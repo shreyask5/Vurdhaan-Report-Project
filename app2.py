@@ -43,7 +43,7 @@ def handle_500_error(e):
 
 @app.route('/')
 def index():
-    return render_template('index2.html')
+    return render_template('index4.html')
 
 
 def detect_encoding(file_path):
@@ -144,22 +144,6 @@ def upload_csv():
         ref_encoding = detect_encoding(ref_csv_path)
         ref_df = pd.read_csv(ref_csv_path, encoding=ref_encoding, encoding_errors='replace')
         
-        # Store metadata
-        file_metadata[file_id] = {
-            'folder': file_folder,
-            'original_path': original_path,
-            'start_date': start_date,
-            'end_date': end_date,
-            'date_format': date_format,
-            'flight_starts_with': flight_starts_with,
-            'upload_time': datetime.now().isoformat()
-        }
-        
-        # Save metadata to file
-        metadata_path = os.path.join(file_folder, 'metadata.json')
-        with open(metadata_path, 'w') as f:
-            json.dump(file_metadata[file_id], f, default=str)
-        
         # Run validation
         is_valid, processed_path, validated_df, error_json_path = validate_and_process_file(
             file_path=original_path,
@@ -171,12 +155,25 @@ def upload_csv():
             end_date=end_date
         )
         
+        # Store metadata
+        file_metadata[file_id] = {
+            'folder': file_folder,
+            'original_path': original_path,
+            'start_date': start_date,
+            'end_date': end_date,
+            'date_format': date_format,
+            'flight_starts_with': flight_starts_with,
+            'upload_time': datetime.now().isoformat(),
+            'is_valid' : is_valid,
+            'processed_path' : processed_path,
+            'error_json_path' : error_json_path
+        }
         
-        # Update metadata with validation results
-        file_metadata[file_id]['is_valid'] = is_valid
-        file_metadata[file_id]['processed_path'] = processed_path
-        file_metadata[file_id]['error_json_path'] = error_json_path
-        
+        # Save metadata to file
+        metadata_path = os.path.join(file_folder, 'metadata.json')
+        with open(metadata_path, 'w') as f:
+            json.dump(file_metadata[file_id], f, default=str)
+
         # Return response
         return jsonify({
             'file_id': file_id,
@@ -273,6 +270,37 @@ def update_csv(file_id):
                 # Convert row_idx to integer if it's a string
                 if isinstance(row_idx, str):
                     row_idx = int(row_idx)
+                
+                # Handle data type conversion properly
+                if column in df.columns:
+                    current_dtype = df[column].dtype
+                    
+                    # Convert new_value to appropriate type
+                    try:
+                        if pd.api.types.is_numeric_dtype(current_dtype):
+                            # Handle numeric columns
+                            if new_value == '' or new_value is None:
+                                # Handle empty values for numeric columns
+                                if pd.api.types.is_integer_dtype(current_dtype):
+                                    new_value = pd.NA  # Use pandas NA for integer columns
+                                else:
+                                    new_value = float('nan')  # Use NaN for float columns
+                            else:
+                                # Convert to appropriate numeric type
+                                if pd.api.types.is_integer_dtype(current_dtype):
+                                    new_value = int(float(new_value))  # Convert through float first to handle '0.0' -> 0
+                                else:
+                                    new_value = float(new_value)
+                        else:
+                            # For non-numeric columns, convert to string
+                            new_value = str(new_value) if new_value is not None else ''
+                    
+                    except (ValueError, TypeError) as e:
+                        # If conversion fails, convert to string and let pandas handle it
+                        print(f"Warning: Could not convert '{new_value}' to {current_dtype}, using string: {e}")
+                        new_value = str(new_value) if new_value is not None else ''
+                
+                # Now assign the properly converted value
                 df.at[row_idx, column] = new_value
         
         # Save corrected CSV
@@ -345,6 +373,7 @@ def build_report_endpoint(file_id):
         
         # Get processed CSV path
         processed_path = metadata.get('processed_path')
+        flight_starts_with = metadata.get('flight_starts_with')
         if not processed_path or not os.path.exists(processed_path):
             # Use original if processed doesn't exist
             processed_path = metadata['original_path']
@@ -354,7 +383,7 @@ def build_report_endpoint(file_id):
         
         try:
             # Call build_report function
-            build_report(processed_path)
+            build_report(processed_path,flight_starts_with)
         except Exception as e:
             error_details = {
                 'error': str(e),

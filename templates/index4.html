@@ -1,0 +1,1832 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CSV Validator & Processor</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        
+        :root {
+            --primary-color: #6366f1;
+            --primary-dark: #4f46e5;
+            --primary-light: #818cf8;
+            --secondary-color: #3b82f6;
+            --secondary-dark: #2563eb;
+            --error-color: #ef4444;
+            --error-light: #fca5a5;
+            --warning-color: #f59e0b;
+            --warning-light: #fbbf24;
+            --success-color: #10b981;
+            --success-light: #34d399;
+            --background-color: #f0f2f5;
+            --card-bg: #ffffff;
+            --border-color: #e5e7eb;
+            --text-color: #1f2937;
+            --text-light: #6b7280;
+            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #e9ecef 100%);
+            color: var(--text-color);
+            margin: 0;
+            padding: 0;
+            line-height: 1.6;
+            min-height: 100vh;
+            background-attachment: fixed;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 100vh;
+            background: 
+                radial-gradient(circle at 20% 50%, rgba(99, 102, 241, 0.05) 0%, transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(59, 130, 246, 0.05) 0%, transparent 50%),
+                radial-gradient(circle at 40% 20%, rgba(16, 185, 129, 0.05) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+            position: relative;
+            z-index: 1;
+        }
+
+        header {
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
+            color: white;
+            padding: 40px 30px;
+            border-radius: 16px;
+            margin-bottom: 30px;
+            box-shadow: var(--shadow-xl);
+            position: relative;
+            overflow: hidden;
+        }
+
+        header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -10%;
+            width: 60%;
+            height: 200%;
+            background: rgba(255, 255, 255, 0.05);
+            transform: rotate(35deg);
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 32px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            position: relative;
+            z-index: 1;
+        }
+
+        header p {
+            margin: 8px 0 0 0;
+            opacity: 0.9;
+            font-size: 16px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 30px;
+            margin-bottom: 24px;
+            box-shadow: var(--shadow);
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .card:hover {
+            box-shadow: var(--shadow-xl);
+            transform: translateY(-2px);
+        }
+
+        h2 {
+            font-size: 24px;
+            font-weight: 700;
+            margin: 0 0 20px 0;
+            color: var(--text-color);
+            letter-spacing: -0.5px;
+        }
+
+        h3 {
+            font-size: 20px;
+            font-weight: 600;
+            margin: 0 0 16px 0;
+            color: var(--text-color);
+        }
+
+        /* Upload Section */
+        .upload-section {
+            text-align: center;
+            padding: 60px 40px;
+            border: 2px dashed var(--border-color);
+            border-radius: 16px;
+            background: linear-gradient(135deg, #f8f9ff 0%, #ffffff 100%);
+            transition: all 0.3s ease;
+        }
+
+        .upload-section::before {
+            content: '☁️';
+            font-size: 48px;
+            display: block;
+            margin-bottom: 20px;
+        }
+
+        .upload-section.dragover {
+            border-color: var(--primary-color);
+            background: linear-gradient(135deg, #e0e7ff 0%, #f0f4ff 100%);
+            transform: scale(1.02);
+        }
+
+        .upload-section h2 {
+            color: var(--primary-color);
+            margin-bottom: 10px;
+        }
+
+        .upload-section p {
+            color: var(--text-light);
+            margin-bottom: 24px;
+            font-size: 16px;
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        .upload-button {
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
+            color: white;
+            padding: 14px 36px;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(99, 102, 241, 0.2);
+            letter-spacing: 0.5px;
+        }
+
+        .upload-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(99, 102, 241, 0.3);
+        }
+
+        .upload-button:active {
+            transform: translateY(0);
+        }
+
+        /* Parameters Section */
+        .parameters-section {
+            display: none;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 24px;
+            margin-top: 24px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .form-group label {
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: var(--text-color);
+            font-size: 14px;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+
+        .form-group input,
+        .form-group select {
+            padding: 12px 16px;
+            border: 2px solid var(--border-color);
+            border-radius: 10px;
+            font-size: 15px;
+            font-family: inherit;
+            transition: all 0.2s ease;
+            background-color: #f9fafb;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            background-color: white;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+        }
+
+        .button-group {
+            margin-top: 30px;
+            margin-bottom: 30px;
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 12px 28px;
+            border: none;
+            border-radius: 10px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            letter-spacing: 0.3px;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .btn:hover {
+            transform: translateY(-1px);
+            box-shadow: var(--shadow);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: linear-gradient(135deg, var(--primary-dark) 0%, #4338ca 100%);
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #9ca3af 0%, #6b7280 100%);
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, var(--error-color) 0%, #dc2626 100%);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, var(--success-color) 0%, #059669 100%);
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: linear-gradient(135deg, #059669 0%, #047857 100%);
+        }
+
+        /* Loading Indicator */
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 60px;
+            background: linear-gradient(135deg, #f8f9ff 0%, #ffffff 100%);
+        }
+
+        .spinner {
+            border: 4px solid rgba(99, 102, 241, 0.1);
+            border-top: 4px solid var(--primary-color);
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 24px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Error Display Section */
+        .error-section {
+            display: none;
+        }
+
+        .summary-box {
+            background: linear-gradient(135deg, #fef3c7 0%, #fef9e7 100%);
+            border: 2px solid #fbbf24;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 16px;
+            margin-top: 16px;
+        }
+
+        .summary-item {
+            background: white;
+            border-radius: 10px;
+            padding: 16px 20px;
+            box-shadow: var(--shadow-sm);
+            transition: all 0.2s ease;
+            border-left: 4px solid var(--primary-color);
+        }
+
+        .summary-item:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow);
+        }
+
+        .summary-item.error {
+            border-left-color: var(--error-color);
+        }
+
+        .summary-item label {
+            font-size: 13px;
+            color: var(--text-light);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            display: block;
+            margin-bottom: 4px;
+        }
+
+        .summary-item span {
+            font-size: 28px;
+            font-weight: 700;
+            display: block;
+            color: var(--text-color);
+        }
+
+        .category {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            margin-bottom: 16px;
+            box-shadow: var(--shadow-sm);
+            overflow: hidden;
+            transition: all 0.2s ease;
+        }
+
+        .category:hover {
+            box-shadow: var(--shadow);
+        }
+
+        .category-header {
+            background: linear-gradient(135deg, var(--secondary-color) 0%, var(--secondary-dark) 100%);
+            color: white;
+            padding: 16px 24px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            user-select: none;
+            transition: all 0.2s ease;
+        }
+
+        .category-header:hover {
+            background: linear-gradient(135deg, var(--secondary-dark) 0%, #1d4ed8 100%);
+        }
+
+        .category-name {
+            font-weight: 600;
+            font-size: 18px;
+            letter-spacing: -0.3px;
+        }
+
+        .category-count {
+            background: white;
+            color: var(--secondary-color);
+            border-radius: 20px;
+            padding: 4px 12px;
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        .category-content {
+            display: none;
+            padding: 24px;
+            background: #f9fafb;
+        }
+
+        .reason-group {
+            background: white;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            margin: 16px 0;
+            overflow: hidden;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .reason-header {
+            background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
+            padding: 14px 20px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            user-select: none;
+            transition: all 0.2s ease;
+        }
+
+        .reason-header:hover {
+            background: linear-gradient(135deg, #e5e7eb 0%, #d1d5db 100%);
+        }
+
+        .reason-name {
+            font-weight: 600;
+            font-size: 16px;
+            color: var(--text-color);
+        }
+
+        .reason-count {
+            background: var(--primary-color);
+            color: white;
+            border-radius: 20px;
+            padding: 2px 10px;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .reason-content {
+            display: none;
+            padding: 20px;
+            background: #fafbfc;
+        }
+
+        /* Progress Bar */
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background-color: rgba(99, 102, 241, 0.1);
+            border-radius: 999px;
+            overflow: hidden;
+            margin: 24px 0;
+            display: none;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary-color) 0%, var(--primary-light) 100%);
+            width: 0%;
+            transition: width 0.3s ease;
+            border-radius: 999px;
+        }
+
+        /* Success Section */
+        .success-section {
+            display: none;
+            text-align: center;
+            padding: 60px;
+            background: linear-gradient(135deg, #d1fae5 0%, #ecfdf5 100%);
+            border: 2px solid var(--success-light);
+        }
+
+        .success-icon {
+            font-size: 72px;
+            color: var(--success-color);
+            margin-bottom: 24px;
+            animation: successPulse 1s ease;
+        }
+
+        @keyframes successPulse {
+            0% { transform: scale(0); opacity: 0; }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        /* Alerts */
+        .alert {
+            padding: 16px 20px;
+            margin-bottom: 24px;
+            border-radius: 10px;
+            display: none;
+            animation: slideIn 0.3s ease;
+            font-weight: 500;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateY(-20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .alert-error {
+            background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+            color: #991b1b;
+            border: 1px solid var(--error-light);
+        }
+
+        .alert-success {
+            background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+            color: #065f46;
+            border: 1px solid var(--success-light);
+        }
+
+        .alert-info {
+            background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+            color: #1e40af;
+            border: 1px solid #93c5fd;
+        }
+
+        /* Enhanced Tables - Compact Design */
+        .data-table, .error-row-table, .sequence-table {
+            width: 100%;
+            max-width: 1600px;
+            border-collapse: collapse;
+            margin: 16px auto;
+            background: white;
+            box-shadow: var(--shadow);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .data-table th, .error-row-table th, .sequence-table th {
+            background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%);
+            padding: 8px 10px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-light);
+            border-bottom: 2px solid var(--border-color);
+        }
+
+        .data-table td, .error-row-table td, .sequence-table td {
+            padding: 6px 10px;
+            font-size: 12px;
+            border-bottom: 1px solid var(--border-color);
+            position: relative;
+        }
+
+        /* Row dividers - default for all rows */
+        .data-table tr td, .error-row-table tr td, .sequence-table tr td {
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        /* Remove dividers within sequence groups */
+        .data-table tr.sequence-error-row + tr.sequence-error-row td,
+        .error-row-table tr.sequence-error-row + tr.sequence-error-row td,
+        .sequence-table tr.sequence-error-row + tr.sequence-error-row td {
+            border-bottom: none;
+        }
+
+        /* For browsers that support :has() - keep divider for last row in sequence group */
+        @supports selector(:has(*)) {
+            .data-table tr.sequence-error-row:not(:has(+ tr.sequence-error-row)) td,
+            .error-row-table tr.sequence-error-row:not(:has(+ tr.sequence-error-row)) td,
+            .sequence-table tr.sequence-error-row:not(:has(+ tr.sequence-error-row)) td {
+                border-bottom: 1px solid var(--border-color) !important;
+            }
+        }
+
+        /* Fallback class for last row in sequence - to be added by JavaScript */
+        .data-table tr.sequence-error-row.last-in-sequence td,
+        .error-row-table tr.sequence-error-row.last-in-sequence td,
+        .sequence-table tr.sequence-error-row.last-in-sequence td {
+            border-bottom: 1px solid var(--border-color) !important;
+        }
+
+        .data-table tr:last-child td, .error-row-table tr:last-child td, .sequence-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .data-table tr:hover, .error-row-table tr:hover, .sequence-table tr:hover {
+            background-color: #f9fafb;
+        }
+
+        .data-table td.error-column, .error-row-table td.error-column {
+            background: linear-gradient(135deg, #fef3c7 0%, #fed7aa 100%);
+            border-left: 3px solid var(--warning-color);
+            padding: 0;
+        }
+
+        .data-table tr.sequence-error-row {
+            background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%) !important;
+        }
+
+        .data-table tr.sequence-error-row td, .sequence-table tr.sequence-error-row td {
+            background: transparent !important;
+        }
+
+        /* Error and Details cell styling */
+        .data-table td:has(> .error-details-box),
+        .error-row-table td:has(> .error-details-box),
+        .sequence-table td:has(> .error-details-box) {
+            padding: 4px;
+        }
+
+        .error-details-box {
+            border: 2px solid var(--error-color);
+            border-radius: 6px;
+            background: linear-gradient(135deg, #fee2e2 0%, #fef2f2 100%);
+            padding: 6px 10px;
+            display: inline-block;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .error-details-box strong {
+            color: var(--error-color);
+            font-weight: 600;
+        }
+
+        /* Apply error box styling to cells containing "Error:" or "Details:" */
+        .data-table td:contains("Error:"),
+        .data-table td:contains("Details:"),
+        .error-row-table td:contains("Error:"),
+        .error-row-table td:contains("Details:"),
+        .sequence-table td:contains("Error:"),
+        .sequence-table td:contains("Details:") {
+            padding: 4px !important;
+        }
+        
+        /* Since :contains is not CSS standard, we'll use a class approach */
+        .error-info-cell {
+            padding: 4px !important;
+        }
+        
+        .error-info-cell > span {
+            display: block;
+            border: 2px solid var(--error-color);
+            border-radius: 6px;
+            background: linear-gradient(135deg, #fee2e2 0%, #fef2f2 100%);
+            padding: 6px 10px;
+            font-size: 12px;
+        }
+
+        .editable-input {
+            width: 100%;
+            padding: 4px 8px;
+            border: 2px solid var(--warning-color);
+            border-radius: 4px;
+            background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+            font-size: 12px;
+            font-family: inherit;
+            transition: all 0.2s ease;
+        }
+
+        .editable-input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            background: white;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+        }
+
+        .data-table .editable-input {
+            width: 100%;
+            height: 100%;
+            padding: 4px 8px;
+            border: none;
+            background-color: transparent;
+            font-size: 12px;
+        }
+
+        .data-table .editable-input:focus {
+            background-color: white;
+            outline: 2px solid var(--secondary-color);
+        }
+
+        /* Sequence Error Styles */
+        .sequence-summary {
+            margin-top: 16px;
+            padding: 20px;
+            background: linear-gradient(135deg, #fef3c7 0%, #fef9e7 100%);
+            border: 2px solid var(--warning-light);
+            border-radius: 10px;
+            border-left: 5px solid var(--error-color);
+        }
+
+        .sequence-summary h4 {
+            margin: 0 0 12px 0;
+            color: var(--error-color);
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .sequence-summary-item {
+            margin-bottom: 10px;
+            padding: 12px;
+            background: white;
+            border-radius: 6px;
+            font-size: 14px;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .sequence-table-container {
+            margin-bottom: 24px;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: var(--shadow);
+        }
+
+        .sequence-table-header {
+            background: linear-gradient(135deg, var(--error-color) 0%, #dc2626 100%);
+            color: white;
+            padding: 16px 20px;
+            font-weight: 600;
+            font-size: 16px;
+            letter-spacing: 0.3px;
+        }
+
+        /* File Info Styling */
+        #fileInfo {
+            margin-top: 24px;
+            color: var(--text-light);
+            font-weight: 500;
+        }
+
+        /* Loading Message */
+        #loadingMessage {
+            color: var(--primary-color);
+            margin-bottom: 16px;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>VURDHAAN CORSIA Report Generator</h1>
+            <p>Validate your data and generate compliant reports with ease</p>
+        </header>
+
+        <!-- Alert Messages -->
+        <div id="alertMessage" class="alert"></div>
+
+        <!-- Upload Section -->
+        <div id="uploadSection" class="card upload-section">
+            <h2>Upload CSV File</h2>
+            <p>Drag and drop your CSV file here or click to browse</p>
+            <input type="file" id="fileInput" class="file-input" accept=".csv">
+            <button class="upload-button" onclick="document.getElementById('fileInput').click()">
+                Choose CSV File
+            </button>
+            <p class="file-info" id="fileInfo"></p>
+        </div>
+
+        <!-- Parameters Section -->
+        <div id="parametersSection" class="card parameters-section">
+            <h2>Validation Parameters</h2>
+            <form id="parametersForm">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="startDate">Start Date</label>
+                        <input type="date" id="startDate" name="start_date" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="endDate">End Date</label>
+                        <input type="date" id="endDate" name="end_date" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="dateFormat">Date Format</label>
+                        <select id="dateFormat" name="date_format" required>
+                            <option value="DMY">DD/MM/YYYY</option>
+                            <option value="MDY">MM/DD/YYYY</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="flightPrefix">Flight Starts With</label>
+                        <input type="text" id="flightPrefix" name="flight_starts_with" 
+                               placeholder="e.g., AI, LH, FHY" required>
+                    </div>
+                </div>
+                <div class="button-group">
+                    <button type="submit" class="btn btn-primary">Start Validation</button>
+                    <button type="button" class="btn btn-secondary" onclick="resetUpload()">Cancel</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Loading Section -->
+        <div id="loadingSection" class="card loading">
+            <div class="spinner"></div>
+            <h3 id="loadingMessage">Processing CSV file...</h3>
+            <div class="progress-bar" id="progressBar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+        </div>
+
+        <!-- Error Display Section -->
+        <div id="errorSection" class="card error-section">
+            <h2>Validation Errors</h2>
+            <div class="summary-box">
+                <h3>Summary</h3>
+                <div class="summary-grid" id="errorStats"></div>
+            </div>
+            
+            <div class="button-group">
+                <button class="btn btn-success" onclick="saveCorrections()">Save Corrections</button>
+                <button class="btn btn-danger" onclick="ignoreErrors()">Ignore Remaining Errors</button>
+                <button class="btn btn-secondary" onclick="resetUpload()">Start Over</button>
+            </div>
+
+            <div id="errorCategoriesContainer"></div>
+        </div>
+
+        <!-- Success Section -->
+        <div id="successSection" class="card success-section">
+            <div class="success-icon">✓</div>
+            <h2>Validation Complete!</h2>
+            <p>Your CSV file has been successfully validated.</p>
+            <div class="button-group">
+                <button class="btn btn-primary" onclick="generateReport()">Generate CORSIA Report</button>
+                <button class="btn btn-secondary" onclick="revalidate()">Re-Validate & Process Again</button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Function to apply error box styling to cells containing "Error:" or "Details:"
+        function applyErrorBoxStyling() {
+            const tables = document.querySelectorAll('.data-table, .error-row-table, .sequence-table');
+            tables.forEach(table => {
+                const cells = table.querySelectorAll('td');
+                cells.forEach(cell => {
+                    const text = cell.textContent || '';
+                    if (text.includes('Error:') || text.includes('Details:')) {
+                        cell.classList.add('error-info-cell');
+                        // Wrap content in span for styling
+                        if (!cell.querySelector('span')) {
+                            cell.innerHTML = `<span>${cell.innerHTML}</span>`;
+                        }
+                    }
+                });
+            });
+        }
+
+        // Function to mark last rows in sequence groups
+        function markLastInSequence() {
+            const tables = document.querySelectorAll('.data-table, .error-row-table, .sequence-table');
+            tables.forEach(table => {
+                const rows = table.querySelectorAll('tr');
+                rows.forEach((row, index) => {
+                    if (row.classList.contains('sequence-error-row')) {
+                        const nextRow = rows[index + 1];
+                        if (!nextRow || !nextRow.classList.contains('sequence-error-row')) {
+                            row.classList.add('last-in-sequence');
+                        }
+                    }
+                });
+            });
+        }
+
+        // Apply styling when tables are rendered
+        const observer = new MutationObserver(() => {
+            applyErrorBoxStyling();
+            markLastInSequence();
+        });
+
+        // Observe changes to the error section
+        const errorSection = document.getElementById('errorSection');
+        if (errorSection) {
+            observer.observe(errorSection, { childList: true, subtree: true });
+        }
+
+        // Also apply on initial load
+        document.addEventListener('DOMContentLoaded', () => {
+            applyErrorBoxStyling();
+            markLastInSequence();
+        });
+
+        // Global variables
+        let currentFileId = null;
+        let currentChunk = 1;
+        let errorData = null;
+        let editedCells = {};
+        let validationParams = {};
+        let sequenceErrors = new Map(); // NEW: Store sequence errors for highlighting
+
+        // DOM elements
+        const uploadSection = document.getElementById('uploadSection');
+        const parametersSection = document.getElementById('parametersSection');
+        const loadingSection = document.getElementById('loadingSection');
+        const successSection = document.getElementById('successSection');
+        const alertMessage = document.getElementById('alertMessage');
+        const fileInput = document.getElementById('fileInput');
+        const fileInfo = document.getElementById('fileInfo');
+
+        // Add fixed column order
+        const columnOrder = [
+            "Date",
+            "A/C Registration",
+            "Flight",
+            "A/C Type",
+            "ATD (UTC) Block out",
+            "ATA (UTC) Block in",
+            "Origin ICAO",
+            "Destination ICAO",
+            "Uplift Volume",
+            "Uplift Density",
+            "Uplift weight",
+            "Remaining Fuel From Prev. Flight",
+            "Block off Fuel",
+            "Block on Fuel",
+            "Fuel Type"
+        ];
+
+        // NEW: Function to parse error sequence from cell_data
+        function parseErrorSequence(cellData) {
+            if (!cellData) return null;
+            
+            // Match pattern like "TCCOH : LTAF → LTAI"
+            const match = cellData.match(/(\w+)\s*:\s*(\w+)\s*→\s*(\w+)/);
+            if (match) {
+                return {
+                    errorCode: match[1], // TCCOH
+                    destinationICAO: match[2], // LTAF
+                    originICAO: match[3] // LTAI
+                };
+            }
+            return null;
+        }
+
+        // NEW: Function to group rows by cell_data and determine highlighting
+        function processSequenceGroups(errorGroup) {
+            // Group rows by cell_data
+            const groups = new Map();
+            
+            errorGroup.rows.forEach((rowError, index) => {
+                if (rowError.cell_data) {
+                    const sequence = parseErrorSequence(rowError.cell_data);
+                    if (sequence) {
+                        const key = rowError.cell_data; // Use full cell_data as key
+                        if (!groups.has(key)) {
+                            groups.set(key, []);
+                        }
+                        groups.get(key).push({ rowError, originalIndex: index });
+                    }
+                }
+            });
+
+            // Determine which rows should be highlighted
+            const highlightMap = new Map();
+            
+            groups.forEach((groupRows, cellData) => {
+                if (groupRows.length === 4) {
+                    // Highlight 2nd and 3rd rows (indices 1 and 2)
+                    highlightMap.set(groupRows[1].rowError.row_idx, true);
+                    highlightMap.set(groupRows[2].rowError.row_idx, true);
+                }
+                
+                // Collect sequence for final summary
+                if (groupRows.length > 0) {
+                    const sequence = parseErrorSequence(cellData);
+                    if (sequence) {
+                        const key = `${sequence.errorCode}_${sequence.destinationICAO}_${sequence.originICAO}`;
+                        sequenceErrors.set(key, sequence);
+                    }
+                }
+            });
+
+            return { groups, highlightMap };
+        }
+
+        // NEW: Function to create final sequence error summary
+        function createFinalSequenceSummary() {
+            if (sequenceErrors.size === 0) return;
+
+            // Find or create a container at the end of the error section
+            let summaryContainer = document.getElementById('finalSequenceSummary');
+            if (!summaryContainer) {
+                summaryContainer = document.createElement('div');
+                summaryContainer.id = 'finalSequenceSummary';
+                summaryContainer.className = 'sequence-summary';
+                summaryContainer.style.marginTop = '30px';
+                
+                const errorSection = document.getElementById('errorSection');
+                errorSection.appendChild(summaryContainer);
+            }
+
+            summaryContainer.innerHTML = '';
+            
+            const title = document.createElement('h4');
+            title.textContent = 'Sequence Error Summary';
+            summaryContainer.appendChild(title);
+
+            // Create one summary item per unique error
+            for (let [key, sequence] of sequenceErrors) {
+                const item = document.createElement('div');
+                item.className = 'sequence-summary-item';
+                item.innerHTML = `
+                    <strong>Error:</strong> ${sequence.errorCode}: Sequence Failed for Destination ICAO: ${sequence.destinationICAO} to Origin ICAO: ${sequence.originICAO}<br>
+                    <strong>Details:</strong> ${sequence.errorCode} : ${sequence.destinationICAO} → ${sequence.originICAO}
+                `;
+                summaryContainer.appendChild(item);
+            }
+        }
+
+        // Initialize
+        function formatAsYMD(date) {
+            const yyyy = date.getFullYear();
+            // month is zero-indexed, so add 1 and pad to two digits
+            const mm = String(date.getMonth() + 1).padStart(2, "0");
+            const dd = String(date.getDate()).padStart(2, "0");
+            return `${yyyy}-${mm}-${dd}`;
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            setupDragDrop();
+            setupFileInput();
+            setupParametersForm();
+            
+            // Set default dates
+            const startOfYear = new Date(2024, 0, 1);
+            const endOfYear = new Date(2024, 11, 31);
+            
+            document.getElementById("startDate").value = formatAsYMD(startOfYear);
+            document.getElementById("endDate").value   = formatAsYMD(endOfYear);
+        });
+
+        // File upload handling
+        function setupDragDrop() {
+            const dropZone = uploadSection;
+            
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                dropZone.addEventListener(eventName, preventDefaults, false);
+            });
+            
+            function preventDefaults(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            
+            ['dragenter', 'dragover'].forEach(eventName => {
+                dropZone.addEventListener(eventName, () => dropZone.classList.add('dragover'), false);
+            });
+            
+            ['dragleave', 'drop'].forEach(eventName => {
+                dropZone.addEventListener(eventName, () => dropZone.classList.remove('dragover'), false);
+            });
+            
+            dropZone.addEventListener('drop', handleDrop, false);
+        }
+
+        function handleDrop(e) {
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFile(files[0]);
+            }
+        }
+
+        function setupFileInput() {
+            fileInput.addEventListener('change', function(e) {
+                if (e.target.files.length > 0) {
+                    handleFile(e.target.files[0]);
+                }
+            });
+        }
+
+        function handleFile(file) {
+            if (!file.name.endsWith('.csv')) {
+                showAlert('Please select a CSV file', 'error');
+                return;
+            }
+            
+            fileInfo.textContent = `Selected: ${file.name} (${formatFileSize(file.size)})`;
+            parametersSection.style.display = 'block';
+            uploadSection.style.display = 'none';
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // Parameters form handling
+        function setupParametersForm() {
+            const form = document.getElementById('parametersForm');
+            form.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                
+                // Collect parameters
+                validationParams = {
+                    start_date: document.getElementById('startDate').value,
+                    end_date: document.getElementById('endDate').value,
+                    date_format: document.getElementById('dateFormat').value,
+                    flight_starts_with: document.getElementById('flightPrefix').value
+                };
+                
+                // Upload file
+                await uploadFile();
+            });
+        }
+
+        // File upload to server
+        async function uploadFile() {
+            const file = fileInput.files[0];
+            if (!file) return;
+            
+            showLoading('Uploading file...');
+            
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            // Add validation parameters
+            Object.keys(validationParams).forEach(key => {
+                formData.append(key, validationParams[key]);
+            });
+            
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Upload failed');
+                }
+                
+                const data = await response.json();
+                currentFileId = data.file_id;
+                
+                // Start fetching errors
+                await fetchErrors();
+                
+            } catch (error) {
+                showAlert('Failed to upload file: ' + error.message, 'error');
+                hideLoading();
+            }
+        }
+
+        // Fetch errors in chunks
+        async function fetchErrors() {
+            showLoading('Loading validation results...');
+            
+            try {
+                console.log('Fetching errors for file ID:', currentFileId);
+                
+                // First, get the error data to check total_errors
+                const response = await fetch(`/errors/${currentFileId}`);
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('Server response not OK:', response.status, errorText);
+                    throw new Error(`Failed to fetch errors: ${response.status} ${errorText}`);
+                }
+                
+                const data = await response.json();
+                console.log('Received error data:', data);
+                
+                if (!data) {
+                    throw new Error('Received empty error data');
+                }
+                
+                errorData = data;
+                
+                hideLoading();
+                
+                // Check if there are errors
+                if (!errorData.summary) {
+                    console.error('Missing summary in error data:', errorData);
+                    throw new Error('Invalid error data format: missing summary');
+                }
+                
+                console.log('Error summary:', errorData.summary);
+                
+                if (errorData.summary.total_errors > 0) {
+                    // Immediately show error page
+                    displayErrors();
+                } else {
+                    // No errors, proceed to success
+                    showSuccess();
+                }
+                
+            } catch (error) {
+                console.error('Error in fetchErrors:', error);
+                console.error('Error stack:', error.stack);
+                showAlert('Failed to load errors: ' + error.message, 'error');
+                hideLoading();
+            }
+        }
+
+        // NEW: Function to create sequence table
+        function createSequenceTable(sequence, rows) {
+            const container = document.createElement('div');
+            container.className = 'sequence-table-container';
+
+            // Create header
+            const header = document.createElement('div');
+            header.className = 'sequence-table-header';
+            header.textContent = `Sequence Error: ${sequence.errorCode}`;
+            container.appendChild(header);
+
+            // Create table
+            const table = document.createElement('table');
+            table.className = 'sequence-table';
+
+            // Create header row
+            const thead = document.createElement('thead');
+            const headerRow = document.createElement('tr');
+            
+            // Use fixed column order
+            columnOrder.forEach(column => {
+                const th = document.createElement('th');
+                th.textContent = column;
+                headerRow.appendChild(th);
+            });
+            
+            thead.appendChild(headerRow);
+            table.appendChild(thead);
+
+            // Create body
+            const tbody = document.createElement('tbody');
+            
+            // Add all rows
+            rows.forEach(({ rowError, rowData }) => {
+                const tr = document.createElement('tr');
+                
+                // Check if this row should be highlighted
+                if (rowError.highlight) {
+                    tr.className = 'sequence-error-row';
+                }
+
+                // Use fixed column order
+                columnOrder.forEach(column => {
+                    const td = document.createElement('td');
+                    const value = rowData[column];
+                    
+                    if (rowError.editableColumns.includes(column)) {
+                        // Make this cell editable
+                        const input = document.createElement('input');
+                        input.type = 'text';
+                        input.className = 'editable-input';
+                        input.value = value || '';
+                        input.dataset.row = rowError.row_idx;
+                        input.dataset.column = column;
+                        input.dataset.originalValue = value || '';
+                        
+                        // Track changes
+                        input.addEventListener('change', function() {
+                            const key = `${rowError.row_idx}-${column}`;
+                            if (this.value !== this.dataset.originalValue) {
+                                editedCells[key] = {
+                                    row: parseInt(rowError.row_idx),
+                                    column: column,
+                                    old_value: this.dataset.originalValue,
+                                    new_value: this.value
+                                };
+                            } else {
+                                delete editedCells[key];
+                            }
+                        });
+                        
+                        td.appendChild(input);
+                    } else {
+                        td.textContent = value || '';
+                    }
+                    
+                    tr.appendChild(td);
+                });
+                
+                tbody.appendChild(tr);
+            });
+            
+            table.appendChild(tbody);
+            container.appendChild(table);
+
+            // Add sequence summary
+            const summary = document.createElement('div');
+            summary.className = 'sequence-summary';
+            summary.innerHTML = `
+                <div class="sequence-summary-item">
+                    <strong>Error:</strong> ${sequence.errorCode}: Sequence Failed for Destination ICAO: ${sequence.destinationICAO} to Origin ICAO: ${sequence.originICAO}<br>
+                    <strong>Details:</strong> ${sequence.errorCode} : ${sequence.destinationICAO} → ${sequence.originICAO}
+                </div>
+            `;
+            container.appendChild(summary);
+
+            return container;
+        }
+
+        function displayErrors() {
+            try {
+                console.log('Displaying errors...');
+                console.log('Error data:', errorData);
+                
+                // Clear previous sequence errors
+                sequenceErrors.clear();
+                
+                // Update error stats
+                const errorStats = document.getElementById('errorStats');
+                if (!errorStats) {
+                    throw new Error('Error stats element not found');
+                }
+                
+                // Calculate total errors correctly
+                const totalErrors = errorData.categories.reduce((sum, category) => 
+                    sum + category.errors.reduce((catSum, errorGroup) => 
+                        catSum + errorGroup.rows.length, 0), 0);
+                
+                // Calculate unique error rows
+                const errorRows = new Set();
+                errorData.categories.forEach(category => {
+                    category.errors.forEach(errorGroup => {
+                        errorGroup.rows.forEach(rowError => {
+                            if (!rowError.file_level) {
+                                errorRows.add(rowError.row_idx);
+                            }
+                        });
+                    });
+                });
+                
+                const stats = {
+                    total_errors: totalErrors,
+                    error_rows: errorRows.size
+                };
+                
+                errorStats.innerHTML = `
+                    <div class="summary-item error">
+                        <span>${stats.total_errors}</span>
+                        Total Errors
+                    </div>
+                    <div class="summary-item error">
+                        <span>${stats.error_rows}</span>
+                        Affected Rows
+                    </div>
+                `;
+                
+                // Update error categories
+                const container = document.getElementById('errorCategoriesContainer');
+                if (!container) {
+                    throw new Error('Error categories container not found');
+                }
+                
+                container.innerHTML = '';
+                
+                // Process each category
+                errorData.categories.forEach((category, catIndex) => {
+                    console.log('Processing category:', category.name);
+                    
+                    const categoryDiv = document.createElement('div');
+                    categoryDiv.className = 'category';
+                    
+                    // Category header
+                    const header = document.createElement('div');
+                    header.className = 'category-header';
+                    header.innerHTML = `
+                        <div class="category-name">${category.name}</div>
+                        <div class="category-count">${category.errors.reduce((sum, err) => sum + err.rows.length, 0)} errors</div>
+                    `;
+                    header.onclick = () => toggleCategory(catIndex);
+                    
+                    // Category content
+                    const content = document.createElement('div');
+                    content.className = 'category-content';
+                    content.id = `category-content-${catIndex}`;
+                    
+                    // Process each error group
+                    category.errors.forEach(errorGroup => {
+                        console.log('Processing error group:', errorGroup.reason);
+                        
+                        // Check if this is a sequence error group
+                        const isSequenceError = errorGroup.rows.some(row => 
+                            row.cell_data && parseErrorSequence(row.cell_data));
+                        
+                        if (isSequenceError) {
+                            // Handle sequence errors with new table format
+                            const sequenceGroups = new Map();
+                            
+                            errorGroup.rows.forEach(rowError => {
+                                if (!rowError.file_level) {
+                                    const sequence = parseErrorSequence(rowError.cell_data);
+                                    if (sequence) {
+                                        const key = `${sequence.errorCode}_${sequence.destinationICAO}_${sequence.originICAO}`;
+                                        if (!sequenceGroups.has(key)) {
+                                            sequenceGroups.set(key, {
+                                                sequence,
+                                                rows: []
+                                            });
+                                        }
+                                        
+                                        sequenceGroups.get(key).rows.push({
+                                            rowError: {
+                                                ...rowError,
+                                                highlight: false,
+                                                editableColumns: rowError.columns.flat()
+                                            },
+                                            rowData: errorData.rows_data[rowError.row_idx] || {}
+                                        });
+                                    }
+                                }
+                            });
+                            
+                            sequenceGroups.forEach((group, key) => {
+                                group.rows.sort((a, b) => a.rowError.row_idx - b.rowError.row_idx);
+                                
+                                if (group.rows.length === 4) {
+                                    group.rows[1].rowError.highlight = true;
+                                    group.rows[2].rowError.highlight = true;
+                                }
+                                
+                                const sequenceTable = createSequenceTable(group.sequence, group.rows);
+                                content.appendChild(sequenceTable);
+                            });
+                        } else {
+                            // Handle non-sequence errors with original format
+                            const reasonDiv = document.createElement('div');
+                            reasonDiv.className = 'reason-group';
+                            
+                            const reasonHeader = document.createElement('div');
+                            reasonHeader.className = 'reason-header';
+                            reasonHeader.innerHTML = `
+                                <div class="reason-name">${errorGroup.reason}</div>
+                                <div class="reason-count">${errorGroup.rows.length} rows</div>
+                            `;
+                            reasonHeader.onclick = () => toggleReason(reasonHeader.nextElementSibling);
+                            
+                            const reasonContent = document.createElement('div');
+                            reasonContent.className = 'reason-content';
+                            
+                            errorGroup.rows.forEach(rowError => {
+                                const rowDiv = document.createElement('div');
+                                rowDiv.className = 'error-row';
+                                
+                                const detailsDiv = document.createElement('div');
+                                detailsDiv.className = 'error-details';
+                                
+                                if (rowError.file_level) {
+                                    detailsDiv.innerHTML = `
+                                        <div class="error-detail">
+                                            <strong>Type:</strong> File-level error
+                                        </div>
+                                        <div class="error-detail">
+                                            <strong>Columns:</strong> ${rowError.columns.join(', ')}
+                                        </div>
+                                    `;
+                                } else {
+                                    const rowData = errorData.rows_data[rowError.row_idx] || {};
+                                    
+                                    const table = document.createElement('table');
+                                    table.className = 'data-table';
+                                    
+                                    const thead = document.createElement('thead');
+                                    const headerRow = document.createElement('tr');
+                                    
+                                    const editableColumns = rowError.columns.flat();
+                                    
+                                    // Use fixed column order
+                                    columnOrder.forEach(column => {
+                                        const th = document.createElement('th');
+                                        th.textContent = column;
+                                        if (editableColumns.includes(column)) {
+                                            th.style.backgroundColor = '#fff3cd';
+                                        }
+                                        headerRow.appendChild(th);
+                                    });
+                                    
+                                    thead.appendChild(headerRow);
+                                    table.appendChild(thead);
+                                    
+                                    const tbody = document.createElement('tbody');
+                                    const dataRow = document.createElement('tr');
+                                    
+                                    // Use fixed column order
+                                    columnOrder.forEach(column => {
+                                        const td = document.createElement('td');
+                                        const value = rowData[column];
+                                        
+                                        if (editableColumns.includes(column)) {
+                                            td.className = 'error-column';
+                                            const input = document.createElement('input');
+                                            input.type = 'text';
+                                            input.className = 'editable-input';
+                                            input.value = value || '';
+                                            input.dataset.row = rowError.row_idx;
+                                            input.dataset.column = column;
+                                            input.dataset.originalValue = value || '';
+                                            
+                                            input.addEventListener('change', function() {
+                                                const key = `${rowError.row_idx}-${column}`;
+                                                if (this.value !== this.dataset.originalValue) {
+                                                    editedCells[key] = {
+                                                        row: parseInt(rowError.row_idx),
+                                                        column: column,
+                                                        old_value: this.dataset.originalValue,
+                                                        new_value: this.value
+                                                    };
+                                                } else {
+                                                    delete editedCells[key];
+                                                }
+                                            });
+                                            
+                                            td.appendChild(input);
+                                        } else {
+                                            td.textContent = value || '';
+                                        }
+                                        
+                                        dataRow.appendChild(td);
+                                    });
+                                    
+                                    tbody.appendChild(dataRow);
+                                    table.appendChild(tbody);
+                                    
+                                    const errorMessage = document.createElement('div');
+                                    errorMessage.className = 'error-message';
+                                    errorMessage.innerHTML = `
+                                        <strong>Error:</strong> ${errorGroup.reason}
+                                        <br>
+                                        <strong>Details:</strong> ${rowError.cell_data || ''}
+                                    `;
+                                    detailsDiv.appendChild(errorMessage);
+                                    detailsDiv.appendChild(table);
+                                }
+                                
+                                rowDiv.appendChild(detailsDiv);
+                                reasonContent.appendChild(rowDiv);
+                            });
+                            
+                            reasonDiv.appendChild(reasonHeader);
+                            reasonDiv.appendChild(reasonContent);
+                            content.appendChild(reasonDiv);
+                        }
+                    });
+                    
+                    categoryDiv.appendChild(header);
+                    categoryDiv.appendChild(content);
+                    container.appendChild(categoryDiv);
+                });
+                
+                // Show error section
+                errorSection.style.display = 'block';
+                successSection.style.display = 'none';
+                
+                // Open first category by default
+                if (errorData.categories.length > 0) {
+                    toggleCategory(0);
+                }
+                
+            } catch (error) {
+                console.error('Error in displayErrors:', error);
+                console.error('Error stack:', error.stack);
+                showAlert('Failed to display errors: ' + error.message, 'error');
+            }
+        }
+
+        function toggleCategory(index) {
+            const content = document.getElementById(`category-content-${index}`);
+            if (content) {
+                content.style.display = content.style.display === 'none' ? 'block' : 'none';
+            }
+        }
+
+        function toggleReason(content) {
+            if (content) {
+                content.style.display = content.style.display === 'none' ? 'block' : 'none';
+            }
+        }
+
+        // Save corrections
+        async function saveCorrections() {
+            if (Object.keys(editedCells).length === 0) {
+                showAlert('No corrections to save', 'info');
+                return;
+            }
+            
+            showLoading('Saving corrections and re-validating...');
+            
+            const corrections = Object.values(editedCells);
+            
+            try {
+                const response = await fetch(`/upload/${currentFileId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ corrections: corrections })
+                });
+                
+                if (!response.ok) throw new Error('Failed to save corrections');
+                
+                // Clear edited cells
+                editedCells = {};
+                
+                // Fetch new errors
+                await fetchErrors();
+                
+            } catch (error) {
+                showAlert('Failed to save corrections: ' + error.message, 'error');
+                hideLoading();
+            }
+        }
+
+        // Ignore errors
+        async function ignoreErrors() {
+            if (!confirm('Are you sure you want to ignore remaining errors and proceed to report generation?')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/upload/${currentFileId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ ignore_errors: true })
+                });
+                
+                if (!response.ok) throw new Error('Failed to process request');
+                
+                showSuccess();
+                
+            } catch (error) {
+                showAlert('Failed to process request: ' + error.message, 'error');
+            }
+        }
+
+        // Generate report
+        async function generateReport() {
+            showLoading('Generating CORSIA report...');
+            
+            try {
+                const response = await fetch(`/report/${currentFileId}`, {
+                    method: 'POST'
+                });
+                
+                if (!response.ok) throw new Error('Failed to generate report');
+                
+                // Download the file
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'template_filled.xlsx';
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                a.remove();
+                
+                hideLoading();
+                showAlert('Report generated successfully!', 'success');
+                
+                // Reset after a delay
+                setTimeout(resetUpload, 3000);
+                
+            } catch (error) {
+                showAlert('Failed to generate report: ' + error.message, 'error');
+                hideLoading();
+            }
+        }
+
+        // Re-validate
+        async function revalidate() {
+            showLoading('Re-validating CSV file...');
+            
+            try {
+                const response = await fetch(`/upload/${currentFileId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ revalidate: true })
+                });
+                
+                if (!response.ok) throw new Error('Failed to re-validate');
+                
+                await fetchErrors();
+                
+            } catch (error) {
+                showAlert('Failed to re-validate: ' + error.message, 'error');
+                hideLoading();
+            }
+        }
+
+        // UI Helper functions
+        function showLoading(message) {
+            console.log('Showing loading:', message);
+            loadingSection.style.display = 'block';
+            document.getElementById('loadingMessage').textContent = message;
+            uploadSection.style.display = 'none';
+            parametersSection.style.display = 'none';
+            errorSection.style.display = 'none';
+            successSection.style.display = 'none';
+        }
+
+        function hideLoading() {
+            console.log('Hiding loading');
+            loadingSection.style.display = 'none';
+        }
+
+        function showSuccess() {
+            console.log('Showing success');
+            successSection.style.display = 'block';
+            errorSection.style.display = 'none';
+            loadingSection.style.display = 'none';
+        }
+
+        function showAlert(message, type = 'info') {
+            console.log('Showing alert:', message, 'Type:', type);
+            alertMessage.textContent = message;
+            alertMessage.className = `alert alert-${type}`;
+            alertMessage.style.display = 'block';
+            
+            // Hide alert after 5 seconds
+            setTimeout(() => {
+                alertMessage.style.display = 'none';
+            }, 5000);
+        }
+
+        function updateProgress(percent) {
+            document.getElementById('progressFill').style.width = percent + '%';
+        }
+
+        function resetUpload() {
+            currentFileId = null;
+            currentChunk = 1;
+            errorData = null;
+            editedCells = {};
+            sequenceErrors.clear(); // NEW: Clear sequence errors
+            fileInput.value = '';
+            fileInfo.textContent = '';
+            
+            // NEW: Remove final sequence summary if it exists
+            const finalSummary = document.getElementById('finalSequenceSummary');
+            if (finalSummary) {
+                finalSummary.remove();
+            }
+            
+            hideAllSections();
+            uploadSection.style.display = 'block';
+        }
+
+        function hideAllSections() {
+            uploadSection.style.display = 'none';
+            parametersSection.style.display = 'none';
+            loadingSection.style.display = 'none';
+            errorSection.style.display = 'none';
+            successSection.style.display = 'none';
+        }
+
+        function escapeHtml(text) {
+            const map = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            };
+            return text.replace(/[&<>"']/g, m => map[m]);
+        }
+
+        function handleCorrection(event) {
+            const input = event.target;
+            const row = input.dataset.row;
+            const column = input.dataset.column;
+            const newValue = input.value;
+            
+            console.log('Handling correction:', { row, column, newValue });
+            
+            // Store the correction
+            const key = `${row}-${column}`;
+            if (newValue !== '') {
+                editedCells[key] = {
+                    row: parseInt(row),
+                    column: column,
+                    new_value: newValue
+                };
+            } else {
+                delete editedCells[key];
+            }
+            
+            console.log('Current corrections:', editedCells);
+        }
+    </script>
+</body>
+</html>

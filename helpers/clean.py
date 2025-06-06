@@ -493,7 +493,7 @@ error_tracker = {category: [] for category in error_categories}
 
 # Track all rows with errors
 error_rows = set()  # Using a set for faster lookup
-rows_to_delete = [] # Rows that are needed to be deleted
+
 
 
 
@@ -566,10 +566,6 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
     #Folder path file
     folder_path = os.path.dirname(file_path)
 
-
-
-
-
     # Define all required columns
     required_columns = [
         'Origin ICAO', 
@@ -608,7 +604,7 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
             )
         
         # Return False to indicate the file is incomplete, and empty string for file path
-        output_file_json = generate_error_report(result_df, error_tracker, error_rows, folder_path)
+        output_file_json = generate_error_report(result_df, folder_path)
         return False, "",result_df, output_file_json
     
     # Sort the dataframe by Date, A/C Registration, and ATD
@@ -849,16 +845,6 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
                     # Invalid date format
                     mark_error(date_str, f"Invalid date format: {e}", idx, "Date", "Date")
     
-    # 6. FLIGHT VALIDATION
-    print("Validating flight numbers...")
-    if 'Flight' in result_df.columns:
-        for idx, row in result_df.iterrows():
-            if not pd.isna(row['Flight']):
-                flight_str = str(row['Flight'])
-                if flight_starts_with and not flight_str.startswith(flight_starts_with):
-                    # Mark for deletion instead of error
-                    if idx not in rows_to_delete:
-                        rows_to_delete.append(idx)
     
     # 7. ICAO CODE VALIDATION
     print("Validating ICAO codes...")
@@ -989,7 +975,7 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
     - mark_error: Function to mark errors in the error tracker
     """
     print("Checking flight sequence...")
-    
+
     # Group by aircraft registration
     for ac_reg, group in result_df.groupby('A/C Registration'):
         # Reset index to make iterating easier
@@ -1075,21 +1061,19 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
     # Check if there are "Column Missing" errors - critical issue
     if error_tracker["Column Missing"]:
         print("\nCritical error: Missing required columns - file cannot be processed")
-        output_file_json = generate_error_report(result_df, error_tracker, error_rows, folder_path)
+        output_file_json = generate_error_report(result_df, folder_path)
         return False, "",result_df, output_file_json
     
-    # Process the dataframe: remove rows marked for deletion
-    if rows_to_delete:
-        print(f"Removing {len(rows_to_delete)} rows that don't match flight prefix criteria")
-        result_df = result_df.drop(rows_to_delete)
     
     # After all validations, determine if file is valid
     has_column_errors = len(error_tracker["Column Missing"]) > 0
     
+
+    print("\n\n" + str(result_df.iloc[6]) + "\n\n")
     # Generate output path
     if has_column_errors:
         # File has critical errors - don't save output
-        output_file_json = generate_error_report(result_df, error_tracker, error_rows, folder_path)
+        output_file_json = generate_error_report(result_df, folder_path)
         return False, "",result_df,output_file_json
     else:
         # Save file with validation results
@@ -1099,12 +1083,12 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
         print(f"File validated and saved to: {output_path}")
         
         # Return True if validation passed, but might have non-critical errors
-        output_file_json = generate_error_report(result_df, error_tracker, error_rows, folder_path)
+        output_file_json = generate_error_report(result_df, folder_path)
         return True, output_path,result_df,output_file_json
 
 
 
-def generate_error_report(result_df, error_tracker, error_rows, output_path):
+def generate_error_report(result_df, output_path):
     """
     Generates a JSON report of all errors, grouped by category and reason.
     Stores row data in a central place to avoid duplication.
@@ -1120,6 +1104,7 @@ def generate_error_report(result_df, error_tracker, error_rows, output_path):
     """
     print("Generating error report...")
     
+    global error_tracker,error_rows
     # Initialize the error report structure
     error_report = {
         "summary": {
@@ -1215,5 +1200,11 @@ def generate_error_report(result_df, error_tracker, error_rows, output_path):
         with open(output_file, 'w') as f:
             f.write(json_str)
         print(f"Error report saved to: {output_file}")
+
+
+    error_tracker = {category: [] for category in error_categories}
+
+    # Track all rows with errors
+    error_rows = set()  # Using a set for faster lookup
     
     return output_file

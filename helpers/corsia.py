@@ -303,11 +303,30 @@ def insert_icao_data(wb, icao_grouped):
 
 
 
-def build_report(output_path):   
+def build_report(output_path,flight_starts_with):
     # Now load the processed file to add the Block fuel calculation and create summaries
     try:
         processed_df = pd.read_csv(output_path, encoding='utf-8')
-        
+
+
+        rows_to_delete = [] # Rows that are needed to be deleted
+
+        # 6. FLIGHT VALIDATION
+        print("Validating flight numbers...")
+        if 'Flight' in processed_df.columns:
+            for idx, row in processed_df.iterrows():
+                if not pd.isna(row['Flight']):
+                    flight_str = str(row['Flight'])
+                    if flight_starts_with and not flight_str.startswith(flight_starts_with):
+                        # Mark for deletion instead of error
+                        if idx not in rows_to_delete:
+                            rows_to_delete.append(idx)
+
+        # Process the dataframe: remove rows marked for deletion
+        if rows_to_delete:
+            print(f"Removing {len(rows_to_delete)} rows that don't match flight prefix criteria")
+            processed_df = processed_df.drop(rows_to_delete)
+
         # Now add Block fuel calculation on the processed data
         if "Block off Fuel" in processed_df.columns and "Block on Fuel" in processed_df.columns:
             # Convert columns to numeric, coercing errors to NaN
