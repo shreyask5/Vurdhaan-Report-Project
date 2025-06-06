@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CSV Validation Error Report</title>
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --secondary-color: #3498db;
+            --error-color: #e74c3c;
+            --warning-color: #f39c12;
+            --success-color: #2ecc71;
+            --background-color: #f8f9fa;
+            --card-bg: #ffffff;
+            --border-color: #ddd;
+            --text-color: #333;
+            --text-light: #777;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 20px;
+            border-radius: 6px 6px 0 0;
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 24px;
+        }
+
+        .summary-box {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .summary-item {
+            background-color: rgba(52, 152, 219, 0.1);
+            border-left: 4px solid var(--secondary-color);
+            padding: 10px 15px;
+            border-radius: 4px;
+        }
+
+        .summary-item.error {
+            background-color: rgba(231, 76, 60, 0.1);
+            border-left-color: var(--error-color);
+        }
+
+        .summary-item span {
+            font-size: 24px;
+            font-weight: bold;
+            display: block;
+        }
+
+        .category {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .category-header {
+            background-color: var(--secondary-color);
+            color: white;
+            padding: 12px 20px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            user-select: none;
+        }
+
+        .category-header:hover {
+            background-color: #2980b9;
+        }
+
+        .category-name {
+            font-weight: bold;
+            font-size: 18px;
+        }
+
+        .category-count {
+            background-color: white;
+            color: var(--secondary-color);
+            border-radius: 20px;
+            padding: 2px 10px;
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        .category-content {
+            display: none;
+            padding: 0 15px 15px;
+        }
+
+        .reason-group {
+            background-color: rgba(236, 240, 241, 0.5);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            margin: 15px 0;
+            overflow: hidden;
+        }
+
+        .reason-header {
+            background-color: #ecf0f1;
+            padding: 10px 15px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            user-select: none;
+        }
+
+        .reason-header:hover {
+            background-color: #d6dbdf;
+        }
+
+        .reason-name {
+            font-weight: 600;
+            font-size: 16px;
+        }
+
+        .reason-count {
+            background-color: white;
+            color: var(--text-color);
+            border-radius: 20px;
+            padding: 2px 8px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .reason-content {
+            display: none;
+            padding: 15px;
+        }
+
+        .error-row {
+            margin-bottom: 15px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 15px;
+        }
+
+        .error-row:last-child {
+            margin-bottom: 0;
+            border-bottom: none;
+        }
+
+        .error-details {
+            margin-bottom: 10px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .error-detail {
+            background-color: #f5f5f5;
+            border-radius: 4px;
+            padding: 8px 12px;
+            font-size: 14px;
+        }
+
+        .error-detail strong {
+            color: var(--primary-color);
+        }
+
+        .data-table-wrapper {
+            margin-top: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+            background-color: white;
+        }
+
+        .data-table th {
+            background-color: #f5f5f5;
+            padding: 10px;
+            text-align: left;
+            border: 1px solid #ddd;
+            position: sticky;
+            top: 0;
+        }
+
+        .data-table td {
+            padding: 8px 10px;
+            border: 1px solid #ddd;
+            max-width: 300px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .data-table td.error-cell {
+            color: var(--error-color);
+            font-weight: bold;
+            background-color: rgba(231, 76, 60, 0.05);
+        }
+
+        .toggle-button {
+            border: none;
+            background: transparent;
+            font-size: 14px;
+            color: #2980b9;
+            cursor: pointer;
+            padding: 5px;
+            margin-top: 5px;
+        }
+
+        .toggle-button:hover {
+            text-decoration: underline;
+        }
+
+        .file-input-area {
+            text-align: center;
+            padding: 30px;
+            background-color: var(--card-bg);
+            border: 2px dashed var(--border-color);
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+        
+        .file-input {
+            display: none;
+        }
+        
+        .file-input-label {
+            background-color: var(--secondary-color);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            display: inline-block;
+            transition: background-color 0.2s;
+        }
+        
+        .file-input-label:hover {
+            background-color: #2980b9;
+        }
+        
+        .file-input-text {
+            margin-top: 10px;
+            color: var(--text-light);
+        }
+        
+        .error-report {
+            display: none;
+        }
+        
+        .loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 20px 0;
+        }
+        
+        .loading-spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-radius: 50%;
+            border-top: 4px solid var(--secondary-color);
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .error-text {
+            color: var(--error-color);
+            text-align: center;
+            padding: 20px;
+            background-color: rgba(231, 76, 60, 0.1);
+            border-radius: 4px;
+            margin: 20px 0;
+            display: none;
+        }
+        
+        .highlight {
+            background-color: rgba(231, 76, 60, 0.2);
+        }
+        
+        .expand-all-button {
+            background-color: #f5f5f5;
+            border: 1px solid #ddd;
+            padding: 8px 15px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .expand-all-button:hover {
+            background-color: #e9e9e9;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>CSV Validation Error Report</h1>
+        </header>
+        
+        <div class="file-input-area" id="fileInputArea">
+            <label for="fileInput" class="file-input-label">Choose Error Report JSON File</label>
+            <input type="file" id="fileInput" class="file-input" accept=".json">
+            <p class="file-input-text">or drag and drop file here</p>
+        </div>
+        
+        <div class="loading" id="loadingIndicator" style="display: none;">
+            <div class="loading-spinner"></div>
+            <p>Loading error report...</p>
+        </div>
+        
+        <div class="error-text" id="errorMessage"></div>
+        
+        <div class="error-report" id="errorReport">
+            <div class="summary-box">
+                <h2>Summary</h2>
+                <div class="summary-grid" id="summaryGrid">
+                    <!-- Summary data will be inserted here -->
+                </div>
+            </div>
+            
+            <button class="expand-all-button" id="expandAllButton">Expand All Categories</button>
+            
+            <div id="categoriesContainer">
+                <!-- Categories will be inserted here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const fileInput = document.getElementById('fileInput');
+            const fileInputArea = document.getElementById('fileInputArea');
+            const loadingIndicator = document.getElementById('loadingIndicator');
+            const errorMessage = document.getElementById('errorMessage');
+            const errorReport = document.getElementById('errorReport');
+            const summaryGrid = document.getElementById('summaryGrid');
+            const categoriesContainer = document.getElementById('categoriesContainer');
+            const expandAllButton = document.getElementById('expandAllButton');
+            
+            let allExpanded = false;
+            let reportData = null;
+            
+            // Handle file selection
+            fileInput.addEventListener('change', handleFileSelect);
+            
+            // Handle drag and drop
+            fileInputArea.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                fileInputArea.style.borderColor = "#3498db";
+            });
+            
+            fileInputArea.addEventListener('dragleave', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                fileInputArea.style.borderColor = "#ddd";
+            });
+            
+            fileInputArea.addEventListener('drop', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                fileInputArea.style.borderColor = "#ddd";
+                
+                if (e.dataTransfer.files.length) {
+                    fileInput.files = e.dataTransfer.files;
+                    handleFileSelect(e);
+                }
+            });
+            
+            // Expand all button logic
+            expandAllButton.addEventListener('click', function() {
+                allExpanded = !allExpanded;
+                
+                const categoryContents = document.querySelectorAll('.category-content');
+                const reasonContents = document.querySelectorAll('.reason-content');
+                
+                categoryContents.forEach(content => {
+                    content.style.display = allExpanded ? 'block' : 'none';
+                });
+                
+                reasonContents.forEach(content => {
+                    content.style.display = allExpanded ? 'block' : 'none';
+                });
+                
+                this.textContent = allExpanded ? 'Collapse All Categories' : 'Expand All Categories';
+            });
+            
+            function handleFileSelect(event) {
+                const file = event.target.files[0] || (event.dataTransfer && event.dataTransfer.files[0]);
+                
+                if (!file) return;
+                
+                if (file.type !== 'application/json' && !file.name.endsWith('.json')) {
+                    showError("Please select a JSON file.");
+                    return;
+                }
+                
+                // Show loading indicator
+                fileInputArea.style.display = 'none';
+                loadingIndicator.style.display = 'flex';
+                errorMessage.style.display = 'none';
+                errorReport.style.display = 'none';
+                
+                const reader = new FileReader();
+                
+                reader.onload = function(e) {
+                    try {
+                        reportData = JSON.parse(e.target.result);
+                        renderReport(reportData);
+                        loadingIndicator.style.display = 'none';
+                        errorReport.style.display = 'block';
+                    } catch (error) {
+                        showError("Failed to parse JSON file. Please make sure it's a valid error report file.");
+                        console.error(error);
+                    }
+                };
+                
+                reader.onerror = function() {
+                    showError("Failed to read the file. Please try again.");
+                };
+                
+                reader.readAsText(file);
+            }
+            
+            function showError(message) {
+                loadingIndicator.style.display = 'none';
+                errorMessage.textContent = message;
+                errorMessage.style.display = 'block';
+                fileInputArea.style.display = 'block';
+                errorReport.style.display = 'none';
+            }
+            
+            function renderReport(data) {
+                // Clear previous content
+                summaryGrid.innerHTML = '';
+                categoriesContainer.innerHTML = '';
+                
+                // Render summary
+                renderSummary(data.summary);
+                
+                // Render categories
+                renderCategories(data.categories, data.rows_data);
+            }
+            
+            function renderSummary(summary) {
+                // Add total errors
+                const totalErrorsItem = document.createElement('div');
+                totalErrorsItem.className = 'summary-item error';
+                totalErrorsItem.innerHTML = `<span>${summary.total_errors}</span>Total Errors`;
+                summaryGrid.appendChild(totalErrorsItem);
+                
+                // Add affected rows
+                const affectedRowsItem = document.createElement('div');
+                affectedRowsItem.className = 'summary-item error';
+                affectedRowsItem.innerHTML = `<span>${summary.error_rows}</span>Affected Rows`;
+                summaryGrid.appendChild(affectedRowsItem);
+                
+                // Add category counts
+                for (const [category, count] of Object.entries(summary.categories)) {
+                    if (count > 0) {
+                        const categoryItem = document.createElement('div');
+                        categoryItem.className = 'summary-item';
+                        categoryItem.innerHTML = `<span>${count}</span>${category} Errors`;
+                        summaryGrid.appendChild(categoryItem);
+                    }
+                }
+            }
+            
+            function renderCategories(categories, rowsData) {
+                categories.forEach(category => {
+                    const categoryDiv = document.createElement('div');
+                    categoryDiv.className = 'category';
+                    
+                    // Count total errors in this category
+                    let totalErrorCount = 0;
+                    category.errors.forEach(reason => {
+                        totalErrorCount += reason.rows.length;
+                    });
+                    
+                    // Create category header
+                    const categoryHeader = document.createElement('div');
+                    categoryHeader.className = 'category-header';
+                    categoryHeader.innerHTML = `
+                        <div class="category-name">${category.name}</div>
+                        <div class="category-count">${totalErrorCount}</div>
+                    `;
+                    categoryHeader.addEventListener('click', function() {
+                        const content = this.nextElementSibling;
+                        content.style.display = content.style.display === 'block' ? 'none' : 'block';
+                    });
+                    
+                    // Create category content container
+                    const categoryContent = document.createElement('div');
+                    categoryContent.className = 'category-content';
+                    
+                    // Add reasons to category
+                    category.errors.forEach(reason => {
+                        const reasonGroup = renderReasonGroup(reason, rowsData);
+                        categoryContent.appendChild(reasonGroup);
+                    });
+                    
+                    // Assemble category
+                    categoryDiv.appendChild(categoryHeader);
+                    categoryDiv.appendChild(categoryContent);
+                    categoriesContainer.appendChild(categoryDiv);
+                });
+            }
+            
+            function renderReasonGroup(reason, rowsData) {
+                const reasonGroup = document.createElement('div');
+                reasonGroup.className = 'reason-group';
+                
+                // Create reason header
+                const reasonHeader = document.createElement('div');
+                reasonHeader.className = 'reason-header';
+                reasonHeader.innerHTML = `
+                    <div class="reason-name">${reason.reason}</div>
+                    <div class="reason-count">${reason.rows.length}</div>
+                `;
+                reasonHeader.addEventListener('click', function() {
+                    const content = this.nextElementSibling;
+                    content.style.display = content.style.display === 'block' ? 'none' : 'block';
+                });
+                
+                // Create reason content
+                const reasonContent = document.createElement('div');
+                reasonContent.className = 'reason-content';
+                
+                // Add error rows
+                reason.rows.forEach(row => {
+                    const errorRowElement = renderErrorRow(row, rowsData);
+                    reasonContent.appendChild(errorRowElement);
+                });
+                
+                // Assemble reason group
+                reasonGroup.appendChild(reasonHeader);
+                reasonGroup.appendChild(reasonContent);
+                
+                return reasonGroup;
+            }
+            
+            function renderErrorRow(row, rowsData) {
+                const errorRowElement = document.createElement('div');
+                errorRowElement.className = 'error-row';
+                
+                // For file-level errors
+                if (row.file_level) {
+                    const errorDetails = document.createElement('div');
+                    errorDetails.className = 'error-details';
+                    
+                    errorDetails.innerHTML = `
+                        <div class="error-detail">
+                            <strong>File Level Error:</strong> ${row.cell_data}
+                        </div>
+                    `;
+                    
+                    if (row.columns && row.columns.length > 0) {
+                        const columnsDetail = document.createElement('div');
+                        columnsDetail.className = 'error-detail';
+                        columnsDetail.innerHTML = `<strong>Affected Columns:</strong> ${row.columns.join(', ')}`;
+                        errorDetails.appendChild(columnsDetail);
+                    }
+                    
+                    errorRowElement.appendChild(errorDetails);
+                    return errorRowElement;
+                }
+                
+                // For regular row errors
+                const rowIdx = row.row_idx;
+                const rowData = rowsData[rowIdx];
+                
+                if (!rowData) {
+                    errorRowElement.innerHTML = `<div class="error-detail"><strong>Error:</strong> Row data not found for row ${rowIdx}</div>`;
+                    return errorRowElement;
+                }
+                
+                // Create error details section
+                const errorDetails = document.createElement('div');
+                errorDetails.className = 'error-details';
+                
+                // Add row index
+                const rowIdxDetail = document.createElement('div');
+                rowIdxDetail.className = 'error-detail';
+                rowIdxDetail.innerHTML = `<strong>Row:</strong> ${rowIdx}`;
+                errorDetails.appendChild(rowIdxDetail);
+                
+                // Add cell data if available
+                if (row.cell_data) {
+                    const cellDataDetail = document.createElement('div');
+                    cellDataDetail.className = 'error-detail';
+                    cellDataDetail.innerHTML = `<strong>Value:</strong> ${row.cell_data}`;
+                    errorDetails.appendChild(cellDataDetail);
+                }
+                
+                // Add affected columns if available
+                if (row.columns && row.columns.length > 0) {
+                    const columnsDetail = document.createElement('div');
+                    columnsDetail.className = 'error-detail';
+                    columnsDetail.innerHTML = `<strong>Columns:</strong> ${row.columns.join(', ')}`;
+                    errorDetails.appendChild(columnsDetail);
+                }
+                
+                errorRowElement.appendChild(errorDetails);
+                
+                // Create data table
+                const tableWrapper = document.createElement('div');
+                tableWrapper.className = 'data-table-wrapper';
+                
+                const table = document.createElement('table');
+                table.className = 'data-table';
+                
+                // Create table header
+                const thead = document.createElement('thead');
+                const headerRow = document.createElement('tr');
+                
+                // Get all columns
+                const columns = Object.keys(rowData);
+                
+                columns.forEach(col => {
+                    const th = document.createElement('th');
+                    th.textContent = col;
+                    headerRow.appendChild(th);
+                });
+                
+                thead.appendChild(headerRow);
+                table.appendChild(thead);
+                
+                // Create table body
+                const tbody = document.createElement('tbody');
+                const dataRow = document.createElement('tr');
+                
+                // Add data cells
+                columns.forEach(col => {
+                    const td = document.createElement('td');
+                    let value = rowData[col];
+                    
+                    // Format the value for display
+                    if (value === null || value === undefined) {
+                        value = '';
+                    } else if (typeof value === 'object') {
+                        value = JSON.stringify(value);
+                    } else {
+                        value = String(value);
+                    }
+                    
+                    td.textContent = value;
+                    
+                    // Highlight error cells
+                    if (row.columns && row.columns.includes(col)) {
+                        td.className = 'error-cell';
+                    }
+                    
+                    dataRow.appendChild(td);
+                });
+                
+                tbody.appendChild(dataRow);
+                table.appendChild(tbody);
+                tableWrapper.appendChild(table);
+                
+                // Add expand/collapse button for the table
+                const tableToggleBtn = document.createElement('button');
+                tableToggleBtn.className = 'toggle-button';
+                tableToggleBtn.textContent = 'Show full row data';
+                tableToggleBtn.addEventListener('click', function() {
+                    const cells = dataRow.querySelectorAll('td');
+                    cells.forEach(cell => {
+                        if (cell.style.whiteSpace === 'normal') {
+                            cell.style.whiteSpace = 'nowrap';
+                            cell.style.maxWidth = '300px';
+                            tableToggleBtn.textContent = 'Show full row data';
+                        } else {
+                            cell.style.whiteSpace = 'normal';
+                            cell.style.maxWidth = 'none';
+                            tableToggleBtn.textContent = 'Collapse row data';
+                        }
+                    });
+                });
+                
+                errorRowElement.appendChild(tableWrapper);
+                errorRowElement.appendChild(tableToggleBtn);
+                
+                return errorRowElement;
+            }
+        });
+    </script>
+</body>
+</html>

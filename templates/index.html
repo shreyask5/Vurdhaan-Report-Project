@@ -1,0 +1,956 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CSV Validator & Processor</title>
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --secondary-color: #3498db;
+            --error-color: #e74c3c;
+            --warning-color: #f39c12;
+            --success-color: #2ecc71;
+            --background-color: #f8f9fa;
+            --card-bg: #ffffff;
+            --border-color: #ddd;
+            --text-color: #333;
+            --text-light: #777;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 20px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 28px;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        /* Upload Section */
+        .upload-section {
+            text-align: center;
+            padding: 40px;
+            border: 2px dashed var(--border-color);
+            border-radius: 6px;
+            background-color: var(--card-bg);
+        }
+
+        .upload-section.dragover {
+            border-color: var(--secondary-color);
+            background-color: rgba(52, 152, 219, 0.05);
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        .upload-button {
+            background-color: var(--secondary-color);
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .upload-button:hover {
+            background-color: #2980b9;
+        }
+
+        /* Parameters Section */
+        .parameters-section {
+            display: none;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .form-group label {
+            font-weight: 600;
+            margin-bottom: 5px;
+            color: var(--primary-color);
+        }
+
+        .form-group input,
+        .form-group select {
+            padding: 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: var(--secondary-color);
+        }
+
+        .button-group {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background-color: var(--secondary-color);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: #2980b9;
+        }
+
+        .btn-secondary {
+            background-color: #95a5a6;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background-color: #7f8c8d;
+        }
+
+        .btn-danger {
+            background-color: var(--error-color);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background-color: #c0392b;
+        }
+
+        .btn-success {
+            background-color: var(--success-color);
+            color: white;
+        }
+
+        .btn-success:hover {
+            background-color: #27ae60;
+        }
+
+        /* Loading Indicator */
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 40px;
+        }
+
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-top: 4px solid var(--secondary-color);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Error Display Section */
+        .error-section {
+            display: none;
+        }
+
+        .error-summary {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 4px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+
+        .error-stats {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            margin-top: 10px;
+        }
+
+        .stat-item {
+            background-color: rgba(231, 76, 60, 0.1);
+            padding: 10px 20px;
+            border-radius: 4px;
+            border-left: 4px solid var(--error-color);
+        }
+
+        .stat-item strong {
+            display: block;
+            font-size: 24px;
+            color: var(--error-color);
+        }
+
+        /* Error Table */
+        .error-table-container {
+            overflow-x: auto;
+            margin-top: 20px;
+        }
+
+        .error-table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: white;
+        }
+
+        .error-table th {
+            background-color: #f5f5f5;
+            padding: 12px;
+            text-align: left;
+            border: 1px solid #ddd;
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .error-table td {
+            padding: 10px;
+            border: 1px solid #ddd;
+        }
+
+        .error-table tr:hover {
+            background-color: #f9f9f9;
+        }
+
+        .editable-cell {
+            background-color: #fff3cd;
+            cursor: text;
+            position: relative;
+        }
+
+        .editable-cell:hover {
+            background-color: #ffe8a1;
+        }
+
+        .cell-input {
+            width: 100%;
+            padding: 5px;
+            border: 2px solid var(--secondary-color);
+            border-radius: 3px;
+            font-size: 14px;
+        }
+
+        .edit-icon {
+            position: absolute;
+            right: 5px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--secondary-color);
+            font-size: 12px;
+        }
+
+        /* Success Section */
+        .success-section {
+            display: none;
+            text-align: center;
+            padding: 40px;
+        }
+
+        .success-icon {
+            font-size: 60px;
+            color: var(--success-color);
+            margin-bottom: 20px;
+        }
+
+        /* Alerts */
+        .alert {
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+            display: none;
+        }
+
+        .alert-error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .alert-success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert-info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+
+        /* Progress Bar */
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background-color: #e0e0e0;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 20px 0;
+            display: none;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background-color: var(--secondary-color);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        /* Pagination */
+        .pagination {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .page-btn {
+            padding: 5px 10px;
+            border: 1px solid var(--border-color);
+            background-color: white;
+            cursor: pointer;
+            border-radius: 3px;
+        }
+
+        .page-btn:hover {
+            background-color: #f0f0f0;
+        }
+
+        .page-btn.active {
+            background-color: var(--secondary-color);
+            color: white;
+        }
+
+        .page-btn:disabled {
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>CSV Validator & CORSIA Report Generator</h1>
+        </header>
+
+        <!-- Alert Messages -->
+        <div id="alertMessage" class="alert"></div>
+
+        <!-- Upload Section -->
+        <div id="uploadSection" class="card upload-section">
+            <h2>Upload CSV File</h2>
+            <p>Drag and drop your CSV file here or click to browse</p>
+            <input type="file" id="fileInput" class="file-input" accept=".csv">
+            <button class="upload-button" onclick="document.getElementById('fileInput').click()">
+                Choose CSV File
+            </button>
+            <p class="file-info" id="fileInfo" style="margin-top: 20px; color: var(--text-light);"></p>
+        </div>
+
+        <!-- Parameters Section -->
+        <div id="parametersSection" class="card parameters-section">
+            <h2>Validation Parameters</h2>
+            <form id="parametersForm">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="startDate">Start Date</label>
+                        <input type="date" id="startDate" name="start_date" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="endDate">End Date</label>
+                        <input type="date" id="endDate" name="end_date" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="dateFormat">Date Format</label>
+                        <select id="dateFormat" name="date_format" required>
+                            <option value="DMY">DD/MM/YYYY</option>
+                            <option value="MDY">MM/DD/YYYY</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="flightPrefix">Flight Starts With</label>
+                        <input type="text" id="flightPrefix" name="flight_starts_with" 
+                               placeholder="e.g., AI, LH, FHY" required>
+                    </div>
+                </div>
+                <div class="button-group">
+                    <button type="submit" class="btn btn-primary">Start Validation</button>
+                    <button type="button" class="btn btn-secondary" onclick="resetUpload()">Cancel</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Loading Section -->
+        <div id="loadingSection" class="card loading">
+            <div class="spinner"></div>
+            <h3 id="loadingMessage">Processing CSV file...</h3>
+            <div class="progress-bar" id="progressBar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+        </div>
+
+        <!-- Error Display Section -->
+        <div id="errorSection" class="card error-section">
+            <h2>Validation Errors</h2>
+            <div class="error-summary">
+                <h3>Summary</h3>
+                <div class="error-stats" id="errorStats"></div>
+            </div>
+            
+            <div class="button-group">
+                <button class="btn btn-success" onclick="saveCorrections()">Save Corrections</button>
+                <button class="btn btn-danger" onclick="ignoreErrors()">Ignore Remaining Errors</button>
+                <button class="btn btn-secondary" onclick="resetUpload()">Start Over</button>
+            </div>
+
+            <div class="error-table-container">
+                <table class="error-table" id="errorTable">
+                    <thead>
+                        <tr>
+                            <th>Row</th>
+                            <th>Column</th>
+                            <th>Current Value</th>
+                            <th>Error Message</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="errorTableBody"></tbody>
+                </table>
+            </div>
+
+            <div class="pagination" id="pagination"></div>
+        </div>
+
+        <!-- Success Section -->
+        <div id="successSection" class="card success-section">
+            <div class="success-icon">✓</div>
+            <h2>Validation Complete!</h2>
+            <p>Your CSV file has been successfully validated.</p>
+            <div class="button-group">
+                <button class="btn btn-primary" onclick="generateReport()">Generate CORSIA Report</button>
+                <button class="btn btn-secondary" onclick="revalidate()">Re-Validate & Process Again</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let currentFileId = null;
+        let currentChunk = 1;
+        let allErrors = [];
+        let editedCells = {};
+        let validationParams = {};
+
+        // DOM elements
+        const uploadSection = document.getElementById('uploadSection');
+        const parametersSection = document.getElementById('parametersSection');
+        const loadingSection = document.getElementById('loadingSection');
+        const errorSection = document.getElementById('errorSection');
+        const successSection = document.getElementById('successSection');
+        const alertMessage = document.getElementById('alertMessage');
+        const fileInput = document.getElementById('fileInput');
+        const fileInfo = document.getElementById('fileInfo');
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            setupDragDrop();
+            setupFileInput();
+            setupParametersForm();
+            
+            // Set default dates
+            const today = new Date();
+            const startOfYear = new Date(today.getFullYear(), 0, 1);
+            const endOfYear = new Date(today.getFullYear(), 11, 31);
+            
+            document.getElementById('startDate').value = startOfYear.toISOString().split('T')[0];
+            document.getElementById('endDate').value = endOfYear.toISOString().split('T')[0];
+        });
+
+        // File upload handling
+        function setupDragDrop() {
+            const dropZone = uploadSection;
+            
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                dropZone.addEventListener(eventName, preventDefaults, false);
+            });
+            
+            function preventDefaults(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            
+            ['dragenter', 'dragover'].forEach(eventName => {
+                dropZone.addEventListener(eventName, () => dropZone.classList.add('dragover'), false);
+            });
+            
+            ['dragleave', 'drop'].forEach(eventName => {
+                dropZone.addEventListener(eventName, () => dropZone.classList.remove('dragover'), false);
+            });
+            
+            dropZone.addEventListener('drop', handleDrop, false);
+        }
+
+        function handleDrop(e) {
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFile(files[0]);
+            }
+        }
+
+        function setupFileInput() {
+            fileInput.addEventListener('change', function(e) {
+                if (e.target.files.length > 0) {
+                    handleFile(e.target.files[0]);
+                }
+            });
+        }
+
+        function handleFile(file) {
+            if (!file.name.endsWith('.csv')) {
+                showAlert('Please select a CSV file', 'error');
+                return;
+            }
+            
+            fileInfo.textContent = `Selected: ${file.name} (${formatFileSize(file.size)})`;
+            parametersSection.style.display = 'block';
+            uploadSection.style.display = 'none';
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // Parameters form handling
+        function setupParametersForm() {
+            const form = document.getElementById('parametersForm');
+            form.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                
+                // Collect parameters
+                validationParams = {
+                    start_date: document.getElementById('startDate').value,
+                    end_date: document.getElementById('endDate').value,
+                    date_format: document.getElementById('dateFormat').value,
+                    flight_starts_with: document.getElementById('flightPrefix').value
+                };
+                
+                // Upload file
+                await uploadFile();
+            });
+        }
+
+        // File upload to server
+        async function uploadFile() {
+            const file = fileInput.files[0];
+            if (!file) return;
+            
+            showLoading('Uploading file...');
+            
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            // Add validation parameters
+            Object.keys(validationParams).forEach(key => {
+                formData.append(key, validationParams[key]);
+            });
+            
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Upload failed');
+                }
+                
+                const data = await response.json();
+                currentFileId = data.file_id;
+                
+                // Start fetching errors
+                await fetchErrors();
+                
+            } catch (error) {
+                showAlert('Failed to upload file: ' + error.message, 'error');
+                hideLoading();
+            }
+        }
+
+        // Fetch errors in chunks
+        async function fetchErrors() {
+            showLoading('Loading validation results...');
+            allErrors = [];
+            currentChunk = 1;
+            
+            try {
+                let hasMore = true;
+                while (hasMore) {
+                    const response = await fetch(`/errors/${currentFileId}?chunk=${currentChunk}`);
+                    if (!response.ok) throw new Error('Failed to fetch errors');
+                    
+                    const data = await response.json();
+                    
+                    if (data.errors && data.errors.length > 0) {
+                        allErrors = allErrors.concat(data.errors);
+                    }
+                    
+                    hasMore = data.next_chunk !== null;
+                    if (hasMore) {
+                        currentChunk = data.next_chunk;
+                        updateProgress(currentChunk * 10); // Approximate progress
+                    }
+                }
+                
+                hideLoading();
+                
+                if (allErrors.length === 0) {
+                    showSuccess();
+                } else {
+                    displayErrors();
+                }
+                
+            } catch (error) {
+                showAlert('Failed to load errors: ' + error.message, 'error');
+                hideLoading();
+            }
+        }
+
+        // Display errors
+        function displayErrors() {
+            errorSection.style.display = 'block';
+            
+            // Update summary
+            updateErrorSummary();
+            
+            // Display error table
+            displayErrorTable();
+        }
+
+        function updateErrorSummary() {
+            const stats = document.getElementById('errorStats');
+            const errorsByCategory = {};
+            const affectedRows = new Set();
+            
+            allErrors.forEach(error => {
+                const category = error.category || 'Other';
+                errorsByCategory[category] = (errorsByCategory[category] || 0) + 1;
+                if (error.row !== undefined) {
+                    affectedRows.add(error.row);
+                }
+            });
+            
+            stats.innerHTML = `
+                <div class="stat-item">
+                    <strong>${allErrors.length}</strong>
+                    Total Errors
+                </div>
+                <div class="stat-item">
+                    <strong>${affectedRows.size}</strong>
+                    Affected Rows
+                </div>
+                ${Object.entries(errorsByCategory).map(([cat, count]) => `
+                    <div class="stat-item">
+                        <strong>${count}</strong>
+                        ${cat} Errors
+                    </div>
+                `).join('')}
+            `;
+        }
+
+        function displayErrorTable() {
+            const tbody = document.getElementById('errorTableBody');
+            tbody.innerHTML = '';
+            
+            allErrors.forEach((error, index) => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${error.row || 'N/A'}</td>
+                    <td>${error.column || 'N/A'}</td>
+                    <td>
+                        <div class="editable-cell" onclick="editCell(${index})">
+                            <span id="value-${index}">${escapeHtml(error.value || '')}</span>
+                            <span class="edit-icon">✏️</span>
+                        </div>
+                    </td>
+                    <td>${escapeHtml(error.message || '')}</td>
+                    <td>
+                        <button class="btn btn-primary btn-sm" onclick="editCell(${index})">Edit</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        function editCell(index) {
+            const error = allErrors[index];
+            const valueSpan = document.getElementById(`value-${index}`);
+            const currentValue = valueSpan.textContent;
+            
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'cell-input';
+            input.value = currentValue;
+            
+            input.onblur = function() {
+                const newValue = input.value;
+                valueSpan.textContent = newValue;
+                
+                // Store the edit
+                const key = `${error.row}-${error.column}`;
+                editedCells[key] = {
+                    row: error.row,
+                    column: error.column,
+                    old_value: error.value,
+                    new_value: newValue
+                };
+            };
+            
+            input.onkeypress = function(e) {
+                if (e.key === 'Enter') {
+                    input.blur();
+                }
+            };
+            
+            valueSpan.innerHTML = '';
+            valueSpan.appendChild(input);
+            input.focus();
+        }
+
+        // Save corrections
+        async function saveCorrections() {
+            if (Object.keys(editedCells).length === 0) {
+                showAlert('No corrections to save', 'info');
+                return;
+            }
+            
+            showLoading('Saving corrections and re-validating...');
+            
+            const corrections = Object.values(editedCells);
+            
+            try {
+                const response = await fetch(`/upload/${currentFileId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ corrections: corrections })
+                });
+                
+                if (!response.ok) throw new Error('Failed to save corrections');
+                
+                // Clear edited cells
+                editedCells = {};
+                
+                // Fetch new errors
+                await fetchErrors();
+                
+            } catch (error) {
+                showAlert('Failed to save corrections: ' + error.message, 'error');
+                hideLoading();
+            }
+        }
+
+        // Ignore errors
+        async function ignoreErrors() {
+            if (!confirm('Are you sure you want to ignore remaining errors and proceed?')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/upload/${currentFileId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ ignore_errors: true })
+                });
+                
+                if (!response.ok) throw new Error('Failed to process request');
+                
+                showSuccess();
+                
+            } catch (error) {
+                showAlert('Failed to process request: ' + error.message, 'error');
+            }
+        }
+
+        // Generate report
+        async function generateReport() {
+            showLoading('Generating CORSIA report...');
+            
+            try {
+                const response = await fetch(`/report/${currentFileId}`, {
+                    method: 'POST'
+                });
+                
+                if (!response.ok) throw new Error('Failed to generate report');
+                
+                // Download the file
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'template_filled.xlsx';
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                a.remove();
+                
+                hideLoading();
+                showAlert('Report generated successfully!', 'success');
+                
+                // Reset after a delay
+                setTimeout(resetUpload, 3000);
+                
+            } catch (error) {
+                showAlert('Failed to generate report: ' + error.message, 'error');
+                hideLoading();
+            }
+        }
+
+        // Re-validate
+        async function revalidate() {
+            showLoading('Re-validating CSV file...');
+            
+            try {
+                const response = await fetch(`/upload/${currentFileId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ revalidate: true })
+                });
+                
+                if (!response.ok) throw new Error('Failed to re-validate');
+                
+                await fetchErrors();
+                
+            } catch (error) {
+                showAlert('Failed to re-validate: ' + error.message, 'error');
+                hideLoading();
+            }
+        }
+
+        // UI Helper functions
+        function showLoading(message) {
+            hideAllSections();
+            loadingSection.style.display = 'block';
+            document.getElementById('loadingMessage').textContent = message;
+            document.getElementById('progressBar').style.display = 'block';
+        }
+
+        function hideLoading() {
+            loadingSection.style.display = 'none';
+            updateProgress(0);
+        }
+
+        function showSuccess() {
+            hideAllSections();
+            successSection.style.display = 'block';
+        }
+
+        function hideAllSections() {
+            uploadSection.style.display = 'none';
+            parametersSection.style.display = 'none';
+            loadingSection.style.display = 'none';
+            errorSection.style.display = 'none';
+            successSection.style.display = 'none';
+        }
+
+        function showAlert(message, type) {
+            alertMessage.textContent = message;
+            alertMessage.className = `alert alert-${type}`;
+            alertMessage.style.display = 'block';
+            
+            setTimeout(() => {
+                alertMessage.style.display = 'none';
+            }, 5000);
+        }
+
+        function updateProgress(percent) {
+            document.getElementById('progressFill').style.width = percent + '%';
+        }
+
+        function resetUpload() {
+            currentFileId = null;
+            currentChunk = 1;
+            allErrors = [];
+            editedCells = {};
+            fileInput.value = '';
+            fileInfo.textContent = '';
+            hideAllSections();
+            uploadSection.style.display = 'block';
+        }
+
+        function escapeHtml(text) {
+            const map = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            };
+            return text.replace(/[&<>"']/g, m => map[m]);
+        }
+    </script>
+</body>
+</html>
