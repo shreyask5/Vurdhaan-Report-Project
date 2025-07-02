@@ -8,3 +8,4 @@ xlwings
 openpyxl
 Flask
 flask-cors
+brotli
