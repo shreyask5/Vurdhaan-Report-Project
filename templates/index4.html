@@ -1187,7 +1187,7 @@
             });
             
             try {
-                const response = await fetch('/upload', {
+                const response = await fetch('/vurdhaan/upload', {
                     method: 'POST',
                     body: formData
                 });
@@ -1216,7 +1216,7 @@
                 console.log('Fetching errors for file ID:', currentFileId);
                 
                 // Fetch the error data (could be compressed or regular JSON)
-                const response = await fetch(`/errors/${currentFileId}`);
+                const response = await fetch(`/vurdhaan/errors/${currentFileId}`);
                 if (!response.ok) {
                     const errorText = await response.text();
                     console.error('Server response not OK:', response.status, errorText);
@@ -1455,7 +1455,7 @@
         async function fetchErrorsLegacy(fileId) {
             console.log('Using legacy JSON endpoint...');
             
-            const response = await fetch(`/errors/${fileId}/json`); // You'd need to add this endpoint
+            const response = await fetch(`/vurdhaan/errors/${fileId}/json`); // You'd need to add this endpoint
             if (!response.ok) {
                 throw new Error(`Failed to fetch legacy errors: ${response.status}`);
             }
@@ -1854,7 +1854,7 @@
             const corrections = Object.values(editedCells);
             
             try {
-                const response = await fetch(`/upload/${currentFileId}`, {
+                const response = await fetch(`/vurdhaan/upload/${currentFileId}`, {
                     method: 'PUT',
                     headers: {
                         'Content-Type': 'application/json'
@@ -1883,7 +1883,7 @@
             }
             
             try {
-                const response = await fetch(`/upload/${currentFileId}`, {
+                const response = await fetch(`/vurdhaan/upload/${currentFileId}`, {
                     method: 'PUT',
                     headers: {
                         'Content-Type': 'application/json'
@@ -1905,7 +1905,7 @@
             showLoading('Generating CORSIA report...');
             
             try {
-                const response = await fetch(`/report/${currentFileId}`, {
+                const response = await fetch(`/vurdhaan/report/${currentFileId}`, {
                     method: 'POST'
                 });
                 
@@ -1939,7 +1939,7 @@
             showLoading('Re-validating CSV file...');
             
             try {
-                const response = await fetch(`/upload/${currentFileId}`, {
+                const response = await fetch(`/vurdhaan/upload/${currentFileId}`, {
                     method: 'PUT',
                     headers: {
                         'Content-Type': 'application/json'
