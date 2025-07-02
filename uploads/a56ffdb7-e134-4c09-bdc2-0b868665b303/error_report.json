@@ -1,0 +1,133 @@
+{
+  "summary": {
+    "total_errors": 8,
+    "error_rows": 8,
+    "categories": {
+      "Sequence": 8
+    }
+  },
+  "rows_data": {
+    "17825": {
+      "error": "Row not found in DataFrame"
+    },
+    "17826": {
+      "error": "Row not found in DataFrame"
+    },
+    "17827": {
+      "error": "Row not found in DataFrame"
+    },
+    "17828": {
+      "error": "Row not found in DataFrame"
+    },
+    "3002": {
+      "error": "Row not found in DataFrame"
+    },
+    "3003": {
+      "error": "Row not found in DataFrame"
+    },
+    "3004": {
+      "error": "Row not found in DataFrame"
+    },
+    "3005": {
+      "error": "Row not found in DataFrame"
+    }
+  },
+  "categories": [
+    {
+      "name": "Sequence",
+      "errors": [
+        {
+          "reason": "TCCOH: Sequence Failed for Destination ICAO: LTAF to Origin ICAO: LTAI",
+          "rows": [
+            {
+              "row_idx": "3002",
+              "cell_data": "TCCOH : LTAF \u2192 LTAI",
+              "columns": [
+                [
+                  "Origin ICAO",
+                  "Destination ICAO"
+                ]
+              ]
+            },
+            {
+              "row_idx": "3003",
+              "cell_data": "TCCOH : LTAF \u2192 LTAI",
+              "columns": [
+                [
+                  "Origin ICAO",
+                  "Destination ICAO"
+                ]
+              ]
+            },
+            {
+              "row_idx": "3004",
+              "cell_data": "TCCOH : LTAF \u2192 LTAI",
+              "columns": [
+                [
+                  "Origin ICAO",
+                  "Destination ICAO"
+                ]
+              ]
+            },
+            {
+              "row_idx": "3005",
+              "cell_data": "TCCOH : LTAF \u2192 LTAI",
+              "columns": [
+                [
+                  "Origin ICAO",
+                  "Destination ICAO"
+                ]
+              ]
+            }
+          ]
+        },
+        {
+          "reason": "TCGMA: Sequence Failed for Destination ICAO: LTFJ to Origin ICAO: LTAI",
+          "rows": [
+            {
+              "row_idx": "17825",
+              "cell_data": "TCGMA : LTFJ \u2192 LTAI",
+              "columns": [
+                [
+                  "Origin ICAO",
+                  "Destination ICAO"
+                ]
+              ]
+            },
+            {
+              "row_idx": "17826",
+              "cell_data": "TCGMA : LTFJ \u2192 LTAI",
+              "columns": [
+                [
+                  "Origin ICAO",
+                  "Destination ICAO"
+                ]
+              ]
+            },
+            {
+              "row_idx": "17827",
+              "cell_data": "TCGMA : LTFJ \u2192 LTAI",
+              "columns": [
+                [
+                  "Origin ICAO",
+                  "Destination ICAO"
+                ]
+              ]
+            },
+            {
+              "row_idx": "17828",
+              "cell_data": "TCGMA : LTFJ \u2192 LTAI",
+              "columns": [
+                [
+                  "Origin ICAO",
+                  "Destination ICAO"
+                ]
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "error_tracker": "test"
+}

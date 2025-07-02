@@ -1,0 +1,244 @@
+{
+  "summary": {
+    "total_errors": 8,
+    "error_rows": 8,
+    "categories": {
+      "Sequence": 8
+    }
+  },
+  "rows_data": {
+    "17825": {
+      "Date": "2024-02-17",
+      "A/C Registration": "TCGMA",
+      "Flight": "FHY908P",
+      "A/C Type": "A320",
+      "ATD (UTC) Block out": "17:31",
+      "ATA (UTC) Block in": "19:33",
+      "Origin ICAO": "LTFJ",
+      "Destination ICAO": "LTFO",
+      "Uplift Volume": 8017,
+      "Uplift Density": 0.8,
+      "Uplift weight": 6413.6,
+      "Remaining Fuel From Prev. Flight": 3800,
+      "Block off Fuel": 10213.6,
+      "Block on Fuel": 6080,
+      "Fuel Type": "Jet-A1"
+    },
+    "17826": {
+      "Date": "2024-02-17",
+      "A/C Registration": "TCGMA",
+      "Flight": "FHY1907",
+      "A/C Type": "A320",
+      "ATD (UTC) Block out": "20:24",
+      "ATA (UTC) Block in": "22:11",
+      "Origin ICAO": "LTFO",
+      "Destination ICAO": "LTFJ",
+      "Uplift Volume": 5658,
+      "Uplift Density": 0.8,
+      "Uplift weight": 4526.4,
+      "Remaining Fuel From Prev. Flight": 6080,
+      "Block off Fuel": 10606.4,
+      "Block on Fuel": 6820,
+      "Fuel Type": "Jet-A1"
+    },
+    "17827": {
+      "Date": "2024-02-26",
+      "A/C Registration": "TCGMA",
+      "Flight": "FHY907P",
+      "A/C Type": "A320",
+      "ATD (UTC) Block out": "13:30",
+      "ATA (UTC) Block in": "14:35",
+      "Origin ICAO": "LTAI",
+      "Destination ICAO": "LTFJ",
+      "Uplift Volume": 4427,
+      "Uplift Density": 0.8,
+      "Uplift weight": 3541.6,
+      "Remaining Fuel From Prev. Flight": 2980,
+      "Block off Fuel": 6521.6,
+      "Block on Fuel": 4360,
+      "Fuel Type": "Jet-A1"
+    },
+    "17828": {
+      "Date": "2024-02-26",
+      "A/C Registration": "TCGMA",
+      "Flight": "FHY1907",
+      "A/C Type": "A320",
+      "ATD (UTC) Block out": "16:30",
+      "ATA (UTC) Block in": "17:30",
+      "Origin ICAO": "LTFJ",
+      "Destination ICAO": "LTAC",
+      "Uplift Volume": 2127,
+      "Uplift Density": 0.8,
+      "Uplift weight": 1701.6,
+      "Remaining Fuel From Prev. Flight": 4360,
+      "Block off Fuel": 6061.6,
+      "Block on Fuel": 4200,
+      "Fuel Type": "Jet-A1"
+    },
+    "3002": {
+      "Date": "2024-02-16",
+      "A/C Registration": "TCCOH",
+      "Flight": "FHY4544",
+      "A/C Type": "B738",
+      "ATD (UTC) Block out": "17:50",
+      "ATA (UTC) Block in": "19:00",
+      "Origin ICAO": "LTAI",
+      "Destination ICAO": "LCEN",
+      "Uplift Volume": 4238,
+      "Uplift Density": 0.78,
+      "Uplift weight": 3305.64,
+      "Remaining Fuel From Prev. Flight": 3700,
+      "Block off Fuel": 7005.64,
+      "Block on Fuel": 4500,
+      "Fuel Type": "Jet-A1"
+    },
+    "3003": {
+      "Date": "2024-02-16",
+      "A/C Registration": "TCCOH",
+      "Flight": "FHY975P",
+      "A/C Type": "B738",
+      "ATD (UTC) Block out": "19:40",
+      "ATA (UTC) Block in": "20:40",
+      "Origin ICAO": "LCEN",
+      "Destination ICAO": "LTAF",
+      "Uplift Volume": 800,
+      "Uplift Density": 0.8,
+      "Uplift weight": 640.0,
+      "Remaining Fuel From Prev. Flight": 4500,
+      "Block off Fuel": 5140.0,
+      "Block on Fuel": 3600,
+      "Fuel Type": "Jet-A1"
+    },
+    "3004": {
+      "Date": "2024-03-05",
+      "A/C Registration": "TCCOH",
+      "Flight": "FHY1303",
+      "A/C Type": "B738",
+      "ATD (UTC) Block out": "12:20",
+      "ATA (UTC) Block in": "15:50",
+      "Origin ICAO": "LTAI",
+      "Destination ICAO": "EDDM",
+      "Uplift Volume": 9477,
+      "Uplift Density": 0.8,
+      "Uplift weight": 7581.6,
+      "Remaining Fuel From Prev. Flight": 3900,
+      "Block off Fuel": 11481.6,
+      "Block on Fuel": 4000,
+      "Fuel Type": "Jet-A1"
+    },
+    "3005": {
+      "Date": "2024-03-05",
+      "A/C Registration": "TCCOH",
+      "Flight": "FHY1304",
+      "A/C Type": "B738",
+      "ATD (UTC) Block out": "16:30",
+      "ATA (UTC) Block in": "19:45",
+      "Origin ICAO": "EDDM",
+      "Destination ICAO": "LTAI",
+      "Uplift Volume": 8825,
+      "Uplift Density": 0.797,
+      "Uplift weight": 7033.525,
+      "Remaining Fuel From Prev. Flight": 4000,
+      "Block off Fuel": 11033.525,
+      "Block on Fuel": 3800,
+      "Fuel Type": "Jet-A1"
+    }
+  },
+  "categories": [
+    {
+      "name": "Sequence",
+      "errors": [
+        {
+          "reason": "TCCOH: Sequence Failed for Destination ICAO: LTAF to Origin ICAO: LTAI",
+          "rows": [
+            {
+              "row_idx": "3002",
+              "cell_data": "TCCOH : LTAF \u2192 LTAI",
+              "columns": [
+                [
+                  "Origin ICAO",
+                  "Destination ICAO"
+                ]
+              ]
+            },
+            {
+              "row_idx": "3003",
+              "cell_data": "TCCOH : LTAF \u2192 LTAI",
+              "columns": [
+                [
+                  "Origin ICAO",
+                  "Destination ICAO"
+                ]
+              ]
+            },
+            {
+              "row_idx": "3004",
+              "cell_data": "TCCOH : LTAF \u2192 LTAI",
+              "columns": [
+                [
+                  "Origin ICAO",
+                  "Destination ICAO"
+                ]
+              ]
+            },
+            {
+              "row_idx": "3005",
+              "cell_data": "TCCOH : LTAF \u2192 LTAI",
+              "columns": [
+                [
+                  "Origin ICAO",
+                  "Destination ICAO"
+                ]
+              ]
+            }
+          ]
+        },
+        {
+          "reason": "TCGMA: Sequence Failed for Destination ICAO: LTFJ to Origin ICAO: LTAI",
+          "rows": [
+            {
+              "row_idx": "17825",
+              "cell_data": "TCGMA : LTFJ \u2192 LTAI",
+              "columns": [
+                [
+                  "Origin ICAO",
+                  "Destination ICAO"
+                ]
+              ]
+            },
+            {
+              "row_idx": "17826",
+              "cell_data": "TCGMA : LTFJ \u2192 LTAI",
+              "columns": [
+                [
+                  "Origin ICAO",
+                  "Destination ICAO"
+                ]
+              ]
+            },
+            {
+              "row_idx": "17827",
+              "cell_data": "TCGMA : LTFJ \u2192 LTAI",
+              "columns": [
+                [
+                  "Origin ICAO",
+                  "Destination ICAO"
+                ]
+              ]
+            },
+            {
+              "row_idx": "17828",
+              "cell_data": "TCGMA : LTFJ \u2192 LTAI",
+              "columns": [
+                [
+                  "Origin ICAO",
+                  "Destination ICAO"
+                ]
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

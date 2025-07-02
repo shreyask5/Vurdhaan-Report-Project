@@ -631,9 +631,11 @@
         }
 
         .data-table td.error-column, .error-row-table td.error-column {
-            background: linear-gradient(135deg, #fef3c7 0%, #fed7aa 100%);
+            background: #ffe5e5 !important;
             border-left: 3px solid var(--warning-color);
             padding: 0;
+            color: #111 !important;
+            font-weight: bold !important;
         }
 
         .data-table tr.sequence-error-row {
@@ -641,7 +643,7 @@
         }
 
         .data-table tr.sequence-error-row td, .sequence-table tr.sequence-error-row td {
-            background: transparent !important;
+            background: transparent;
         }
 
         /* Error and Details cell styling */
@@ -699,6 +701,7 @@
             font-size: 12px;
             font-family: inherit;
             transition: all 0.2s ease;
+            font-weight: bold;
         }
 
         .editable-input:focus {
@@ -776,6 +779,23 @@
             color: var(--primary-color);
             margin-bottom: 16px;
             font-weight: 600;
+        }
+
+        .red-highlight, .sequence-table tr .red-highlight {
+            background: #ffe5e5 !important;
+            border-left: 3px solid var(--warning-color);
+            padding: 0;
+            font-weight: bold !important;
+        }
+
+        .sequence-table th, .sequence-table td, .data-table th, .data-table td, .error-row-table th, .error-row-table td {
+            text-align: center;
+        }
+
+        .data-table, .sequence-table {
+            overflow-x: auto;
+            display: block;
+            max-width: 100%;
         }
     </style>
 </head>
@@ -967,6 +987,7 @@
             // Match pattern like "TCCOH : LTAF → LTAI"
             const match = cellData.match(/(\w+)\s*:\s*(\w+)\s*→\s*(\w+)/);
             if (match) {
+                console.log(match)
                 return {
                     errorCode: match[1], // TCCOH
                     destinationICAO: match[2], // LTAF
@@ -1194,7 +1215,7 @@
             try {
                 console.log('Fetching errors for file ID:', currentFileId);
                 
-                // First, get the error data to check total_errors
+                // Fetch the error data (could be compressed or regular JSON)
                 const response = await fetch(`/errors/${currentFileId}`);
                 if (!response.ok) {
                     const errorText = await response.text();
@@ -1202,7 +1223,28 @@
                     throw new Error(`Failed to fetch errors: ${response.status} ${errorText}`);
                 }
                 
-                const data = await response.json();
+                // Check response headers to determine if data is compressed
+                const contentType = response.headers.get('content-type');
+                const contentEncoding = response.headers.get('content-encoding');
+                
+                let data;
+                
+                if (contentEncoding === 'br' || contentType === 'application/octet-stream') {
+                    // Handle compressed Brotli data
+                    console.log('Decompressing Brotli data...');
+                    const compressedData = new Uint8Array(await response.arrayBuffer());
+                    
+                    // Log compression details
+                    console.log(`Received compressed data: ${compressedData.length.toLocaleString()} bytes`);
+                    
+                    data = await decompressOptimizedErrorReport(compressedData);
+                    console.log('Decompression completed successfully');
+                } else {
+                    // Handle regular JSON (fallback for compatibility)
+                    console.log('Processing regular JSON data...');
+                    data = await response.json();
+                }
+                
                 console.log('Received error data:', data);
                 
                 if (!data) {
@@ -1210,7 +1252,6 @@
                 }
                 
                 errorData = data;
-                
                 hideLoading();
                 
                 // Check if there are errors
@@ -1237,6 +1278,191 @@
             }
         }
 
+        /**
+         * Decompresses Brotli-compressed optimized error report and restores original structure
+         * @param {Uint8Array} compressedData - The compressed data
+         * @returns {Object} - Restored error report in original format
+         */
+        async function decompressOptimizedErrorReport(compressedData) {
+            try {
+                console.log('Starting Brotli decompression...');
+                
+                // Check if DecompressionStream is available (modern browsers)
+                if (typeof DecompressionStream === 'undefined') {
+                    throw new Error('Brotli decompression not supported in this browser. Please use a modern browser like Chrome, Firefox, or Safari.');
+                }
+                
+                // Step 1: Brotli decompression
+                const stream = new DecompressionStream('br');
+                const writer = stream.writable.getWriter();
+                const reader = stream.readable.getReader();
+                
+                // Write compressed data to stream
+                await writer.write(compressedData);
+                await writer.close();
+                
+                // Read decompressed chunks
+                const chunks = [];
+                let result;
+                while (!(result = await reader.read()).done) {
+                    chunks.push(result.value);
+                }
+                
+                // Combine chunks into single Uint8Array
+                const totalLength = chunks.reduce((acc, chunk) => acc + chunk.length, 0);
+                const decompressed = new Uint8Array(totalLength);
+                let offset = 0;
+                for (const chunk of chunks) {
+                    decompressed.set(chunk, offset);
+                    offset += chunk.length;
+                }
+                
+                // Convert to string and parse JSON
+                const jsonStr = new TextDecoder().decode(decompressed);
+                const optimizedData = JSON.parse(jsonStr);
+                
+                console.log(`Brotli decompression successful: ${compressedData.length.toLocaleString()} → ${jsonStr.length.toLocaleString()} bytes`);
+                console.log(`Compression ratio: ${((1 - compressedData.length / jsonStr.length) * 100).toFixed(1)}%`);
+                
+                // Step 2: Restore original structure
+                return restoreOriginalErrorStructure(optimizedData);
+                
+            } catch (error) {
+                console.error('Decompression failed:', error);
+                
+                // Provide helpful error messages
+                if (error.message.includes('DecompressionStream')) {
+                    throw new Error('Your browser does not support Brotli decompression. Please update to a newer version or use Chrome/Firefox/Safari.');
+                } else if (error.message.includes('JSON')) {
+                    throw new Error('Failed to parse decompressed data. The data may be corrupted.');
+                } else {
+                    throw new Error(`Failed to decompress error data: ${error.message}`);
+                }
+            }
+        }
+
+        /**
+         * Restores the original error report structure from optimized format
+         * @param {Object} optimizedData - The optimized/compressed data structure
+         * @returns {Object} - Original error report structure
+         */
+        function restoreOriginalErrorStructure(optimizedData) {
+            try {
+                console.log('Restoring original error structure...');
+                
+                // Validate input structure
+                if (!optimizedData || !optimizedData.meta) {
+                    throw new Error('Invalid optimized data structure: missing meta section');
+                }
+                
+                // Get field mapping for restoration
+                const fieldMap = optimizedData.meta.fm; // field map
+                if (!fieldMap) {
+                    throw new Error('Invalid optimized data structure: missing field map');
+                }
+                
+                // Step 1: Restore row data with full field names
+                const restoredRows = {};
+                const rowsData = optimizedData.rd || {};
+                
+                for (const [rowIdx, rowData] of Object.entries(rowsData)) {
+                    const restoredRow = {};
+                    
+                    for (const [shortKey, value] of Object.entries(rowData)) {
+                        if (shortKey === 'err') {
+                            // Handle error field
+                            restoredRow['error'] = value;
+                        } else {
+                            // Restore full field name
+                            const fullKey = fieldMap[shortKey] || shortKey;
+                            restoredRow[fullKey] = value;
+                        }
+                    }
+                    
+                    restoredRows[rowIdx] = restoredRow;
+                }
+                
+                // Step 2: Restore category structure
+                const categories = optimizedData.c || [];
+                const restoredCategories = categories.map(category => ({
+                    name: category.n || '', // name
+                    errors: (category.e || []).map(error => ({ // errors
+                        reason: error.r || '', // reason
+                        rows: (error.rows || []).map(row => {
+                            if (row.fl) { // file_level
+                                return {
+                                    file_level: true,
+                                    cell_data: row.cd || '',
+                                    columns: row.cols || []
+                                };
+                            } else {
+                                return {
+                                    row_idx: row.idx,
+                                    cell_data: row.cd || '',
+                                    columns: row.cols || []
+                                };
+                            }
+                        })
+                    }))
+                }));
+                
+                // Step 3: Restore summary structure
+                const summary = optimizedData.meta.s || {};
+                const restoredSummary = {
+                    total_errors: summary.te || 0,
+                    error_rows: summary.er || 0,
+                    categories: summary.c || {}
+                };
+                
+                // Step 4: Construct final restored structure
+                const restoredData = {
+                    summary: restoredSummary,
+                    rows_data: restoredRows,
+                    categories: restoredCategories
+                };
+                
+                console.log('Structure restoration completed');
+                console.log('Restored data summary:', restoredData.summary);
+                
+                // Validate restored structure
+                if (!restoredData.summary || typeof restoredData.summary.total_errors !== 'number') {
+                    throw new Error('Restored data validation failed: invalid summary structure');
+                }
+                
+                return restoredData;
+                
+            } catch (error) {
+                console.error('Failed to restore error structure:', error);
+                throw new Error(`Structure restoration failed: ${error.message}`);
+            }
+        }
+
+        /**
+         * Browser compatibility check for Brotli decompression
+         * @returns {boolean} - True if browser supports Brotli decompression
+         */
+        function isBrotliSupported() {
+            return typeof DecompressionStream !== 'undefined' && 
+                'br' in DecompressionStream.prototype.constructor || 
+                typeof window.DecompressionStream !== 'undefined';
+        }
+
+        /**
+         * Fallback function for legacy browsers or when decompression fails
+         * @param {string} fileId - The file ID
+         * @returns {Object} - Error data in original format
+         */
+        async function fetchErrorsLegacy(fileId) {
+            console.log('Using legacy JSON endpoint...');
+            
+            const response = await fetch(`/errors/${fileId}/json`); // You'd need to add this endpoint
+            if (!response.ok) {
+                throw new Error(`Failed to fetch legacy errors: ${response.status}`);
+            }
+            
+            return await response.json();
+        }
+
         // NEW: Function to create sequence table
         function createSequenceTable(sequence, rows) {
             const container = document.createElement('div');
@@ -1255,36 +1481,47 @@
             // Create header row
             const thead = document.createElement('thead');
             const headerRow = document.createElement('tr');
-            
-            // Use fixed column order
             columnOrder.forEach(column => {
                 const th = document.createElement('th');
                 th.textContent = column;
                 headerRow.appendChild(th);
             });
-            
             thead.appendChild(headerRow);
             table.appendChild(thead);
 
             // Create body
             const tbody = document.createElement('tbody');
-            
+
+            // Find mismatched sequence cells
+            let highlightCells = [];
+            for (let i = 0; i < rows.length - 1; i++) {
+                const currentRow = rows[i].rowData;
+                const nextRow = rows[i + 1].rowData;
+                if (currentRow['Destination ICAO'] !== nextRow['Origin ICAO']) {
+                    highlightCells.push({rowIdx: i, col: 'Destination ICAO'});
+                    highlightCells.push({rowIdx: i + 1, col: 'Origin ICAO'});
+                }
+            }
+            // Debug: log which cells will be highlighted
+            console.log('Highlighting cells:', highlightCells);
+
             // Add all rows
-            rows.forEach(({ rowError, rowData }) => {
+            rows.forEach(({ rowError, rowData }, idx) => {
                 const tr = document.createElement('tr');
-                
-                // Check if this row should be highlighted
                 if (rowError.highlight) {
                     tr.className = 'sequence-error-row';
                 }
-
-                // Use fixed column order
                 columnOrder.forEach(column => {
                     const td = document.createElement('td');
                     const value = rowData[column];
-                    
-                    if (rowError.editableColumns.includes(column)) {
-                        // Make this cell editable
+                    // Highlight only the specific cell if it matches
+                    if (highlightCells.some(hc => hc.rowIdx === idx && hc.col === column)) {
+                        td.classList.add('red-highlight');
+                    }
+                    // Remove input for Origin ICAO and Destination ICAO, always show as plain text
+                    if ((column === 'Origin ICAO' || column === 'Destination ICAO')) {
+                        td.textContent = value || '';
+                    } else if (rowError.editableColumns.includes(column)) {
                         const input = document.createElement('input');
                         input.type = 'text';
                         input.className = 'editable-input';
@@ -1292,8 +1529,6 @@
                         input.dataset.row = rowError.row_idx;
                         input.dataset.column = column;
                         input.dataset.originalValue = value || '';
-                        
-                        // Track changes
                         input.addEventListener('change', function() {
                             const key = `${rowError.row_idx}-${column}`;
                             if (this.value !== this.dataset.originalValue) {
@@ -1307,21 +1542,16 @@
                                 delete editedCells[key];
                             }
                         });
-                        
                         td.appendChild(input);
                     } else {
                         td.textContent = value || '';
                     }
-                    
                     tr.appendChild(td);
                 });
-                
                 tbody.appendChild(tr);
             });
-            
             table.appendChild(tbody);
             container.appendChild(table);
-
             // Add sequence summary
             const summary = document.createElement('div');
             summary.className = 'sequence-summary';
@@ -1332,7 +1562,6 @@
                 </div>
             `;
             container.appendChild(summary);
-
             return container;
         }
 
