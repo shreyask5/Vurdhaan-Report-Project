@@ -854,7 +854,7 @@ def process_chat_query(session_id):
         
         # Initialize SQL agent
         print("🤖 [CHAT] Initializing SQL agent...")
-        sql_agent = create_sql_agent()
+        sql_agent = create_sql_agent(session['db_path'],session_id)
         
         # Process query through SQL agent
         print("⚡ [CHAT] Processing query through SQL agent...")
