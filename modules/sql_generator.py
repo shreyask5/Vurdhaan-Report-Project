@@ -90,18 +90,28 @@ class QueryRewrite(BaseModel):
 class DuckDBLocalClient:
     """Client for interacting with local DuckDB database"""
     
-    def __init__(self, db_path: str = None):
-        self.db_path = db_path or ":memory:"
+    def __init__(self, db_path: str = None, session_id: str = None):
+        # If session_id is provided, construct the database path
+        if session_id and not db_path:
+            db_dir = getattr(Config, 'DATABASE_DIR', 'databases')
+            self.db_path = os.path.join(db_dir, f"{session_id}.db")
+        else:
+            self.db_path = db_path or ":memory:"
         self.conn = None
         self._connect()
     
     def _connect(self):
         """Connect to local DuckDB database"""
         try:
+            # Ensure the database directory exists
+            db_dir = os.path.dirname(self.db_path)
+            if db_dir and not os.path.exists(db_dir):
+                os.makedirs(db_dir, exist_ok=True)
+                logger.info(f"📁 Created database directory: {db_dir}")
             self.conn = duckdb.connect(self.db_path)
-            logger.info(f"Connected to local DuckDB: {self.db_path}")
+            logger.info(f"🔗 Connected to local DuckDB: {self.db_path}")
         except Exception as e:
-            logger.error(f"Failed to connect to local DuckDB: {e}")
+            logger.error(f"❌ Failed to connect to local DuckDB: {e}")
             raise
     
     def test_connection(self) -> Tuple[bool, str]:
@@ -189,8 +199,9 @@ class DuckDBLocalClient:
 class FlightDataSQLAgent:
     """Main SQL Agent for flight data analysis"""
     
-    def __init__(self, db_path: str = None):
-        self.client = DuckDBLocalClient(db_path)
+    def __init__(self, db_path: str = None, session_id: str = None):
+        # Initialize the client with session-specific database
+        self.client = DuckDBLocalClient(db_path, session_id)
         
         # Initialize OpenAI client with error handling
         try:
@@ -209,6 +220,7 @@ class FlightDataSQLAgent:
         
         # Test connection on initialization
         logger.info("🚀 Initializing SQL Agent - Testing local DuckDB connection...")
+        logger.info(f"📍 Database path: {self.client.db_path}")
         is_connected, connection_msg = self.client.test_connection()
         if is_connected:
             logger.info(f"✅ Local DuckDB connection successful: {connection_msg}")
@@ -217,6 +229,10 @@ class FlightDataSQLAgent:
         
     def process_query(self, question: str, session_id: str, table_schemas: Dict[str, Any]) -> Dict[str, Any]:
         """Main entry point for processing natural language queries"""
+        
+        # Log the session and database info
+        logger.info(f"🔍 Processing query for session: {session_id}")
+        logger.info(f"📍 Using database: {self.client.db_path}")
         
         # Initialize state
         state = AgentState(
@@ -667,9 +683,9 @@ Provide a comprehensive answer based on this flight data."""
 # MAIN INTERFACE
 # =========================================================================
 
-def create_sql_agent(db_path: str = None) -> FlightDataSQLAgent:
+def create_sql_agent(db_path: str = None, session_id: str = None) -> FlightDataSQLAgent:
     """Factory function to create SQL agent instance"""
-    return FlightDataSQLAgent(db_path)
+    return FlightDataSQLAgent(db_path, session_id)
 
 # For backward compatibility
 class SQLGenerator:
