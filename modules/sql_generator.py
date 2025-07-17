@@ -339,21 +339,86 @@ Determine if the user's question can be answered using this flight operations da
 Database Schema:
 {schema_context}
 
+AVAILABLE TABLES:
+1. clean_flights (19,210 rows) - Main flight operations data
+2. error_flights (28 rows) - Data quality issues and errors
+
+COLUMN REFERENCE:
+Common Columns (both tables):
+- "Date" (String) - Flight date
+- "A/C Registration" (String) - Aircraft registration identifier
+- "Flight" (String) - Flight number
+- "A/C Type" (String) - Aircraft type/model
+- "ATD (UTC) Block out" (String) - Actual Time Departure (Block Out)
+- "ATA (UTC) Block in" (String) - Actual Time Arrival (Block In)
+- "Origin ICAO" (String) - Departure airport ICAO code
+- "Destination ICAO" (String) - Arrival airport ICAO code
+- "Uplift Volume" (Integer/Float) - Fuel volume uplifted
+- "Uplift Density" (Float) - Fuel density
+- "Uplift weight" (Float) - Weight of fuel uplifted
+- "Remaining Fuel From Prev. Flight" (Integer/Float) - Remaining fuel from previous flight
+- "Block off Fuel" (Float) - Fuel quantity at block off
+- "Block on Fuel" (Integer/Float) - Fuel quantity at block on
+- "Fuel Type" (String) - Type of fuel used
+
+Error-specific columns (error_flights only):
+- "Error_Category" (String) - Type of error encountered
+- "Error_Reason" (String) - Detailed error description
+- "Row_Index" (Integer) - Original row number with error
+- "Affected_Columns" (String) - Columns affected by error
+- "Cell_Data" (String) - Original cell data that caused error
+
 DuckDB-Specific Guidelines:
 1. Use double quotes for column names with spaces: "A/C Registration"
 2. Date functions: strptime() for parsing, date_trunc() for grouping
 3. String functions: regexp_matches() for pattern matching
 4. Use LIMIT for large datasets (recommend LIMIT 1000 for initial queries)
 5. Handle NULL values with COALESCE() or IS NOT NULL
+6. For time calculations, convert string times to timestamps first
 
-Flight Data Patterns:
-- Aircraft: "A/C Registration", "A/C Type"
-- Routes: "Origin ICAO", "Destination ICAO" 
-- Fuel: "Fuel Volume", "Fuel Density", "Uplift weight"
-- Times: "Block Off Time", "Block On Time", "Flight Time"
-- Errors: Check error_flights table for data quality issues
+QUERY PATTERNS:
+Flight Operations:
+- Aircraft performance: GROUP BY "A/C Registration", "A/C Type"
+- Route analysis: GROUP BY "Origin ICAO", "Destination ICAO"
+- Fuel efficiency: Calculate consumption using "Block off Fuel" - "Block on Fuel"
+- Time analysis: Parse "ATD (UTC) Block out" and "ATA (UTC) Block in"
 
-Generate efficient, accurate DuckDB SQL queries."""
+Data Quality:
+- Check error_flights for data issues by "Error_Category"
+- Join error_flights with clean_flights using "Row_Index" when available
+- Analyze error patterns by "Affected_Columns"
+
+FUEL CALCULATIONS:
+- Fuel consumed = "Block off Fuel" - "Block on Fuel"
+- Total fuel on board = "Remaining Fuel From Prev. Flight" + "Uplift weight"
+- Fuel efficiency = Fuel consumed / Flight time
+
+COMMON JOINS:
+- Aircraft analysis: JOIN both tables on "A/C Registration"
+- Route analysis: JOIN both tables on "Origin ICAO" and "Destination ICAO"
+- Error investigation: JOIN error_flights with clean_flights on matching flight details
+
+EXAMPLE QUERIES:
+1. Top fuel consuming aircraft:
+   SELECT "A/C Registration", AVG("Block off Fuel" - "Block on Fuel") as avg_consumption
+   FROM clean_flights 
+   GROUP BY "A/C Registration" 
+   ORDER BY avg_consumption DESC
+
+2. Route efficiency:
+   SELECT "Origin ICAO", "Destination ICAO", 
+          COUNT(*) as flight_count,
+          AVG("Uplift weight") as avg_uplift
+   FROM clean_flights
+   GROUP BY "Origin ICAO", "Destination ICAO"
+
+3. Error analysis:
+   SELECT "Error_Category", COUNT(*) as error_count
+   FROM error_flights
+   GROUP BY "Error_Category"
+   ORDER BY error_count DESC
+
+Generate efficient, accurate DuckDB SQL queries based on the user's question."""
 
         try:
             response = self.llm_client.chat.completions.create(
