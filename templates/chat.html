@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flight Operations Assistant</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <h1>Flight Operations Assistant</h1>
+            <div class="session-info" id="sessionInfo"></div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Chat Messages -->
+            <div class="chat-messages" id="chatMessages">
+                <div class="welcome-message">
+                    <h2>Welcome to Flight Operations Assistant</h2>
+                    <p>I can help you analyze flight data using natural language queries.</p>
+                    
+                    <!-- File Upload Section -->
+                    <div class="file-upload-section" id="fileUploadSection">
+                        <h3>Upload Your Data Files</h3>
+                        <div class="file-inputs">
+                            <div class="file-input-group">
+                                <label for="cleanFlightsFile">Clean Flights CSV:</label>
+                                <input type="file" id="cleanFlightsFile" accept=".csv" />
+                            </div>
+                            <div class="file-input-group">
+                                <label for="errorFlightsFile">Error Flights CSV:</label>
+                                <input type="file" id="errorFlightsFile" accept=".csv" />
+                            </div>
+                        </div>
+                        <button class="init-button" onclick="initializeChat()">Initialize Chat</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Suggested Questions -->
+            <div class="suggested-questions" id="suggestedQuestions" style="display: none;">
+                <h3>Try asking:</h3>
+                <div class="suggestions-grid">
+                    <button class="suggestion-item" onclick="askQuestion('Summarize flight operations for the last quarter')">
+                        Summarize flight operations for the last quarter
+                    </button>
+                    <button class="suggestion-item" onclick="askQuestion('Show aircraft with fuel efficiency issues')">
+                        Show aircraft with fuel efficiency issues
+                    </button>
+                    <button class="suggestion-item" onclick="askQuestion('Compare error rates between different aircraft types')">
+                        Compare error rates between different aircraft types
+                    </button>
+                    <button class="suggestion-item" onclick="askQuestion('Identify flights with the highest fuel consumption')">
+                        Identify flights with the highest fuel consumption
+                    </button>
+                </div>
+            </div>
+
+            <!-- Chat Input -->
+            <div class="chat-input-container" id="chatInputContainer" style="display: none;">
+                <form class="chat-form" onsubmit="sendMessage(event)">
+                    <div class="input-wrapper">
+                        <input 
+                            type="text" 
+                            id="chatInput" 
+                            placeholder="Ask anything about your flight data..." 
+                            autocomplete="off"
+                        />
+                        <button type="submit" class="send-button">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                <line x1="12" y1="19" x2="12" y2="5"></line>
+                                <polyline points="5,12 12,5 19,12"></polyline>
+                            </svg>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </main>
+
+        <!-- Loading Indicator -->
+        <div class="loading-overlay" id="loadingOverlay" style="display: none;">
+            <div class="loading-spinner"></div>
+            <p>Processing your request...</p>
+        </div>
+    </div>
+
+    <script src="/static/js/chat.js"></script>
+</body>
+</html>

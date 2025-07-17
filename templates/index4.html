@@ -280,6 +280,18 @@
             transform: translateY(0);
         }
 
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none !important;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .btn:disabled:hover {
+            transform: none !important;
+            box-shadow: var(--shadow-sm);
+        }
+
         .btn-primary {
             background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
             color: white;
@@ -314,6 +326,11 @@
 
         .btn-success:hover {
             background: linear-gradient(135deg, #059669 0%, #047857 100%);
+        }
+
+        .btn-icon {
+            margin-right: 8px;
+            font-size: 16px;
         }
 
         /* Loading Indicator */
@@ -798,6 +815,7 @@
             max-width: 100%;
         }
     </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 </head>
 <body>
     <div class="container">
@@ -873,6 +891,9 @@
             <div class="button-group">
                 <button class="btn btn-success" onclick="saveCorrections()">Save Corrections</button>
                 <button class="btn btn-danger" onclick="ignoreErrors()">Ignore Remaining Errors</button>
+                <button class="btn btn-primary" onclick="openChatSession()" id="chatButton">
+                    <span class="btn-icon">💬</span> Analyze Data with AI Chat
+                </button>
                 <button class="btn btn-secondary" onclick="resetUpload()">Start Over</button>
             </div>
 
@@ -1187,7 +1208,7 @@
             });
             
             try {
-                const response = await fetch('/vurdhaan/upload', {
+                const response = await fetch('/upload', {
                     method: 'POST',
                     body: formData
                 });
@@ -1216,7 +1237,7 @@
                 console.log('Fetching errors for file ID:', currentFileId);
                 
                 // Fetch the error data (could be compressed or regular JSON)
-                const response = await fetch(`/vurdhaan/errors/${currentFileId}`);
+                const response = await fetch(`/errors/${currentFileId}`);
                 if (!response.ok) {
                     const errorText = await response.text();
                     console.error('Server response not OK:', response.status, errorText);
@@ -1225,19 +1246,19 @@
                 
                 // Check response headers to determine if data is compressed
                 const contentType = response.headers.get('content-type');
-                const contentEncoding = response.headers.get('content-encoding');
+                const compressionType = response.headers.get('x-compression');
                 
                 let data;
                 
-                if (contentEncoding === 'br' || contentType === 'application/octet-stream') {
-                    // Handle compressed Brotli data
-                    console.log('Decompressing Brotli data...');
-                    const compressedData = new Uint8Array(await response.arrayBuffer());
+                if (compressionType === 'lzstring' || contentType === 'text/plain') {
+                    // Handle LZ-String compressed data
+                    console.log('Decompressing LZ-String data...');
+                    const compressedData = await response.text();
                     
                     // Log compression details
-                    console.log(`Received compressed data: ${compressedData.length.toLocaleString()} bytes`);
+                    console.log(`Received compressed data: ${compressedData.length.toLocaleString()} characters`);
                     
-                    data = await decompressOptimizedErrorReport(compressedData);
+                    data = await decompressLZStringErrorReport(compressedData);
                     console.log('Decompression completed successfully');
                 } else {
                     // Handle regular JSON (fallback for compatibility)
@@ -1279,49 +1300,30 @@
         }
 
         /**
-         * Decompresses Brotli-compressed optimized error report and restores original structure
-         * @param {Uint8Array} compressedData - The compressed data
+         * Decompresses LZ-String compressed optimized error report and restores original structure
+         * @param {string} compressedData - The LZ-String compressed data
          * @returns {Object} - Restored error report in original format
          */
-        async function decompressOptimizedErrorReport(compressedData) {
+        async function decompressLZStringErrorReport(compressedData) {
             try {
-                console.log('Starting Brotli decompression...');
+                console.log('Starting LZ-String decompression...');
                 
-                // Check if DecompressionStream is available (modern browsers)
-                if (typeof DecompressionStream === 'undefined') {
-                    throw new Error('Brotli decompression not supported in this browser. Please use a modern browser like Chrome, Firefox, or Safari.');
+                // Check if LZString is available
+                if (typeof LZString === 'undefined') {
+                    throw new Error('LZ-String library not loaded. Please check your internet connection and try again.');
                 }
                 
-                // Step 1: Brotli decompression
-                const stream = new DecompressionStream('br');
-                const writer = stream.writable.getWriter();
-                const reader = stream.readable.getReader();
+                // Step 1: LZ-String decompression
+                const jsonStr = LZString.decompressFromBase64(compressedData);
                 
-                // Write compressed data to stream
-                await writer.write(compressedData);
-                await writer.close();
-                
-                // Read decompressed chunks
-                const chunks = [];
-                let result;
-                while (!(result = await reader.read()).done) {
-                    chunks.push(result.value);
+                if (!jsonStr) {
+                    throw new Error('Failed to decompress data. The data may be corrupted.');
                 }
                 
-                // Combine chunks into single Uint8Array
-                const totalLength = chunks.reduce((acc, chunk) => acc + chunk.length, 0);
-                const decompressed = new Uint8Array(totalLength);
-                let offset = 0;
-                for (const chunk of chunks) {
-                    decompressed.set(chunk, offset);
-                    offset += chunk.length;
-                }
-                
-                // Convert to string and parse JSON
-                const jsonStr = new TextDecoder().decode(decompressed);
+                // Parse the decompressed JSON
                 const optimizedData = JSON.parse(jsonStr);
                 
-                console.log(`Brotli decompression successful: ${compressedData.length.toLocaleString()} → ${jsonStr.length.toLocaleString()} bytes`);
+                console.log(`LZ-String decompression successful: ${compressedData.length.toLocaleString()} → ${jsonStr.length.toLocaleString()} characters`);
                 console.log(`Compression ratio: ${((1 - compressedData.length / jsonStr.length) * 100).toFixed(1)}%`);
                 
                 // Step 2: Restore original structure
@@ -1331,8 +1333,8 @@
                 console.error('Decompression failed:', error);
                 
                 // Provide helpful error messages
-                if (error.message.includes('DecompressionStream')) {
-                    throw new Error('Your browser does not support Brotli decompression. Please update to a newer version or use Chrome/Firefox/Safari.');
+                if (error.message.includes('LZString')) {
+                    throw new Error('LZ-String decompression library failed to load. Please check your internet connection.');
                 } else if (error.message.includes('JSON')) {
                     throw new Error('Failed to parse decompressed data. The data may be corrupted.');
                 } else {
@@ -1438,29 +1440,13 @@
         }
 
         /**
-         * Browser compatibility check for Brotli decompression
-         * @returns {boolean} - True if browser supports Brotli decompression
+         * Check if LZ-String is loaded and working
+         * @returns {boolean} - True if LZ-String is available
          */
-        function isBrotliSupported() {
-            return typeof DecompressionStream !== 'undefined' && 
-                'br' in DecompressionStream.prototype.constructor || 
-                typeof window.DecompressionStream !== 'undefined';
-        }
-
-        /**
-         * Fallback function for legacy browsers or when decompression fails
-         * @param {string} fileId - The file ID
-         * @returns {Object} - Error data in original format
-         */
-        async function fetchErrorsLegacy(fileId) {
-            console.log('Using legacy JSON endpoint...');
-            
-            const response = await fetch(`/vurdhaan/errors/${fileId}/json`); // You'd need to add this endpoint
-            if (!response.ok) {
-                throw new Error(`Failed to fetch legacy errors: ${response.status}`);
-            }
-            
-            return await response.json();
+        function isLZStringSupported() {
+            return typeof LZString !== 'undefined' && 
+                typeof LZString.compressToBase64 === 'function' &&
+                typeof LZString.decompressFromBase64 === 'function';
         }
 
         // NEW: Function to create sequence table
@@ -1563,6 +1549,111 @@
             `;
             container.appendChild(summary);
             return container;
+        }
+
+        // Helper to render error rows in batches for non-sequence errors
+        function renderErrorRowsInBatches(errorGroup, reasonContent, batchSize = 100) {
+            let currentIndex = 0;
+            const totalRows = errorGroup.rows.length;
+
+            function renderBatch() {
+                const end = Math.min(currentIndex + batchSize, totalRows);
+                for (let i = currentIndex; i < end; i++) {
+                    const rowError = errorGroup.rows[i];
+                    const rowDiv = document.createElement('div');
+                    rowDiv.className = 'error-row';
+
+                    const detailsDiv = document.createElement('div');
+                    detailsDiv.className = 'error-details';
+
+                    if (rowError.file_level) {
+                        detailsDiv.innerHTML = `
+                            <div class="error-detail">
+                                <strong>Type:</strong> File-level error
+                            </div>
+                            <div class="error-detail">
+                                <strong>Columns:</strong> ${rowError.columns.join(', ')}
+                            </div>
+                        `;
+                    } else {
+                        const rowData = errorData.rows_data[rowError.row_idx] || {};
+                        const table = document.createElement('table');
+                        table.className = 'data-table';
+                        const thead = document.createElement('thead');
+                        const headerRow = document.createElement('tr');
+                        const editableColumns = rowError.columns.flat();
+                        columnOrder.forEach(column => {
+                            const th = document.createElement('th');
+                            th.textContent = column;
+                            if (editableColumns.includes(column)) {
+                                th.style.backgroundColor = '#fff3cd';
+                            }
+                            headerRow.appendChild(th);
+                        });
+                        thead.appendChild(headerRow);
+                        table.appendChild(thead);
+                        const tbody = document.createElement('tbody');
+                        const dataRow = document.createElement('tr');
+                        columnOrder.forEach(column => {
+                            const td = document.createElement('td');
+                            const value = rowData[column];
+                            if (editableColumns.includes(column)) {
+                                td.className = 'error-column';
+                                const input = document.createElement('input');
+                                input.type = 'text';
+                                input.className = 'editable-input';
+                                input.value = value || '';
+                                input.dataset.row = rowError.row_idx;
+                                input.dataset.column = column;
+                                input.dataset.originalValue = value || '';
+                                input.addEventListener('change', function() {
+                                    const key = `${rowError.row_idx}-${column}`;
+                                    if (this.value !== this.dataset.originalValue) {
+                                        editedCells[key] = {
+                                            row: parseInt(rowError.row_idx),
+                                            column: column,
+                                            old_value: this.dataset.originalValue,
+                                            new_value: this.value
+                                        };
+                                    } else {
+                                        delete editedCells[key];
+                                    }
+                                });
+                                td.appendChild(input);
+                            } else {
+                                td.textContent = value || '';
+                            }
+                            dataRow.appendChild(td);
+                        });
+                        tbody.appendChild(dataRow);
+                        table.appendChild(tbody);
+                        const errorMessage = document.createElement('div');
+                        errorMessage.className = 'error-message';
+                        errorMessage.innerHTML = `
+                            <strong>Error:</strong> ${errorGroup.reason}
+                            <br>
+                            <strong>Details:</strong> ${rowError.cell_data || ''}
+                        `;
+                        detailsDiv.appendChild(errorMessage);
+                        detailsDiv.appendChild(table);
+                    }
+                    rowDiv.appendChild(detailsDiv);
+                    reasonContent.appendChild(rowDiv);
+                }
+                currentIndex = end;
+                // Remove any existing load more button
+                const oldBtn = reasonContent.querySelector('.load-more-btn');
+                if (oldBtn) oldBtn.remove();
+                if (currentIndex < totalRows) {
+                    const loadMoreBtn = document.createElement('button');
+                    loadMoreBtn.textContent = `Load More Errors (${totalRows - currentIndex} remaining)`;
+                    loadMoreBtn.className = 'btn btn-primary load-more-btn';
+                    loadMoreBtn.style.margin = '20px auto 0 auto';
+                    loadMoreBtn.onclick = renderBatch;
+                    reasonContent.appendChild(loadMoreBtn);
+                }
+            }
+            renderBatch();
         }
 
         function displayErrors() {
@@ -1692,7 +1783,6 @@
                             // Handle non-sequence errors with original format
                             const reasonDiv = document.createElement('div');
                             reasonDiv.className = 'reason-group';
-                            
                             const reasonHeader = document.createElement('div');
                             reasonHeader.className = 'reason-header';
                             reasonHeader.innerHTML = `
@@ -1700,108 +1790,10 @@
                                 <div class="reason-count">${errorGroup.rows.length} rows</div>
                             `;
                             reasonHeader.onclick = () => toggleReason(reasonHeader.nextElementSibling);
-                            
                             const reasonContent = document.createElement('div');
                             reasonContent.className = 'reason-content';
-                            
-                            errorGroup.rows.forEach(rowError => {
-                                const rowDiv = document.createElement('div');
-                                rowDiv.className = 'error-row';
-                                
-                                const detailsDiv = document.createElement('div');
-                                detailsDiv.className = 'error-details';
-                                
-                                if (rowError.file_level) {
-                                    detailsDiv.innerHTML = `
-                                        <div class="error-detail">
-                                            <strong>Type:</strong> File-level error
-                                        </div>
-                                        <div class="error-detail">
-                                            <strong>Columns:</strong> ${rowError.columns.join(', ')}
-                                        </div>
-                                    `;
-                                } else {
-                                    const rowData = errorData.rows_data[rowError.row_idx] || {};
-                                    
-                                    const table = document.createElement('table');
-                                    table.className = 'data-table';
-                                    
-                                    const thead = document.createElement('thead');
-                                    const headerRow = document.createElement('tr');
-                                    
-                                    const editableColumns = rowError.columns.flat();
-                                    
-                                    // Use fixed column order
-                                    columnOrder.forEach(column => {
-                                        const th = document.createElement('th');
-                                        th.textContent = column;
-                                        if (editableColumns.includes(column)) {
-                                            th.style.backgroundColor = '#fff3cd';
-                                        }
-                                        headerRow.appendChild(th);
-                                    });
-                                    
-                                    thead.appendChild(headerRow);
-                                    table.appendChild(thead);
-                                    
-                                    const tbody = document.createElement('tbody');
-                                    const dataRow = document.createElement('tr');
-                                    
-                                    // Use fixed column order
-                                    columnOrder.forEach(column => {
-                                        const td = document.createElement('td');
-                                        const value = rowData[column];
-                                        
-                                        if (editableColumns.includes(column)) {
-                                            td.className = 'error-column';
-                                            const input = document.createElement('input');
-                                            input.type = 'text';
-                                            input.className = 'editable-input';
-                                            input.value = value || '';
-                                            input.dataset.row = rowError.row_idx;
-                                            input.dataset.column = column;
-                                            input.dataset.originalValue = value || '';
-                                            
-                                            input.addEventListener('change', function() {
-                                                const key = `${rowError.row_idx}-${column}`;
-                                                if (this.value !== this.dataset.originalValue) {
-                                                    editedCells[key] = {
-                                                        row: parseInt(rowError.row_idx),
-                                                        column: column,
-                                                        old_value: this.dataset.originalValue,
-                                                        new_value: this.value
-                                                    };
-                                                } else {
-                                                    delete editedCells[key];
-                                                }
-                                            });
-                                            
-                                            td.appendChild(input);
-                                        } else {
-                                            td.textContent = value || '';
-                                        }
-                                        
-                                        dataRow.appendChild(td);
-                                    });
-                                    
-                                    tbody.appendChild(dataRow);
-                                    table.appendChild(tbody);
-                                    
-                                    const errorMessage = document.createElement('div');
-                                    errorMessage.className = 'error-message';
-                                    errorMessage.innerHTML = `
-                                        <strong>Error:</strong> ${errorGroup.reason}
-                                        <br>
-                                        <strong>Details:</strong> ${rowError.cell_data || ''}
-                                    `;
-                                    detailsDiv.appendChild(errorMessage);
-                                    detailsDiv.appendChild(table);
-                                }
-                                
-                                rowDiv.appendChild(detailsDiv);
-                                reasonContent.appendChild(rowDiv);
-                            });
-                            
+                            // Use batching for performance
+                            renderErrorRowsInBatches(errorGroup, reasonContent, 100);
                             reasonDiv.appendChild(reasonHeader);
                             reasonDiv.appendChild(reasonContent);
                             content.appendChild(reasonDiv);
@@ -1854,7 +1846,7 @@
             const corrections = Object.values(editedCells);
             
             try {
-                const response = await fetch(`/vurdhaan/upload/${currentFileId}`, {
+                const response = await fetch(`/upload/${currentFileId}`, {
                     method: 'PUT',
                     headers: {
                         'Content-Type': 'application/json'
@@ -1883,7 +1875,7 @@
             }
             
             try {
-                const response = await fetch(`/vurdhaan/upload/${currentFileId}`, {
+                const response = await fetch(`/upload/${currentFileId}`, {
                     method: 'PUT',
                     headers: {
                         'Content-Type': 'application/json'
@@ -1900,12 +1892,119 @@
             }
         }
 
+        // Open chat session with current file data
+        async function openChatSession() {
+            console.log('🚀 [DEBUG] Button Click → openChatSession() triggered');
+            console.log('🚀 [DEBUG] Current file ID:', currentFileId);
+            
+            if (!currentFileId) {
+                console.log('❌ [DEBUG] No file loaded, cannot proceed');
+                showAlert('No file loaded. Please upload a file first.', 'error');
+                return;
+            }
+            
+            try {
+                console.log('📡 [DEBUG] Backend Call → Sending request to /open-chat/' + currentFileId);
+                
+                // Show loading alert instead of loading section to keep errors visible
+                showAlert('Initializing AI chat session...', 'info');
+                
+                // Disable the chat button to prevent multiple clicks
+                const chatButton = document.getElementById('chatButton');
+                const originalText = chatButton.innerHTML;
+                chatButton.disabled = true;
+                chatButton.innerHTML = '<span class="btn-icon">⏳</span> Creating Chat Session...';
+                
+                // Create chat session from current file
+                const response = await fetch(`/open-chat/${currentFileId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                console.log('📡 [DEBUG] Backend Call → Response status:', response.status);
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    console.log('❌ [DEBUG] Backend Call → Error response:', errorData);
+                    throw new Error(errorData.error || 'Failed to initialize chat session');
+                }
+                
+                const data = await response.json();
+                console.log('✅ [DEBUG] Backend Call → Success response:', data);
+                console.log('🎯 [DEBUG] Session Creation → Session ID created:', data.session_id);
+                
+                // Open chat interface in new tab/window
+                const chatUrl = `/chat?session_id=${data.session_id}`;
+                console.log('🌐 [DEBUG] Chat Redirect → Opening URL:', chatUrl);
+                
+                // Try multiple methods to open the chat window
+                let chatOpened = false;
+                
+                // Method 1: Try window.open with more permissive settings
+                try {
+                    const chatWindow = window.open(chatUrl, '_blank', 'menubar=yes,toolbar=yes,location=yes,status=yes,resizable=yes,scrollbars=yes,width=1200,height=800');
+                    if (chatWindow && !chatWindow.closed) {
+                        console.log('🚪 [DEBUG] Chat Redirect → Chat opened in new window');
+                        chatWindow.opener = null; // Security: prevent access to parent window
+                        chatWindow.focus(); // Ensure the window gets focus
+                        chatOpened = true;
+                        showAlert('Chat session opened in new window. You can now ask questions about your flight data!', 'success');
+                    }
+                } catch (popupError) {
+                    console.log('🚫 [DEBUG] Chat Redirect → Popup method failed:', popupError);
+                }
+                
+                // Method 2: If popup failed, try opening in same tab with confirmation
+                if (!chatOpened) {
+                    console.log('🚪 [DEBUG] Chat Redirect → Popup blocked, offering alternative');
+                    const userChoice = confirm(
+                        'Popup was blocked by your browser.\n\n' +
+                        'Click OK to open chat in current tab (you can return using browser back button)\n' +
+                        'Click Cancel to get a link you can manually open'
+                    );
+                    
+                    if (userChoice) {
+                        console.log('🌐 [DEBUG] Chat Redirect → User chose to navigate in current tab');
+                        window.location.href = chatUrl;
+                    } else {
+                        console.log('📋 [DEBUG] Chat Redirect → Providing manual link');
+                        showAlert(`Chat session created! Manually open this link in a new tab: ${window.location.origin}${chatUrl}`, 'info');
+                        
+                        // Also try to copy to clipboard if possible
+                        try {
+                            navigator.clipboard.writeText(`${window.location.origin}${chatUrl}`);
+                            showAlert('Chat link copied to clipboard! Open it in a new tab.', 'success');
+                        } catch (clipboardError) {
+                            console.log('📋 [DEBUG] Could not copy to clipboard:', clipboardError);
+                        }
+                    }
+                }
+                
+                // Re-enable the chat button
+                chatButton.disabled = false;
+                chatButton.innerHTML = originalText;
+                
+            } catch (error) {
+                console.error('💥 [DEBUG] Chat session error:', error);
+                showAlert('Failed to open chat session: ' + error.message, 'error');
+                
+                // Re-enable the chat button
+                const chatButton = document.getElementById('chatButton');
+                if (chatButton) {
+                    chatButton.disabled = false;
+                    chatButton.innerHTML = '<span class="btn-icon">💬</span> Analyze Data with AI Chat';
+                }
+            }
+        }
+
         // Generate report
         async function generateReport() {
             showLoading('Generating CORSIA report...');
             
             try {
-                const response = await fetch(`/vurdhaan/report/${currentFileId}`, {
+                const response = await fetch(`/report/${currentFileId}`, {
                     method: 'POST'
                 });
                 
@@ -1939,7 +2038,7 @@
             showLoading('Re-validating CSV file...');
             
             try {
-                const response = await fetch(`/vurdhaan/upload/${currentFileId}`, {
+                const response = await fetch(`/upload/${currentFileId}`, {
                     method: 'PUT',
                     headers: {
                         'Content-Type': 'application/json'
@@ -2048,7 +2147,8 @@
                 editedCells[key] = {
                     row: parseInt(row),
                     column: column,
-                    new_value: newValue
+                    old_value: this.dataset.originalValue,
+                    new_value: this.value
                 };
             } else {
                 delete editedCells[key];

@@ -1,7 +1,7 @@
 beautifulsoup4
 requests
 python-dotenv
-openai
+openai==1.96.1
 pandas
 chardet
 xlwings
@@ -9,3 +9,28 @@ openpyxl
 Flask
 flask-cors
 brotli
+
+# Database
+duckdb
+
+# Data processing
+numpy==1.26.3
+
+# Utilities
+werkzeug==3.0.1
+uuid==1.30
+typing_extensions==4.9.0
+pydantic==2.5.3
+lzstring==1.0.4
+
+# Session management
+redis==5.0.1
+apscheduler==3.10.4
+
+# Testing
+pytest==7.4.4
+pytest-asyncio==0.23.3
+pytest-cov==4.1.0
+
+# Logging
+python-json-logger==2.0.7

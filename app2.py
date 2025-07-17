@@ -226,79 +226,82 @@ def upload_csv():
         return jsonify({'error': str(e)}), 500
 
 
+# Update your Flask app's get_errors endpoint:
 @app.route('/errors/<file_id>', methods=['GET'])
 def get_errors(file_id):
-    """Return compressed error JSON for a file with structure optimization + Brotli"""
+    """Return compressed error JSON for a file with structure optimization + LZ-String"""
     try:
         # Check if file exists
         if file_id not in file_metadata:
             return jsonify({'error': 'File not found'}), 404
         
         # Get paths
-        error_json_path = file_metadata[file_id].get('error_json_path')
         file_folder = file_metadata[file_id]['folder']
-        compressed_path = os.path.join(file_folder, 'error_report.br')
+        compressed_path = os.path.join(file_folder, 'error_report.lzs')
+        error_json_path = file_metadata[file_id].get('error_json_path')
         
         # Check if compressed file exists
         if os.path.exists(compressed_path):
             # Serve existing compressed file
-            with open(compressed_path, 'rb') as f:
+            with open(compressed_path, 'r', encoding='utf-8') as f:
                 compressed_data = f.read()
             
             return Response(
                 compressed_data,
                 headers={
-                    'Content-Type': 'application/octet-stream',
-                    'Content-Encoding': 'br',
+                    'Content-Type': 'text/plain',
+                    'X-Compression': 'lzstring',
                     'Cache-Control': 'no-cache'
                 }
             )
         
-        # Load original JSON and compress it
-        if not error_json_path or not os.path.exists(error_json_path):
-            # No errors case
-            empty_error_data = {
-                'summary': {'total_errors': 0, 'error_rows': 0, 'categories': {}},
-                'rows_data': {},
-                'categories': []
-            }
-            compressed_data = compress_error_data(empty_error_data, compressed_path)
-        else:
-            # Load error data safely
+        # If compressed file doesn't exist but original JSON does, create compressed version
+        if error_json_path and os.path.exists(error_json_path):
+            # Load original error data
             error_data = safe_json_load(error_json_path)
-            if not error_data:
-                # Fallback to empty structure if loading failed
-                error_data = {
-                    'summary': {'total_errors': 0, 'error_rows': 0, 'categories': {}},
-                    'rows_data': {},
-                    'categories': []
-                }
-            
-            # Ensure the error data has the expected structure
-            if 'summary' not in error_data:
-                error_data['summary'] = {
-                    'total_errors': 0,
-                    'error_rows': 0,
-                    'categories': {}
-                }
-            
-            if 'rows_data' not in error_data:
-                error_data['rows_data'] = {}
-            
-            if 'categories' not in error_data:
-                error_data['categories'] = []
-            
-            # Compress and save
-            compressed_data = compress_error_data(error_data, compressed_path)
+            if error_data:
+                # Create compressed version using the helper function logic
+                try:
+                    from helpers.clean import create_compressed_error_report
+                    
+                    # Field mappings (same as in helper)
+                    field_map = {
+                        "Date": "d", "A/C Registration": "r", "Flight": "f", "A/C Type": "t",
+                        "ATD (UTC) Block out": "o", "ATA (UTC) Block in": "i", 
+                        "Origin ICAO": "or", "Destination ICAO": "de", "Uplift Volume": "uv",
+                        "Uplift Density": "ud", "Uplift weight": "uw", 
+                        "Remaining Fuel From Prev. Flight": "rf", "Block off Fuel": "bf",
+                        "Block on Fuel": "bo", "Fuel Type": "ft"
+                    }
+                    reverse_field_map = {v: k for k, v in field_map.items()}
+                    
+                    compressed_data = create_compressed_error_report(error_data, field_map, reverse_field_map)
+                    
+                    # Save compressed file for future use
+                    with open(compressed_path, 'w', encoding='utf-8') as f:
+                        f.write(compressed_data)
+                    
+                    return Response(
+                        compressed_data,
+                        headers={
+                            'Content-Type': 'text/plain',
+                            'X-Compression': 'lzstring',
+                            'Cache-Control': 'no-cache'
+                        }
+                    )
+                except ImportError:
+                    # Fallback if helper function not available
+                    pass
         
-        return Response(
-            compressed_data,
-            headers={
-                'Content-Type': 'application/octet-stream',
-                'Content-Encoding': 'br',
-                'Cache-Control': 'no-cache'
-            }
-        )
+        # Fallback: return empty error structure as compressed JSON
+        empty_error_data = {
+            'summary': {'total_errors': 0, 'error_rows': 0, 'categories': {}},
+            'rows_data': {},
+            'categories': []
+        }
+        
+        # Return as regular JSON if compression fails
+        return jsonify(empty_error_data), 200
         
     except Exception as e:
         error_details = {
@@ -307,126 +310,6 @@ def get_errors(file_id):
         }
         app.logger.error(f"Error in get_errors: {error_details}")
         return jsonify(error_details), 500
-
-
-def compress_error_data(error_data, output_path=None):
-    """
-    Compress error data using structure optimization + Brotli compression
-    """
-    try:
-        # Field mappings to reduce key repetition
-        field_map = {
-            "Date": "d", "A/C Registration": "r", "Flight": "f", "A/C Type": "t",
-            "ATD (UTC) Block out": "o", "ATA (UTC) Block in": "i", 
-            "Origin ICAO": "or", "Destination ICAO": "de", "Uplift Volume": "uv",
-            "Uplift Density": "ud", "Uplift weight": "uw", 
-            "Remaining Fuel From Prev. Flight": "rf", "Block off Fuel": "bf",
-            "Block on Fuel": "bo", "Fuel Type": "ft"
-        }
-        
-        # Reverse mapping for client-side decompression
-        reverse_field_map = {v: k for k, v in field_map.items()}
-        
-        # Optimize row data structure
-        optimized_rows = {}
-        for row_idx, row_data in error_data.get('rows_data', {}).items():
-            optimized_row = {}
-            
-            for key, value in row_data.items():
-                if key == 'error':
-                    optimized_row['err'] = value
-                else:
-                    short_key = field_map.get(key, key)
-                    
-                    # Optimize numeric values
-                    if isinstance(value, (int, float)) and not isinstance(value, bool):
-                        rounded_value = round(float(value), 3)
-                        if rounded_value == int(rounded_value):
-                            value = int(rounded_value)
-                        else:
-                            value = rounded_value
-                    
-                    optimized_row[short_key] = value
-            
-            optimized_rows[row_idx] = optimized_row
-        
-        # Optimize error structure
-        optimized_categories = []
-        for category in error_data.get('categories', []):
-            category_errors = []
-            
-            for error_group in category.get('errors', []):
-                reason_data = {
-                    "r": error_group.get('reason', ''),  # reason
-                    "rows": []
-                }
-                
-                for row_error in error_group.get('rows', []):
-                    if row_error.get('file_level'):
-                        row_entry = {
-                            "fl": True,  # file_level
-                            "cd": row_error.get('cell_data', ''),  # cell_data
-                            "cols": row_error.get('columns', [])
-                        }
-                    else:
-                        row_entry = {
-                            "idx": row_error.get('row_idx'),  # row_idx
-                            "cd": row_error.get('cell_data', ''),  # cell_data
-                            "cols": row_error.get('columns', [])
-                        }
-                    
-                    reason_data["rows"].append(row_entry)
-                
-                category_errors.append(reason_data)
-            
-            optimized_categories.append({
-                "n": category.get('name', ''),  # name
-                "e": category_errors  # errors
-            })
-        
-        # Create optimized report
-        summary = error_data.get('summary', {})
-        optimized_report = {
-            "meta": {
-                "fm": reverse_field_map,  # field map for decompression
-                "s": {  # summary
-                    "te": summary.get('total_errors', 0),  # total_errors
-                    "er": summary.get('error_rows', 0),  # error_rows
-                    "c": summary.get('categories', {})  # categories
-                }
-            },
-            "rd": optimized_rows,  # rows_data
-            "c": optimized_categories  # categories
-        }
-        
-        # Convert to compact JSON
-        json_str = json.dumps(optimized_report, separators=(',', ':'), ensure_ascii=False)
-        
-        # Compress with Brotli
-        compressed_data = brotli.compress(json_str.encode('utf-8'))
-        
-        # Calculate compression stats
-        original_size = len(json_str.encode('utf-8'))
-        compressed_size = len(compressed_data)
-        compression_ratio = (1 - compressed_size / original_size) * 100
-        
-        app.logger.info(f"JSON Optimization + Brotli Compression:")
-        app.logger.info(f"  Original size: {original_size:,} bytes")
-        app.logger.info(f"  Compressed size: {compressed_size:,} bytes")
-        app.logger.info(f"  Compression ratio: {compression_ratio:.1f}%")
-        
-        # Save compressed data if output path provided
-        if output_path:
-            with open(output_path, 'wb') as f:
-                f.write(compressed_data)
-        
-        return compressed_data
-        
-    except Exception as e:
-        app.logger.error(f"Error compressing data: {e}")
-        # Fallback: return uncompressed JSON
-        json_str = json.dumps(error_data, separators=(',', ':'), ensure_ascii=False)
-        return json_str.encode('utf-8')
 
 
 @app.route('/upload/<file_id>', methods=['PUT'])

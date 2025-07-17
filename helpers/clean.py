@@ -10,14 +10,22 @@ from datetime import datetime
 import chardet
 import csv
 import xlwings as xw
-import brotli
+from lzstring import LZString
 from collections import defaultdict
 
 # Load environment variables for OpenAI
 try:
     load_dotenv()
     api_key = os.getenv("OPENAI_API_KEY")
-    openai_client = OpenAI(api_key=api_key) if api_key else None
+    if api_key:
+        try:
+            openai_client = OpenAI(api_key=api_key)
+        except TypeError as e:
+            # Handle version compatibility issues
+            print(f"Warning: OpenAI client initialization failed: {e}")
+            openai_client = None
+    else:
+        openai_client = None
 except ImportError:
     openai_client = None
     print("Warning: dotenv or openai package not found. LLM validation will be skipped.")
@@ -648,17 +656,24 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
     result_df['Date'] = pd.to_datetime(result_df['Date'], dayfirst=True, errors='coerce')
     result_df.sort_values(by=['A/C Registration', 'Date', 'ATD (UTC) Block out'], inplace=True)
     
+    # Reset index after sorting but keep original indices for error tracking
+    result_df = result_df.reset_index(drop=False)
+    # Now 'index' column contains original row numbers, and the new index is 0,1,2...
+    
     # 2. CENTRALIZED CHECK FOR MISSING VALUES IN ALL CELLS
     # This is a centralized check for all required columns
     print("Checking for missing cell values...")
     for idx, row in result_df.iterrows():
+        # Use original row index for error tracking
+        original_idx = row['index']
+        
         for column in required_columns:
             value = row[column]
             value_str = str(value).strip() if not pd.isna(value) else ""
             
             # Check for missing data
             if pd.isna(value) or value_str == "":
-                mark_error("Missing data", f"{column} is missing", idx, "Missing", column)
+                mark_error("Missing data", f"{column} is missing", original_idx, "Missing", column)
     
     # 3. CHECK FUEL TYPE VALUES
     # Define allowed fuel types
@@ -666,6 +681,9 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
     
     print("Validating fuel types...")
     for idx, row in result_df.iterrows():
+        # Use original row index for error tracking
+        original_idx = row['index']
+        
         if 'Fuel Type' in result_df.columns:
             fuel_type = row['Fuel Type']
             if not pd.isna(fuel_type) and str(fuel_type).strip() != "":
@@ -673,7 +691,7 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
                     mark_error(
                         str(fuel_type),
                         f"Invalid fuel type. Must be one of: {', '.join(allowed_fuel_types)}",
-                        idx,
+                        original_idx,
                         "Fuel",
                         "Fuel Type"
                     )
@@ -691,6 +709,9 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
     
     # Check each column for valid numeric values
     for idx, row in result_df.iterrows():
+        # Use original row index for error tracking
+        original_idx = row['index']
+        
         for column in fuel_columns:
             if column in result_df.columns:
                 # Get the value
@@ -704,13 +725,16 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
                         
                         # Additional validation: fuel values should be positive
                         if numeric_value < 0:
-                            mark_error(value, f"{column} cannot be negative", idx, "Fuel", column)
+                            mark_error(value, f"{column} cannot be negative", original_idx, "Fuel", column)
                 except (ValueError, TypeError):
-                    mark_error(value, f"{column} must be numeric", idx, "Fuel", column)
+                    mark_error(value, f"{column} must be numeric", original_idx, "Fuel", column)
     
     # Check if Block off Fuel and Block on Fuel meet specific requirements
     if "Block off Fuel" in result_df.columns and "Block on Fuel" in result_df.columns:
         for idx, row in result_df.iterrows():
+            # Use original row index for error tracking
+            original_idx = row['index']
+            
             try:
                 # Only process if both values are numeric and not missing
                 if (not pd.isna(row["Block off Fuel"]) and not pd.isna(row["Block on Fuel"]) and
@@ -725,7 +749,7 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
                     if block_off <= block_on:
                         mark_error(f"Off: {block_off}, On: {block_on}", 
                                 "Block off fuel must be greater than block on fuel", 
-                                idx, "Fuel", ["Block off Fuel", "Block on Fuel"])
+                                original_idx, "Fuel", ["Block off Fuel", "Block on Fuel"])
             except (ValueError, TypeError):
                 # Skip this check if conversion fails - other checks will catch the numeric error
                 pass
@@ -733,6 +757,9 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
     # Check if Uplift Volume * Uplift Density = Uplift weight
     if all(col in result_df.columns for col in ['Uplift Volume', 'Uplift Density', 'Uplift weight']):
         for idx, row in result_df.iterrows():
+            # Use original row index for error tracking
+            original_idx = row['index']
+            
             try:
                 # Check if all three values are present and can be converted to floats
                 if (not pd.isna(row['Uplift Volume']) and 
@@ -753,22 +780,25 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
                         mark_error(
                             f"Volume: {uplift_volume}, Density: {uplift_density}, Weight: {uplift_weight}", 
                             f"Uplift Weight ({uplift_weight}) doesn't match Volume*Density ({expected_weight:.2f})",
-                            idx, "Fuel", ['Uplift Volume', 'Uplift Density', 'Uplift weight']
+                            original_idx, "Fuel", ['Uplift Volume', 'Uplift Density', 'Uplift weight']
                         )
             except (ValueError, TypeError):
                 # Skip this check if conversion fails - other checks will catch the numeric error
                 pass
     
     # Check if fuel calculations are consistent
-    if all(col in result_df.columns for col in ['From Prev. Flight', 'Uplift weight', 'Block off Fuel']):
+    if all(col in result_df.columns for col in ['Remaining Fuel From Prev. Flight', 'Uplift weight', 'Block off Fuel']):
         for idx, row in result_df.iterrows():
+            # Use original row index for error tracking
+            original_idx = row['index']
+            
             try:
                 # Check if all three values are present and can be converted to floats
-                if (not pd.isna(row['From Prev. Flight']) and 
+                if (not pd.isna(row['Remaining Fuel From Prev. Flight']) and 
                     not pd.isna(row['Uplift weight']) and 
                     not pd.isna(row['Block off Fuel'])):
                     
-                    prev_fuel = float(row['From Prev. Flight'])
+                    prev_fuel = float(row['Remaining Fuel From Prev. Flight'])
                     uplift = float(row['Uplift weight'])
                     block_off = float(row['Block off Fuel'])
                     
@@ -782,7 +812,7 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
                         mark_error(
                             f"Prev: {prev_fuel}, Uplift: {uplift}, Block Off: {block_off}", 
                             f"Block off fuel ({block_off}) doesn't match Previous + Uplift ({expected_block_off:.2f})",
-                            idx, "Fuel", ['From Prev. Flight', 'Uplift weight', 'Block off Fuel']
+                            original_idx, "Fuel", ['Remaining Fuel From Prev. Flight', 'Uplift weight', 'Block off Fuel']
                         )
             except (ValueError, TypeError):
                 # Skip this check if conversion fails - other checks will catch the numeric error
@@ -791,6 +821,9 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
     # Check for fuel consumption consistency
     if all(col in result_df.columns for col in ['Block off Fuel', 'Block on Fuel']):
         for idx, row in result_df.iterrows():
+            # Use original row index for error tracking
+            original_idx = row['index']
+            
             try:
                 # Check if both values can be converted to floats
                 if not pd.isna(row['Block off Fuel']) and not pd.isna(row['Block on Fuel']):
@@ -808,12 +841,15 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
     print("Validating dates...")
     if 'Date' in result_df.columns:
         for idx, row in result_df.iterrows():
+            # Use original row index for error tracking
+            original_idx = row['index']
+            
             if not pd.isna(row['Date']):
                 original_date = row['Date']
                 date_str = str(original_date)
                 date_obj = None
                 
-                # Fir   st, check if we have a datetime object or a string with timestamp
+                # First, check if we have a datetime object or a string with timestamp
                 try:
                     # Handle pandas Timestamp objects
                     if isinstance(original_date, pd.Timestamp):
@@ -869,11 +905,11 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
                     
                     # Check if date is within specified range
                     if start_date and end_date and not (start_date <= date_obj <= end_date):
-                        mark_error(date_str, f"Date not within range {start_date.date()} to {end_date.date()}", idx, "Date", "Date")
+                        mark_error(date_str, f"Date not within range {start_date.date()} to {end_date.date()}", original_idx, "Date", "Date")
                         
                 except (ValueError, TypeError) as e:
                     # Invalid date format
-                    mark_error(date_str, f"Invalid date format: {e}", idx, "Date", "Date")
+                    mark_error(date_str, f"Invalid date format: {e}", original_idx, "Date", "Date")
     
     
     # 7. ICAO CODE VALIDATION
@@ -892,6 +928,9 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
     
     # Validate ICAO codes
     for idx, row in result_df.iterrows():
+        # Use original row index for error tracking
+        original_idx = row['index']
+        
         # Check Origin ICAO
         if 'Origin ICAO' in result_df.columns:
             origin_icao = row['Origin ICAO']
@@ -900,7 +939,7 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
                 is_valid, expected_country = validate_and_correct_icao(origin_icao,icao_country_dict)
                 
                 if not is_valid:
-                    mark_error(str(origin_icao), "Invalid Origin ICAO", idx, "ICAO", "Origin ICAO")
+                    mark_error(str(origin_icao), "Invalid Origin ICAO", original_idx, "ICAO", "Origin ICAO")
                 elif origin_icao not in icao_country_dict:
                     # Add the newly discovered valid ICAO code to the dictionary
                     icao_country_dict[origin_icao] = expected_country
@@ -913,7 +952,7 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
                 is_valid, expected_country = validate_and_correct_icao(dest_icao,icao_country_dict)
                 
                 if not is_valid:
-                    mark_error(str(dest_icao), "Invalid Destination ICAO", idx, "ICAO", "Destination ICAO")
+                    mark_error(str(dest_icao), "Invalid Destination ICAO", original_idx, "ICAO", "Destination ICAO")
                 elif dest_icao not in icao_country_dict:
                     # Add the newly discovered valid ICAO code to the dictionary
                     icao_country_dict[dest_icao] = expected_country
@@ -983,6 +1022,9 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
     
     # Validate time columns
     for idx, row in result_df.iterrows():
+        # Use original row index for error tracking
+        original_idx = row['index']
+        
         for col in time_columns:
             if col in result_df.columns:
                 time_value = row[col]
@@ -990,7 +1032,7 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
                     converted_time, is_valid, error_msg = validate_and_convert_time(time_value)
                     
                     if not is_valid:
-                        mark_error(str(time_value), f"{col}: {error_msg}", idx, "Time", col)
+                        mark_error(str(time_value), f"{col}: {error_msg}", original_idx, "Time", col)
                     elif converted_time != time_value:
                         # Update the time value in the dataframe if it was converted
                         result_df.at[idx, col] = converted_time
@@ -999,26 +1041,56 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
     """
     Checks if the flight sequence for each aircraft is valid:
     Destination ICAO of one flight should match Origin ICAO of next flight.
+    Ignores rows with date or time errors for sequence validation.
     
     Parameters:
     - result_df: DataFrame with flight data
     - mark_error: Function to mark errors in the error tracker
     """
     print("Checking flight sequence...")
+    
+    # Collect row indices that have Date or Time errors (to exclude from sequence validation)
+    date_time_error_rows = set()
+    
+    # Get Date error rows
+    for error in error_tracker.get("Date", []):
+        if error["row_idx"] is not None:
+            date_time_error_rows.add(int(error["row_idx"]))
+    
+    # Get Time error rows
+    for error in error_tracker.get("Time", []):
+        if error["row_idx"] is not None:
+            date_time_error_rows.add(int(error["row_idx"]))
+    
+    print(f"Excluding {len(date_time_error_rows)} rows with date/time errors from sequence validation")
 
     # Group by aircraft registration
     for ac_reg, group in result_df.groupby('A/C Registration'):
-        # Reset index to make iterating easier
-        group = group.reset_index()
+        # Note: group already has 'index' column with original indices from earlier reset_index()
         
-        # Iterate through flights in sequence (excluding the last one)
-        for i in range(len(group) - 1):
-            current_flight = group.iloc[i]
-            next_flight = group.iloc[i + 1]
+        # Filter out rows with date/time errors for sequence validation
+        # Keep track of original positions for error marking
+        valid_flights = []
+        original_positions = []
+        
+        for i, (pandas_idx, row) in enumerate(group.iterrows()):
+            original_idx = int(row['index'])
+            if original_idx not in date_time_error_rows:
+                valid_flights.append(row)
+                original_positions.append(i)  # Store original position in the group
+        
+        # Skip sequence validation if less than 2 valid flights
+        if len(valid_flights) < 2:
+            continue
+        
+        # Iterate through valid flights in sequence (excluding the last one)
+        for i in range(len(valid_flights) - 1):
+            current_flight = valid_flights[i]
+            next_flight = valid_flights[i + 1]
             
-            # Get original dataframe indices for these rows
-            current_idx = current_flight['index']
-            next_idx = next_flight['index']
+            # Get original dataframe indices for these rows (ensure they're integers)
+            current_idx = int(current_flight['index'])
+            next_idx = int(next_flight['index'])
             
             # Check if Destination ICAO of current flight matches Origin ICAO of next flight
             if current_flight['Destination ICAO'] != next_flight['Origin ICAO']:
@@ -1028,10 +1100,11 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
                 
                 # Create error message
                 error_msg = f"{ac_reg}: Sequence Failed for Destination ICAO: {dest_icao} to Origin ICAO: {next_origin_icao}"
+                
                 # Mark error for flight before the current flight (if exists)
                 if i > 0:
-                    prev_flight = group.iloc[i - 1]
-                    prev_idx = prev_flight['index']
+                    prev_flight = valid_flights[i - 1]
+                    prev_idx = int(prev_flight['index'])
                     mark_error(
                         f"{ac_reg} : {dest_icao} → {next_origin_icao}",
                         error_msg,
@@ -1058,9 +1131,9 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
                 )
                  
                 # Mark error for flight after the next flight (if exists)
-                if i + 2 < len(group):
-                    after_next_flight = group.iloc[i + 2]
-                    after_next_idx = after_next_flight['index']
+                if i + 2 < len(valid_flights):
+                    after_next_flight = valid_flights[i + 2]
+                    after_next_idx = int(after_next_flight['index'])
                     mark_error(
                         f"{ac_reg} : {dest_icao} → {next_origin_icao}",
                         error_msg,
@@ -1080,13 +1153,27 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
     
     # PRINT ERROR SUMMARY
     total_errors = sum(len(errors) for errors in error_tracker.values())
+    print(f"\n📊 VALIDATION SUMMARY:")
     print(f"Found {total_errors} errors affecting {len(error_rows)} rows.")
     
     # Print summary by category
-    print("\nErrors by category:")
-    for category in error_categories:
-        if error_tracker[category]:
-            print(f"  {category}: {len(error_tracker[category])} errors")
+    if total_errors > 0:
+        print("\nErrors by category:")
+        for category in error_categories:
+            if error_tracker[category]:
+                print(f"  {category}: {len(error_tracker[category])} errors")
+    else:
+        print("✅ No validation errors found - all data appears to be valid according to current rules.")
+        print("\nValidation rules checked:")
+        print("  ✓ Missing column check")
+        print("  ✓ Missing cell data check") 
+        print("  ✓ Fuel type validation")
+        print("  ✓ Fuel numeric validation")
+        print("  ✓ Fuel calculation consistency")
+        print("  ✓ Date format validation")
+        print("  ✓ ICAO code validation")
+        print("  ✓ Time format validation")
+        print("  ✓ Flight sequence validation")
     
     # Check if there are "Column Missing" errors - critical issue
     if error_tracker["Column Missing"]:
@@ -1118,21 +1205,60 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
 
 
 
-def generate_error_report(result_df, output_path):
+
+
+
+def convert_to_serializable(value):
+    """
+    Convert pandas/numpy types to JSON serializable types
+    """
+    import numpy as np
+    
+    if pd.isna(value):
+        return None
+    elif hasattr(value, 'item'):  # numpy/pandas scalar
+        return value.item()
+    elif isinstance(value, (np.integer, np.int64, np.int32)):
+        return int(value)
+    elif isinstance(value, (np.floating, np.float64, np.float32)):
+        return float(value)
+    elif hasattr(value, 'strftime'):  # datetime objects
+        return value.strftime("%Y-%m-%d %H:%M:%S")
+    else:
+        return value
+
+
+def flatten_columns(columns):
+    """
+    Flatten nested column lists and ensure all items are strings
+    """
+    flattened = []
+    for item in columns:
+        if isinstance(item, list):
+            flattened.extend(flatten_columns(item))
+        else:
+            flattened.append(str(item))
+    return flattened
+
+
+def generate_error_report(result_df, output_path, auto_generate_csvs=True):
     """
     Generates a JSON report of all errors, grouped by category and reason.
-    Uses structure optimization + Brotli compression for maximum size reduction.
+    Stores row data in a central place to avoid duplication.
+    Now includes structure optimization + LZ-String compression.
+    Automatically generates clean_data.csv and errors_data.csv files.
     
     Parameters:
     - result_df: The DataFrame containing the data
-    - output_path: Path to save the compressed file (optional)
+    - output_path: Path to save the JSON file (optional)
+    - auto_generate_csvs: Whether to automatically generate CSV files (default: True)
     
     Returns:
-    - output_file: Path to the saved compressed file
+    - output_file_json: Path to the saved JSON file
     """
     global error_tracker, error_rows
     
-    # Create field mappings to reduce key repetition (75%+ of keys are field names)
+    # Field mappings to reduce key repetition (for compression)
     field_map = {
         "Date": "d", "A/C Registration": "r", "Flight": "f", "A/C Type": "t",
         "ATD (UTC) Block out": "o", "ATA (UTC) Block in": "i", 
@@ -1145,144 +1271,533 @@ def generate_error_report(result_df, output_path):
     # Reverse mapping for client-side decompression
     reverse_field_map = {v: k for k, v in field_map.items()}
     
-    # Initialize the optimized error report structure
+    # Initialize the error report structure (original format)
+    total_errors = sum(len(errors) for errors in error_tracker.values())
     error_report = {
-        "meta": {
-            "fm": reverse_field_map,  # field map for decompression
-            "s": {  # summary
-                "te": sum(len(errors) for errors in error_tracker.values()),  # total_errors
-                "er": len(error_rows),  # error_rows
-                "c": {category: len(errors) for category, errors in error_tracker.items() if len(errors) > 0}  # categories
-            }
+        "summary": {
+            "total_errors": total_errors,
+            "error_rows": len(error_rows),
+            "categories": {category: len(errors) for category, errors in error_tracker.items() if len(errors) > 0}
         },
-        "rd": {},  # rows_data (shortened)
-        "c": []    # categories (shortened)
+        "rows_data": {},  # Central place to store row data
+        "categories": []
     }
     
-    # Store all row data with optimized structure
-    for row_idx in error_rows:
-        if row_idx is not None:
-            try:
-                row_data = result_df.iloc[row_idx].to_dict()
-                optimized_row = {}
-                
-                for key, value in row_data.items():
-                    # Use short key names
-                    short_key = field_map.get(key, key)
-                    
-                    # Optimize data types and formats
-                    if key == "Date":
-                        if hasattr(value, 'strftime'):
-                            value = value.strftime("%Y-%m-%d")
-                        elif isinstance(value, str) and value.endswith(" 00:00:00"):
-                            value = value.split(" ")[0]
-                    elif isinstance(value, (int, float)) and not isinstance(value, bool):
-                        # Round and remove unnecessary decimals
-                        rounded_value = round(float(value), 3)
-                        if rounded_value == int(rounded_value):
-                            value = int(rounded_value)
-                        else:
-                            value = rounded_value
-                    else:
-                        # Convert numpy types to native Python types
-                        if hasattr(value, 'item'):
-                            value = value.item()
-                    
-                    optimized_row[short_key] = value
-                
-                error_report["rd"][str(row_idx)] = optimized_row
-            except (IndexError, AttributeError):
-                error_report["rd"][str(row_idx)] = {"err": "Row not found"}
+    # Create mapping from original indices to current pandas indices
+    original_to_pandas_idx = {}
+    for pandas_idx, row in result_df.iterrows():
+        original_idx = row['index']
+        original_to_pandas_idx[original_idx] = pandas_idx
     
-    # Process each category with optimized structure
+    # Store all row data in a central place, indexed by row_idx
+    for row_idx in error_rows:
+        if row_idx is not None:  # Skip None indices (file-level errors)
+            try:
+                # Convert original index to current pandas index
+                if row_idx in original_to_pandas_idx:
+                    pandas_idx = original_to_pandas_idx[row_idx]
+                    # Get row data using the correct pandas index
+                    row_data = result_df.iloc[pandas_idx].to_dict()
+                else:
+                    print(f"Warning: Original row_idx {row_idx} not found in current DataFrame")
+                    continue
+                
+                row_data = {k: convert_to_serializable(v) for k, v in row_data.items()}
+                
+                # Strip " 00:00:00" suffix from Date field
+                if "Date" in row_data:
+                    if hasattr(row_data["Date"], 'strftime'):  # Check if it's a datetime-like object
+                        # Convert to date string (YYYY-MM-DD format)
+                        row_data["Date"] = row_data["Date"].strftime("%Y-%m-%d")
+                    elif isinstance(row_data["Date"], str) and row_data["Date"].endswith(" 00:00:00"):
+                        # Handle string dates
+                        row_data["Date"] = row_data["Date"].split(" ")[0]
+                
+                # Round all numeric values to 3 decimal places
+                for key, value in row_data.items():
+                    if isinstance(value, (int, float)) and not isinstance(value, bool):
+                        row_data[key] = round(float(value), 3)
+                
+                error_report["rows_data"][str(row_idx)] = row_data
+            except (IndexError, AttributeError):
+                error_report["rows_data"][str(row_idx)] = {"error": "Row not found in DataFrame"}
+    
+    # Process each category
     for category in sorted(error_tracker.keys()):
         if not error_tracker[category]:
-            continue
+            continue  # Skip empty categories
         
-        # Group errors by reason
+        # Group errors by reason within this category
         errors_by_reason = defaultdict(list)
         for error in error_tracker[category]:
             reason = error["reason"]
             errors_by_reason[reason].append(error)
         
-        # Create optimized category entry
+        # Create category entry
         category_entry = {
-            "n": category,  # name
-            "e": []         # errors
+            "name": category,
+            "errors": []
         }
         
-        # Process each reason group
+        # Process each reason group, sorted alphabetically
         for reason in sorted(errors_by_reason.keys()):
             reason_group = {
-                "r": reason,  # reason
+                "reason": reason,
                 "rows": []
             }
             
-            # Add each error row with minimal structure
+            # Add each error row
             for error in errors_by_reason[reason]:
                 row_idx = error["row_idx"]
                 
+                # Skip if row_idx is None (applies to the whole file, not a specific row)
                 if row_idx is None:
-                    # File-level errors
+                    # For file-level errors like missing columns
                     file_error = {
-                        "fl": True,  # file_level
-                        "cd": error["cell_data"],  # cell_data
-                        "cols": error["columns"]
+                        "file_level": True,
+                        "cell_data": error["cell_data"],
+                        "columns": error["columns"]
                     }
                     reason_group["rows"].append(file_error)
-                else:
-                    # Row-level errors
-                    row_entry = {
-                        "idx": row_idx,  # row_idx
-                        "cd": error["cell_data"],  # cell_data
-                        "cols": error["columns"]
-                    }
-                    reason_group["rows"].append(row_entry)
+                    continue
+                
+                # Add error row entry with reference to central row data
+                row_entry = {
+                    "row_idx": row_idx,
+                    "cell_data": error["cell_data"],
+                    "columns": error["columns"]
+                }
+                
+                reason_group["rows"].append(row_entry)
             
-            category_entry["e"].append(reason_group)
+            # Add reason group to category
+            category_entry["errors"].append(reason_group)
         
-        error_report["c"].append(category_entry)
+        # Add category to report
+        error_report["categories"].append(category_entry)
     
-    # Convert to compact JSON (no spaces/indentation)
-    json_str = json.dumps(error_report, separators=(',', ':'), default=str)
-    
-    # Compress with Brotli
-    compressed_data = brotli.compress(json_str.encode('utf-8'))
-    
-    # Calculate and log compression stats
-    original_size = len(json_str.encode('utf-8'))
-    compressed_size = len(compressed_data)
-    compression_ratio = (1 - compressed_size / original_size) * 100
-    
-    print(f"JSON Optimization + Brotli Compression:")
-    print(f"  Original size: {original_size:,} bytes")
-    print(f"  Compressed size: {compressed_size:,} bytes")
-    print(f"  Compression ratio: {compression_ratio:.1f}%")
-    
-    # Save compressed data to file
+    # Save original JSON format
     output_file = None
     if output_path:
-        # Generate filename
+        # Generate filename if only directory is provided
         if os.path.isdir(output_path):
-            output_file = os.path.join(output_path, "error_report.br")
+            output_file = os.path.join(output_path, "error_report.json")
         else:
-            # Replace .json extension with .br or add .br
-            if output_path.endswith('.json'):
-                output_file = output_path.replace('.json', '.br')
-            else:
-                output_file = output_path + '.br'
+            output_file = output_path
         
         # Ensure directory exists
         os.makedirs(os.path.dirname(os.path.abspath(output_file)), exist_ok=True)
         
-        # Write compressed binary data
-        with open(output_file, 'wb') as f:
-            f.write(compressed_data)
+        # Write original JSON to file
+        json_str = json.dumps(error_report, indent=2, default=str, ensure_ascii=False)
+        with open(output_file, 'w', encoding='utf-8') as f:
+            f.write(json_str)
+    
+    # Create compressed version for web transfer
+    try:
+        compressed_data = create_compressed_error_report(error_report, field_map, reverse_field_map)
         
-        print(f"  Saved to: {output_file}")
+        # Save compressed version
+        if output_path:
+            if os.path.isdir(output_path):
+                compressed_file = os.path.join(output_path, "error_report.lzs")
+            else:
+                compressed_file = output_path.replace('.json', '.lzs')
+            
+            with open(compressed_file, 'w', encoding='utf-8') as f:
+                f.write(compressed_data)
+            
+            print(f"Compressed file saved to: {compressed_file}")
+    
+    except Exception as e:
+        print(f"Warning: Failed to create compressed version: {e}")
+        # Continue with original functionality
+    
+    # Auto-generate clean and errors CSV files (only if enabled and JSON file was created successfully)
+    if auto_generate_csvs and output_file and os.path.exists(output_file):
+        try:
+            # Create a DataFrame with original indices for CSV processing
+            # We need to restore the original index mapping for the CSV function to work correctly
+            csv_df = result_df.copy()
+            csv_df.index = csv_df['index']  # Set the index to original indices
+            csv_df = csv_df.drop('index', axis=1)  # Remove the 'index' column
+            
+            clean_csv_path, errors_csv_path = process_error_json_to_csvs(
+                json_file_path=output_file,
+                original_data_df=csv_df,
+                output_dir=output_path if output_path and os.path.isdir(output_path) else os.path.dirname(output_file)
+            )
+            
+            if clean_csv_path and errors_csv_path:
+                print(f"Auto-generated CSV files:")
+                print(f"  Clean data: {clean_csv_path}")
+                print(f"  Error data: {errors_csv_path}")
+            else:
+                print("Warning: Failed to auto-generate CSV files")
+                
+        except Exception as e:
+            print(f"Warning: Failed to auto-generate CSV files: {e}")
+            import traceback
+            traceback.print_exc()
     
     # Reset error tracking for next use
     error_tracker = {category: [] for category in error_categories}
     error_rows = set()
     
     return output_file
+
+
+def create_compressed_error_report(error_data, field_map, reverse_field_map):
+    """
+    Create compressed version of error report using structure optimization + LZ-String
+    """
+    try:
+        # Optimize row data structure
+        optimized_rows = {}
+        for row_idx, row_data in error_data.get('rows_data', {}).items():
+            optimized_row = {}
+            
+            for key, value in row_data.items():
+                if key == 'error':
+                    optimized_row['err'] = value
+                else:
+                    short_key = field_map.get(key, key)
+                    
+                    # Convert and optimize numeric values
+                    value = convert_to_serializable(value)
+                    if isinstance(value, (int, float)) and not isinstance(value, bool):
+                        rounded_value = round(float(value), 3)
+                        if rounded_value == int(rounded_value):
+                            value = int(rounded_value)
+                        else:
+                            value = rounded_value
+                    
+                    optimized_row[short_key] = value
+            
+            optimized_rows[row_idx] = optimized_row
+        
+        # Optimize error structure
+        optimized_categories = []
+        for category in error_data.get('categories', []):
+            category_errors = []
+            
+            for error_group in category.get('errors', []):
+                reason_data = {
+                    "r": error_group.get('reason', ''),  # reason
+                    "rows": []
+                }
+                
+                for row_error in error_group.get('rows', []):
+                    if row_error.get('file_level'):
+                        row_entry = {
+                            "fl": True,  # file_level
+                            "cd": row_error.get('cell_data', ''),  # cell_data
+                            "cols": row_error.get('columns', [])
+                        }
+                    else:
+                        row_entry = {
+                            "idx": row_error.get('row_idx'),  # row_idx
+                            "cd": row_error.get('cell_data', ''),  # cell_data
+                            "cols": row_error.get('columns', [])
+                        }
+                    
+                    reason_data["rows"].append(row_entry)
+                
+                category_errors.append(reason_data)
+            
+            optimized_categories.append({
+                "n": category.get('name', ''),  # name
+                "e": category_errors  # errors
+            })
+        
+        # Create optimized report
+        summary = error_data.get('summary', {})
+        optimized_report = {
+            "meta": {
+                "fm": reverse_field_map,  # field map for decompression
+                "s": {  # summary
+                    "te": convert_to_serializable(summary.get('total_errors', 0)),  # total_errors
+                    "er": convert_to_serializable(summary.get('error_rows', 0)),  # error_rows
+                    "c": {k: convert_to_serializable(v) for k, v in summary.get('categories', {}).items()}  # categories
+                }
+            },
+            "rd": optimized_rows,  # rows_data
+            "c": optimized_categories  # categories
+        }
+        
+        # Convert to compact JSON
+        json_str = json.dumps(optimized_report, separators=(',', ':'), ensure_ascii=False)
+        
+        # Compress with LZ-String
+        compressed_data = LZString.compressToBase64(json_str)
+        
+        # Calculate compression stats
+        original_size = len(json_str.encode('utf-8'))
+        compressed_size = len(compressed_data.encode('utf-8'))
+        compression_ratio = (1 - compressed_size / original_size) * 100
+        
+        print(f"JSON Optimization + LZ-String Compression:")
+        print(f"  Original size: {original_size:,} bytes")
+        print(f"  Compressed size: {compressed_size:,} bytes")
+        print(f"  Compression ratio: {compression_ratio:.1f}%")
+        
+        return compressed_data
+        
+    except Exception as e:
+        print(f"Error compressing data: {e}")
+        # Fallback: return uncompressed JSON
+        json_str = json.dumps(error_data, separators=(',', ':'), ensure_ascii=False)
+        return json_str
+
+
+def process_error_json_to_csvs(json_file_path, original_data_df, output_dir=None):
+    """
+    Process a JSON error report to create two CSV files:
+    1. Clean CSV: Contains all rows except those with errors
+    2. Errors CSV: Contains only error rows, organized by category and error type
+    
+    Parameters:
+    - json_file_path: Path to the JSON error report file
+    - original_data_df: The original DataFrame containing all data
+    - output_dir: Directory to save the CSV files (defaults to same directory as JSON file)
+    
+    Returns:
+    - tuple: (clean_csv_path, errors_csv_path) or (None, None) if processing fails
+    """
+    
+    try:
+        # Load the JSON error report
+        with open(json_file_path, 'r', encoding='utf-8') as f:
+            error_data = json.load(f)
+        
+        # Extract all error row indices
+        error_row_indices = set()
+        
+        # Get error rows from categories
+        for category in error_data.get('categories', []):
+            for error_group in category.get('errors', []):
+                for row_error in error_group.get('rows', []):
+                    if not row_error.get('file_level', False):  # Skip file-level errors
+                        row_idx = row_error.get('row_idx')
+                        if row_idx is not None:
+                            # Convert string indices to integers for consistency
+                            try:
+                                row_idx = int(row_idx)
+                                error_row_indices.add(row_idx)
+                            except (ValueError, TypeError):
+                                print(f"Warning: Invalid row_idx '{row_idx}' - skipping")
+                                continue
+        
+        # Determine output directory
+        if output_dir is None:
+            output_dir = os.path.dirname(json_file_path)
+        
+        # Ensure output directory exists
+        os.makedirs(output_dir, exist_ok=True)
+        
+        # 1. CREATE CLEAN CSV (all rows except error rows)
+        clean_df = original_data_df.loc[~original_data_df.index.isin(error_row_indices)].copy()
+        clean_csv_path = os.path.join(output_dir, 'clean_data.csv')
+        clean_df.to_csv(clean_csv_path, index=False)
+        
+        print(f"🧹 Clean CSV created with {len(clean_df)} rows (out of {len(original_data_df)} total): {clean_csv_path}")
+        
+        # 2. CREATE ERRORS CSV (only error rows, organized by category and error type)
+        errors_data = []
+        
+        # Process each category
+        for category in error_data.get('categories', []):
+            category_name = category.get('name', 'Unknown')
+            
+            for error_group in category.get('errors', []):
+                error_reason = error_group.get('reason', 'Unknown Error')
+                
+                for row_error in error_group.get('rows', []):
+                    if row_error.get('file_level', False):
+                        # Handle file-level errors
+                        error_row = {
+                            'Error_Category': category_name,
+                            'Error_Reason': error_reason,
+                            'Row_Index': 'File-level',
+                            'Affected_Columns': ', '.join(flatten_columns(row_error.get('columns', []))),
+                            'Cell_Data': str(row_error.get('cell_data', ''))
+                        }
+                        # Add all original columns with empty values for file-level errors
+                        for col in original_data_df.columns:
+                            error_row[col] = ''
+                        
+                        errors_data.append(error_row)
+                    else:
+                        # Handle row-level errors
+                        row_idx = row_error.get('row_idx')
+                        if row_idx is not None:
+                            # Convert string indices to integers for consistency
+                            try:
+                                row_idx = int(row_idx)
+                            except (ValueError, TypeError):
+                                print(f"Warning: Invalid row_idx '{row_idx}' in error processing - skipping")
+                                continue
+                            
+                            if row_idx in original_data_df.index:
+                                # Get the original row data
+                                original_row = original_data_df.loc[row_idx].to_dict()
+                                
+                                # Clean up the row data (handle datetime objects, etc.)
+                                for key, value in original_row.items():
+                                    original_row[key] = convert_to_serializable(value)
+                                    if hasattr(value, 'strftime'):  # datetime object
+                                        if key == "Date":
+                                            original_row[key] = value.strftime("%Y-%m-%d")
+                                        else:
+                                            original_row[key] = value.strftime("%Y-%m-%d %H:%M:%S")
+                                    elif pd.isna(value):
+                                        original_row[key] = ''
+                                    elif isinstance(original_row[key], (int, float)) and not isinstance(original_row[key], bool):
+                                        original_row[key] = round(float(original_row[key]), 3)
+                                
+                                # Create error row with metadata
+                                error_row = {
+                                    'Error_Category': category_name,
+                                    'Error_Reason': error_reason,
+                                    'Row_Index': row_idx,
+                                    'Affected_Columns': ', '.join(flatten_columns(row_error.get('columns', []))),
+                                    'Cell_Data': str(row_error.get('cell_data', ''))
+                                }
+                                
+                                # Add all original data columns
+                                error_row.update(original_row)
+                                
+                                errors_data.append(error_row)
+                            else:
+                                print(f"Warning: Row index {row_idx} not found in original data - skipping")
+        
+        # Create errors DataFrame and save to CSV
+        if errors_data:
+            errors_df = pd.DataFrame(errors_data)
+            
+            # Reorder columns to put error metadata first
+            error_metadata_cols = ['Error_Category', 'Error_Reason', 'Row_Index', 'Affected_Columns', 'Cell_Data']
+            original_cols = [col for col in original_data_df.columns if col not in error_metadata_cols]
+            column_order = error_metadata_cols + original_cols
+            
+            # Ensure all columns exist (some might be missing for file-level errors)
+            for col in column_order:
+                if col not in errors_df.columns:
+                    errors_df[col] = ''
+            
+            errors_df = errors_df[column_order]
+            
+            errors_csv_path = os.path.join(output_dir, 'errors_data.csv')
+            errors_df.to_csv(errors_csv_path, index=False)
+            
+            print(f"⚠️  Errors CSV created with {len(errors_df)} error entries: {errors_csv_path}")
+            
+            # Show breakdown by category
+            category_counts = errors_df['Error_Category'].value_counts()
+            print(f"   Error breakdown: {dict(category_counts)}")
+        else:
+            # Create empty errors CSV if no errors found
+            errors_df = pd.DataFrame(columns=['Error_Category', 'Error_Reason', 'Row_Index', 'Affected_Columns', 'Cell_Data'] + list(original_data_df.columns))
+            errors_csv_path = os.path.join(output_dir, 'errors_data.csv')
+            errors_df.to_csv(errors_csv_path, index=False)
+            
+            print(f"✅ Empty errors CSV created (no validation errors detected): {errors_csv_path}")
+            print(f"   This means all {len(original_data_df)} rows passed validation checks.")
+        
+        return clean_csv_path, errors_csv_path
+        
+    except Exception as e:
+        print(f"Error processing JSON to CSV: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return None, None
+
+
+def generate_csvs_from_json_report(json_file_path, original_csv_path=None, original_df=None, output_dir=None):
+    """
+    Convenience function to generate clean and errors CSV files from a JSON error report.
+    
+    Parameters:
+    - json_file_path: Path to the JSON error report file
+    - original_csv_path: Path to the original CSV file (optional if original_df is provided)
+    - original_df: Original DataFrame (optional if original_csv_path is provided)
+    - output_dir: Directory to save the CSV files (defaults to same directory as JSON file)
+    
+    Returns:
+    - tuple: (clean_csv_path, errors_csv_path) or (None, None) if processing fails
+    """
+    
+    # Load original data if not provided
+    if original_df is None:
+        if original_csv_path is None:
+            print("Error: Either original_csv_path or original_df must be provided")
+            return None, None
+        
+        try:
+            # Detect encoding and load CSV
+            encoding = 'utf-8'
+            try:
+                import chardet
+                with open(original_csv_path, 'rb') as f:
+                    raw_data = f.read()
+                    result = chardet.detect(raw_data)
+                    encoding = result['encoding'] or 'utf-8'
+            except ImportError:
+                pass
+            
+            original_df = pd.read_csv(original_csv_path, encoding=encoding, encoding_errors='replace')
+        except Exception as e:
+            print(f"Error loading original CSV file: {str(e)}")
+            return None, None
+    
+    return process_error_json_to_csvs(json_file_path, original_df, output_dir)
+
+
+def detect_encoding(file_path):
+    """Detect file encoding with better handling"""
+    try:
+        with open(file_path, 'rb') as f:
+            raw_data = f.read()
+            result = chardet.detect(raw_data)
+            
+        encoding = result['encoding']
+        confidence = result['confidence']
+        
+        # If confidence is low, fallback to common encodings
+        if confidence < 0.7:
+            for fallback_encoding in ['utf-8', 'utf-8-sig', 'latin1', 'cp1252']:
+                try:
+                    with open(file_path, 'r', encoding=fallback_encoding) as f:
+                        f.read()
+                    return fallback_encoding
+                except UnicodeDecodeError:
+                    continue
+        
+        return encoding if encoding else 'utf-8'
+    except Exception:
+        return 'utf-8'
+
+
+def safe_json_load(file_path):
+    """Safely load JSON file with proper encoding detection"""
+    if not os.path.exists(file_path):
+        return None
+    
+    # For JSON files, try common encodings
+    encodings_to_try = ['utf-8', 'utf-8-sig', 'latin1', 'cp1252']
+    
+    for encoding in encodings_to_try:
+        try:
+            with open(file_path, 'r', encoding=encoding) as f:
+                return json.load(f)
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            continue
+    
+    # If all fail, try detecting encoding
+    detected_encoding = detect_encoding(file_path)
+    try:
+        with open(file_path, 'r', encoding=detected_encoding) as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"Failed to load JSON file {file_path}: {e}")
+        return None
