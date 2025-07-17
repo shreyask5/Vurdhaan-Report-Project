@@ -20,7 +20,7 @@ class Config:
     SESSION_TIMEOUT_HOURS = int(os.getenv('SESSION_TIMEOUT_HOURS', '24'))
     
     # Upload settings - Updated for server
-    UPLOAD_FOLDER = os.getenv('UPLOAD_FOLDER', '/var/www/flight-analyzer/uploads')
+    UPLOAD_FOLDER = os.getenv('UPLOAD_FOLDER', '/home/ubuntu/project/uploads')
     MAX_CONTENT_LENGTH = int(os.getenv('MAX_CONTENT_LENGTH', '50485760'))  # 50MB for server
     
     # Redis settings (optional)
