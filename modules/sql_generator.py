@@ -116,22 +116,77 @@ class FlightDataSQLAgent:
         self._test_connection()
     
     def _setup_langchain_components(self):
-        """Setup LangChain SQL database and agent"""
+        """Setup LangChain SQL database and agent using direct DuckDB approach"""
         try:
-            # Close any existing connection that might conflict
-            if self.duckdb_conn and self.owns_connection:
-                self.duckdb_conn.close()
-                self.duckdb_conn = None
+            # Create a custom SQLDatabase that works with DuckDB
+            import duckdb
             
-            # Create SQLDatabase instance with connection pooling disabled
-            database_uri = f"duckdb:///{self.db_path}"
-            engine_args = {
-                "poolclass": None,  # Disable connection pooling to avoid conflicts
-                "connect_args": {"check_same_thread": False}
-            }
+            # Create DuckDB connection
+            self.duckdb_conn_for_langchain = duckdb.connect(self.db_path)
             
-            self.db = SQLDatabase.from_uri(database_uri, engine_args=engine_args)
-            logger.info(f"✅ Connected to DuckDB via LangChain: {self.db_path}")
+            # Create a custom SQLDatabase class that uses DuckDB directly
+            from langchain_community.utilities.sql_database import SQLDatabase
+            from sqlalchemy import create_engine, text
+            from sqlalchemy.pool import StaticPool
+            
+            # Create a simple engine that delegates to DuckDB
+            def get_duckdb_connection():
+                return self.duckdb_conn_for_langchain
+            
+            # Use a memory engine but override the execution methods
+            engine = create_engine(
+                "sqlite:///:memory:",
+                poolclass=StaticPool,
+                connect_args={"check_same_thread": False}
+            )
+            
+            # Create SQLDatabase instance
+            self.db = SQLDatabase(engine)
+            
+            # Override the database methods to use DuckDB
+            original_run = self.db.run
+            original_get_table_names = self.db.get_table_names
+            original_get_table_info = self.db.get_table_info
+            
+            def duckdb_run(command: str, fetch: str = "all"):
+                """Execute command using DuckDB"""
+                try:
+                    result = self.duckdb_conn_for_langchain.execute(command).fetchall()
+                    if fetch == "one":
+                        return result[0] if result else None
+                    return result
+                except Exception as e:
+                    return f"Error: {str(e)}"
+            
+            def duckdb_get_table_names():
+                """Get table names from DuckDB"""
+                try:
+                    result = self.duckdb_conn_for_langchain.execute("SHOW TABLES").fetchall()
+                    return [row[0] for row in result]
+                except Exception:
+                    return []
+            
+            def duckdb_get_table_info(table_names=None):
+                """Get table info from DuckDB"""
+                try:
+                    info = []
+                    tables = table_names or duckdb_get_table_names()
+                    for table in tables:
+                        columns = self.duckdb_conn_for_langchain.execute(f"DESCRIBE {table}").fetchall()
+                        table_info = f"\nTable: {table}\nColumns:\n"
+                        for col in columns:
+                            table_info += f"  - {col[0]} ({col[1]})\n"
+                        info.append(table_info)
+                    return "\n".join(info)
+                except Exception as e:
+                    return f"Error getting table info: {str(e)}"
+            
+            # Override methods
+            self.db.run = duckdb_run
+            self.db.get_table_names = duckdb_get_table_names
+            self.db.get_table_info = duckdb_get_table_info
+            
+            logger.info(f"✅ Connected to DuckDB via custom LangChain adapter: {self.db_path}")
             
             # Initialize OpenAI LLM
             self.llm = OpenAI(
@@ -156,10 +211,11 @@ class FlightDataSQLAgent:
                 handle_parsing_errors=True
             )
             
-            logger.info("✅ LangChain SQL agent initialized successfully")
+            logger.info("✅ LangChain SQL agent with DuckDB adapter initialized successfully")
             
         except Exception as e:
             logger.error(f"❌ Failed to setup LangChain components: {e}")
+            logger.error(f"Error details: {type(e).__name__}: {str(e)}")
             raise
     
     def _setup_direct_duckdb_fallback(self):
@@ -225,6 +281,26 @@ class FlightDataSQLAgent:
                 "metadata": {"error_details": str(e)}
             }
     
+    def _make_json_serializable(self, obj):
+        """Convert object to JSON-serializable format"""
+        if obj is None:
+            return None
+        elif isinstance(obj, (str, int, float, bool)):
+            return obj
+        elif isinstance(obj, (list, tuple)):
+            return [self._make_json_serializable(item) for item in obj]
+        elif isinstance(obj, dict):
+            return {key: self._make_json_serializable(value) for key, value in obj.items()}
+        elif hasattr(obj, 'isoformat'):  # datetime, date, time objects
+            return obj.isoformat()
+        elif isinstance(obj, (bytes, bytearray)):
+            return obj.decode('utf-8', errors='ignore')
+        elif isinstance(obj, (set, frozenset)):
+            return list(obj)
+        else:
+            # For other types, convert to string
+            return str(obj)
+    
     def _process_with_langchain(self, question: str) -> Dict[str, Any]:
         """Process query using LangChain SQL agent"""
         try:
@@ -246,15 +322,18 @@ class FlightDataSQLAgent:
             if sql_query:
                 logger.info(f"📊 Generated SQL: {sql_query}")
             
+            # Make sure all data is JSON serializable
+            metadata = {
+                "sql_query": sql_query,
+                "intermediate_steps": self._make_json_serializable(intermediate_steps),
+                "langchain_result": self._make_json_serializable(result),
+                "method": "langchain"
+            }
+            
             return {
                 "success": True,
                 "answer": answer,
-                "metadata": {
-                    "sql_query": sql_query,
-                    "intermediate_steps": intermediate_steps,
-                    "langchain_result": result,
-                    "method": "langchain"
-                }
+                "metadata": metadata
             }
             
         except Exception as e:
@@ -281,8 +360,14 @@ class FlightDataSQLAgent:
             result = self.duckdb_conn.execute(sql_query).fetchall()
             columns = [desc[0] for desc in self.duckdb_conn.description]
             
-            # Convert to list of dicts
-            data = [dict(zip(columns, row)) for row in result]
+            # Convert to list of dicts with JSON-safe serialization
+            data = []
+            for row in result:
+                row_dict = {}
+                for i, value in enumerate(row):
+                    column_name = columns[i]
+                    row_dict[column_name] = self._make_json_serializable(value)
+                data.append(row_dict)
             
             # Generate natural language answer
             answer = self._generate_answer_with_openai(question, sql_query, data)
@@ -534,6 +619,11 @@ Provide a clear, comprehensive answer to the question based on this flight opera
                 if hasattr(self.db, '_engine') and self.db._engine:
                     self.db._engine.dispose()
                 logger.info("✅ Closed LangChain database connection")
+            
+            # Close LangChain-specific DuckDB connection
+            if hasattr(self, 'duckdb_conn_for_langchain') and self.duckdb_conn_for_langchain:
+                self.duckdb_conn_for_langchain.close()
+                logger.info("✅ Closed LangChain DuckDB connection")
             
             if self.owns_connection and self.duckdb_conn:
                 self.duckdb_conn.close()
