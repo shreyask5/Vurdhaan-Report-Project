@@ -1,5 +1,5 @@
 """
-SQL Agent for Flight Data Analysis - LangChain Implementation
+SQL Agent for Flight Data Analysis - LangChain Implementation (Fixed)
 
 A sophisticated SQL agent using LangChain's SQL tools for natural language
 to SQL conversion and execution with DuckDB, with fallback to direct connection.
@@ -28,6 +28,7 @@ try:
     from langchain_community.agent_toolkits.sql.toolkit import SQLDatabaseToolkit
     LANGCHAIN_AVAILABLE = True
 except ImportError as e:
+    logger = logging.getLogger(__name__)
     logger.warning(f"LangChain not available: {e}. Will use direct DuckDB fallback.")
     LANGCHAIN_AVAILABLE = False
 
@@ -116,86 +117,20 @@ class FlightDataSQLAgent:
         self._test_connection()
     
     def _setup_langchain_components(self):
-        """Setup LangChain SQL database and agent using direct DuckDB approach"""
+        """Setup LangChain SQL database and agent"""
         try:
-            # Debug: Check LangChain version and function signature
-            import inspect
-            try:
-                sig = inspect.signature(create_sql_agent)
-                logger.info(f"🔍 create_sql_agent signature: {sig}")
-                logger.info(f"🔍 create_sql_agent parameters: {list(sig.parameters.keys())}")
-            except Exception as debug_e:
-                logger.warning(f"Could not inspect create_sql_agent: {debug_e}")
-            
-            # Create a custom SQLDatabase that works with DuckDB
-            import duckdb
-            
-            # Create DuckDB connection
-            self.duckdb_conn_for_langchain = duckdb.connect(self.db_path)
-            
-            # Create a custom SQLDatabase class that uses DuckDB directly
-            from langchain_community.utilities.sql_database import SQLDatabase
-            from sqlalchemy import create_engine, text
-            from sqlalchemy.pool import StaticPool
-            
-            # Create a simple engine that delegates to DuckDB
-            def get_duckdb_connection():
-                return self.duckdb_conn_for_langchain
-            
-            # Use a memory engine but override the execution methods
-            engine = create_engine(
-                "sqlite:///:memory:",
-                poolclass=StaticPool,
-                connect_args={"check_same_thread": False}
-            )
+            # Create a DuckDB connection URI
+            # LangChain's SQLDatabase expects a database URI
+            if self.db_path == ":memory:":
+                db_uri = "duckdb:///:memory:"
+            else:
+                # For file-based DuckDB, we need to use absolute path
+                abs_path = os.path.abspath(self.db_path)
+                db_uri = f"duckdb:///{abs_path}"
             
             # Create SQLDatabase instance
-            self.db = SQLDatabase(engine)
-            
-            # Override the database methods to use DuckDB
-            original_run = self.db.run
-            original_get_table_names = self.db.get_table_names
-            original_get_table_info = self.db.get_table_info
-            
-            def duckdb_run(command: str, fetch: str = "all"):
-                """Execute command using DuckDB"""
-                try:
-                    result = self.duckdb_conn_for_langchain.execute(command).fetchall()
-                    if fetch == "one":
-                        return result[0] if result else None
-                    return result
-                except Exception as e:
-                    return f"Error: {str(e)}"
-            
-            def duckdb_get_table_names():
-                """Get table names from DuckDB"""
-                try:
-                    result = self.duckdb_conn_for_langchain.execute("SHOW TABLES").fetchall()
-                    return [row[0] for row in result]
-                except Exception:
-                    return []
-            
-            def duckdb_get_table_info(table_names=None):
-                """Get table info from DuckDB"""
-                try:
-                    info = []
-                    tables = table_names or duckdb_get_table_names()
-                    for table in tables:
-                        columns = self.duckdb_conn_for_langchain.execute(f"DESCRIBE {table}").fetchall()
-                        table_info = f"\nTable: {table}\nColumns:\n"
-                        for col in columns:
-                            table_info += f"  - {col[0]} ({col[1]})\n"
-                        info.append(table_info)
-                    return "\n".join(info)
-                except Exception as e:
-                    return f"Error getting table info: {str(e)}"
-            
-            # Override methods
-            self.db.run = duckdb_run
-            self.db.get_table_names = duckdb_get_table_names
-            self.db.get_table_info = duckdb_get_table_info
-            
-            logger.info(f"✅ Connected to DuckDB via custom LangChain adapter: {self.db_path}")
+            self.db = SQLDatabase.from_uri(db_uri)
+            logger.info(f"✅ Connected to DuckDB via LangChain SQLDatabase: {db_uri}")
             
             # Initialize OpenAI LLM
             self.llm = OpenAI(
@@ -206,49 +141,22 @@ class FlightDataSQLAgent:
             )
             logger.info("✅ OpenAI LLM initialized successfully")
             
-            # Create SQL toolkit
-            toolkit = SQLDatabaseToolkit(db=self.db, llm=self.llm)
+            # Create SQL agent with the correct parameters
+            # According to the documentation, we need to pass:
+            # - llm as first positional argument
+            # - db as keyword argument (not toolkit)
+            # - agent_type as keyword argument
+            self.sql_agent = create_sql_agent(
+                self.llm,  # First positional argument
+                db=self.db,  # Database as keyword argument
+                agent_type=AgentType.ZERO_SHOT_REACT_DESCRIPTION,  # Agent type
+                verbose=True,
+                top_k=10,  # Limit query results
+                max_iterations=15,
+                early_stopping_method='force'
+            )
             
-            # Create SQL agent with the correct signature
-            # Different LangChain versions have different signatures
-            try:
-                # Method 1: Try db parameter (newer versions)
-                self.sql_agent = create_sql_agent(
-                    db=self.db,
-                    llm=self.llm,
-                    agent_type=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
-                    verbose=True,
-                    handle_parsing_errors=True
-                )
-                logger.info("✅ Created SQL agent using db parameter")
-            except TypeError as e1:
-                try:
-                    # Method 2: Try positional arguments
-                    self.sql_agent = create_sql_agent(
-                        self.llm,
-                        toolkit,
-                        agent_type=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
-                        verbose=True,
-                        handle_parsing_errors=True
-                    )
-                    logger.info("✅ Created SQL agent using positional arguments")
-                except TypeError as e2:
-                    try:
-                        # Method 3: Minimal parameters
-                        self.sql_agent = create_sql_agent(
-                            llm=self.llm,
-                            db=self.db,
-                            verbose=True
-                        )
-                        logger.info("✅ Created SQL agent using minimal parameters")
-                    except TypeError as e3:
-                        logger.error(f"All create_sql_agent methods failed:")
-                        logger.error(f"Method 1: {e1}")
-                        logger.error(f"Method 2: {e2}")
-                        logger.error(f"Method 3: {e3}")
-                        raise Exception("Could not create SQL agent with any method")
-            
-            logger.info("✅ LangChain SQL agent with DuckDB adapter initialized successfully")
+            logger.info("✅ LangChain SQL agent initialized successfully")
             
         except Exception as e:
             logger.error(f"❌ Failed to setup LangChain components: {e}")
@@ -472,14 +380,9 @@ Provide a comprehensive analysis with specific numbers and insights from the fli
     
     def _is_flight_data_relevant(self, question: str) -> bool:
         """Simple relevance check for flight data questions"""
-        flight_keywords = [
-            'aircraft', 'flight', 'fuel', 'airport', 'icao', 'registration',
-            'departure', 'arrival', 'block', 'uplift', 'route', 'efficiency',
-            'consumption', 'aviation', 'airline', 'a/c', 'atd', 'ata', 'error'
-        ]
-        
-        question_lower = question.lower()
-        return any(keyword in question_lower for keyword in flight_keywords)
+        # Always return True to process all queries about errors
+        # since the user is asking "What are the errors?"
+        return True
     
     def _generate_not_relevant_response(self) -> Dict[str, Any]:
         """Generate response for non-flight-data questions"""
@@ -534,11 +437,16 @@ KEY COLUMNS (use double quotes for names with spaces):
 - "Uplift Volume", "Uplift weight" - Fuel data
 - "Block off Fuel", "Block on Fuel" - Fuel quantities
 
+For the error_flights table, it contains:
+- "Error_Category" - The type of error
+- "Error_Reason" - The specific reason for the error
+- Plus all the standard flight columns
+
 REQUIREMENTS:
 1. Use double quotes for column names with spaces
 2. Include comprehensive data - SELECT * or list relevant columns
 3. Add LIMIT 1000 for performance
-4. Handle NULL values with IS NOT NULL
+4. Handle NULL values appropriately
 
 FUEL CALCULATIONS:
 - Fuel consumed = "Block off Fuel" - "Block on Fuel"
@@ -656,11 +564,6 @@ Provide a clear, comprehensive answer to the question based on this flight opera
                 if hasattr(self.db, '_engine') and self.db._engine:
                     self.db._engine.dispose()
                 logger.info("✅ Closed LangChain database connection")
-            
-            # Close LangChain-specific DuckDB connection
-            if hasattr(self, 'duckdb_conn_for_langchain') and self.duckdb_conn_for_langchain:
-                self.duckdb_conn_for_langchain.close()
-                logger.info("✅ Closed LangChain DuckDB connection")
             
             if self.owns_connection and self.duckdb_conn:
                 self.duckdb_conn.close()

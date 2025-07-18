@@ -472,8 +472,8 @@ Database Schema:
 {schema_context}
 
 AVAILABLE TABLES:
-1. clean_flights (19,210 rows) - Main flight operations data
-2. error_flights (28 rows) - Data quality issues and errors
+1. clean_flights - Main flight operations data
+2. error_flights - Data quality issues and errors
 
 COLUMN REFERENCE:
 Common Columns (both tables):
