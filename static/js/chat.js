@@ -248,7 +248,7 @@ class FlightOpsChat {
         
         const textDiv = document.createElement('div');
         textDiv.className = 'message-text';
-        textDiv.textContent = text;
+        textDiv.innerHTML = window.markdownit().render(text);
         
         content.appendChild(textDiv);
         messageDiv.appendChild(avatar);
@@ -272,7 +272,7 @@ class FlightOpsChat {
         // Add response text
         const textDiv = document.createElement('div');
         textDiv.className = 'message-text';
-        textDiv.textContent = data.response;
+        textDiv.innerHTML = window.markdownit().render(data.response);
         content.appendChild(textDiv);
         
         // Add SQL query if available

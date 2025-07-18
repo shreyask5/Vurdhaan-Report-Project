@@ -164,7 +164,7 @@ class DuckDBLocalClient:
             return [], error_msg
     
     def get_table_schemas(self) -> Dict[str, List[Dict]]:
-        """Get schema information for all tables"""
+        """Get schema information for all tables with min/max values"""
         try:
             # Get list of tables
             tables_data, error = self.execute_query("SHOW TABLES")
@@ -175,16 +175,148 @@ class DuckDBLocalClient:
             for table_row in tables_data:
                 table_name = table_row.get('name', list(table_row.values())[0])
                 
-                # Get schema for this table
+                # Get basic schema for this table
                 schema_data, error = self.execute_query(f"DESCRIBE {table_name}")
-                if not error and schema_data:
-                    schemas[table_name] = schema_data
+                if error or not schema_data:
+                    continue
+                
+                # Enhance schema with min/max values and statistics
+                enhanced_schema = []
+                for column_info in schema_data:
+                    column_name = column_info.get('column_name', column_info.get('name', 'unknown'))
+                    column_type = column_info.get('column_type', column_info.get('type', 'unknown'))
+                    
+                    # Create enhanced column info
+                    enhanced_column = {
+                        'column_name': column_name,
+                        'data_type': column_type,
+                        'nullable': column_info.get('nullable'),
+                        'default': column_info.get('default'),
+                        'extra': column_info.get('extra')
+                    }
+                    
+                    # Get min/max and statistics for appropriate data types
+                    stats = self._get_column_statistics(table_name, column_name, column_type)
+                    enhanced_column.update(stats)
+                    
+                    enhanced_schema.append(enhanced_column)
+                
+                schemas[table_name] = enhanced_schema
             
             return schemas
             
         except Exception as e:
             logger.error(f"Failed to get table schemas: {e}")
             return {}
+
+    def _get_column_statistics(self, table_name: str, column_name: str, column_type: str) -> Dict[str, Any]:
+        """Get statistics (min/max, count, etc.) for a specific column"""
+        stats = {
+            'min_value': None,
+            'max_value': None,
+            'null_count': None,
+            'distinct_count': None,
+            'sample_values': []
+        }
+        
+        try:
+            # Escape column name with double quotes for DuckDB
+            escaped_column = f'"{column_name}"'
+            
+            # Determine if column is numeric, date, or text
+            is_numeric = any(t in column_type.upper() for t in ['INT', 'FLOAT', 'DOUBLE', 'DECIMAL', 'NUMERIC', 'REAL', 'BIGINT'])
+            is_date = any(t in column_type.upper() for t in ['DATE', 'TIME', 'TIMESTAMP'])
+            is_text = any(t in column_type.upper() for t in ['VARCHAR', 'TEXT', 'STRING', 'CHAR'])
+            
+            # Get basic statistics
+            basic_stats_query = f"""
+            SELECT 
+                COUNT(*) as total_count,
+                COUNT({escaped_column}) as non_null_count,
+                COUNT(*) - COUNT({escaped_column}) as null_count,
+                COUNT(DISTINCT {escaped_column}) as distinct_count
+            FROM {table_name}
+            """
+            
+            basic_stats, error = self.execute_query(basic_stats_query)
+            if not error and basic_stats:
+                stats_row = basic_stats[0]
+                stats['total_count'] = stats_row.get('total_count', 0)
+                stats['non_null_count'] = stats_row.get('non_null_count', 0)
+                stats['null_count'] = stats_row.get('null_count', 0)
+                stats['distinct_count'] = stats_row.get('distinct_count', 0)
+            
+            # Get min/max based on data type
+            if is_numeric or is_date:
+                minmax_query = f"""
+                SELECT 
+                    MIN({escaped_column}) as min_value,
+                    MAX({escaped_column}) as max_value
+                FROM {table_name}
+                WHERE {escaped_column} IS NOT NULL
+                """
+                
+                minmax_data, error = self.execute_query(minmax_query)
+                if not error and minmax_data:
+                    stats['min_value'] = minmax_data[0].get('min_value')
+                    stats['max_value'] = minmax_data[0].get('max_value')
+            
+            elif is_text:
+                # For text columns, get min/max by length and alphabetical order
+                text_stats_query = f"""
+                SELECT 
+                    MIN(LENGTH({escaped_column})) as min_length,
+                    MAX(LENGTH({escaped_column})) as max_length,
+                    MIN({escaped_column}) as min_alphabetical,
+                    MAX({escaped_column}) as max_alphabetical
+                FROM {table_name}
+                WHERE {escaped_column} IS NOT NULL AND {escaped_column} != ''
+                """
+                
+                text_stats, error = self.execute_query(text_stats_query)
+                if not error and text_stats:
+                    stats['min_length'] = text_stats[0].get('min_length')
+                    stats['max_length'] = text_stats[0].get('max_length')
+                    stats['min_value'] = text_stats[0].get('min_alphabetical')
+                    stats['max_value'] = text_stats[0].get('max_alphabetical')
+            
+            # Get sample values for better context
+            sample_query = f"""
+            SELECT DISTINCT {escaped_column}
+            FROM {table_name}
+            WHERE {escaped_column} IS NOT NULL
+            ORDER BY {escaped_column}
+            LIMIT 5
+            """
+            
+            sample_data, error = self.execute_query(sample_query)
+            if not error and sample_data:
+                stats['sample_values'] = [row[column_name] for row in sample_data]
+            
+            # For categorical data, get top values
+            if is_text and stats.get('distinct_count', 0) < 50:  # Only for columns with reasonable number of distinct values
+                top_values_query = f"""
+                SELECT {escaped_column}, COUNT(*) as frequency
+                FROM {table_name}
+                WHERE {escaped_column} IS NOT NULL
+                GROUP BY {escaped_column}
+                ORDER BY frequency DESC
+                LIMIT 10
+                """
+                
+                top_values, error = self.execute_query(top_values_query)
+                if not error and top_values:
+                    stats['top_values'] = [
+                        {'value': row[column_name], 'frequency': row['frequency']} 
+                        for row in top_values
+                    ]
+            
+            logger.debug(f"📊 Got statistics for {table_name}.{column_name}: {stats}")
+            
+        except Exception as e:
+            logger.warning(f"Failed to get statistics for {table_name}.{column_name}: {e}")
+        
+        return stats
     
     def close(self):
         """Close database connection"""
@@ -368,6 +500,23 @@ Error-specific columns (error_flights only):
 - "Affected_Columns" (String) - Columns affected by error
 - "Cell_Data" (String) - Original cell data that caused error
 
+CRITICAL QUERY REQUIREMENTS:
+1. **ALWAYS SELECT ALL COLUMNS**: Use SELECT * or explicitly list ALL columns for complete row data
+2. **PROVIDE COMPLETE ROW CONTEXT**: Include all available columns to give full context for each record
+3. **NEVER use SELECT column_name only**: Always include the complete row information
+4. **When aggregating**: Still include key identifying columns and use GROUP BY appropriately
+
+MANDATORY COLUMN SELECTION PATTERNS:
+✅ CORRECT: SELECT * FROM clean_flights WHERE...
+✅ CORRECT: SELECT "Date", "A/C Registration", "Flight", "A/C Type", "ATD (UTC) Block out", "ATA (UTC) Block in", "Origin ICAO", "Destination ICAO", "Uplift Volume", "Uplift Density", "Uplift weight", "Remaining Fuel From Prev. Flight", "Block off Fuel", "Block on Fuel", "Fuel Type" FROM clean_flights WHERE...
+❌ INCORRECT: SELECT "A/C Registration" FROM clean_flights
+❌ INCORRECT: SELECT "Flight", "Origin ICAO" FROM clean_flights
+
+FOR AGGREGATIONS WITH COMPLETE DATA:
+- When grouping, include representative complete rows using window functions
+- Use ROW_NUMBER() or FIRST() to get complete sample rows within groups
+- Always provide full context even in summary queries
+
 DuckDB-Specific Guidelines:
 1. Use double quotes for column names with spaces: "A/C Registration"
 2. Date functions: strptime() for parsing, date_trunc() for grouping
@@ -376,49 +525,118 @@ DuckDB-Specific Guidelines:
 5. Handle NULL values with COALESCE() or IS NOT NULL
 6. For time calculations, convert string times to timestamps first
 
-QUERY PATTERNS:
+QUERY PATTERNS WITH COMPLETE ROW DATA:
 Flight Operations:
-- Aircraft performance: GROUP BY "A/C Registration", "A/C Type"
-- Route analysis: GROUP BY "Origin ICAO", "Destination ICAO"
-- Fuel efficiency: Calculate consumption using "Block off Fuel" - "Block on Fuel"
-- Time analysis: Parse "ATD (UTC) Block out" and "ATA (UTC) Block in"
+- Aircraft performance: SELECT *, calculated_metrics FROM table GROUP BY aircraft_id
+- Route analysis: SELECT *, route_metrics FROM table GROUP BY route
+- Fuel efficiency: SELECT *, ("Block off Fuel" - "Block on Fuel") as fuel_consumed FROM table
 
 Data Quality:
-- Check error_flights for data issues by "Error_Category"
-- Join error_flights with clean_flights using "Row_Index" when available
-- Analyze error patterns by "Affected_Columns"
+- Check error_flights: SELECT * FROM error_flights WHERE "Error_Category" = '...'
+- Join with complete data: SELECT cf.*, ef.* FROM clean_flights cf JOIN error_flights ef ON ...
 
-FUEL CALCULATIONS:
+FUEL CALCULATIONS WITH COMPLETE DATA:
 - Fuel consumed = "Block off Fuel" - "Block on Fuel"
 - Total fuel on board = "Remaining Fuel From Prev. Flight" + "Uplift weight"
 - Fuel efficiency = Fuel consumed / Flight time
 
-COMMON JOINS:
-- Aircraft analysis: JOIN both tables on "A/C Registration"
-- Route analysis: JOIN both tables on "Origin ICAO" and "Destination ICAO"
-- Error investigation: JOIN error_flights with clean_flights on matching flight details
-
-EXAMPLE QUERIES:
-1. Top fuel consuming aircraft:
-   SELECT "A/C Registration", AVG("Block off Fuel" - "Block on Fuel") as avg_consumption
+EXAMPLE QUERIES WITH COMPLETE ROW DATA:
+1. Top fuel consuming aircraft with complete flight details:
+   ```sql
+   SELECT *, 
+          ("Block off Fuel" - "Block on Fuel") as fuel_consumed
    FROM clean_flights 
-   GROUP BY "A/C Registration" 
-   ORDER BY avg_consumption DESC
+   WHERE ("Block off Fuel" - "Block on Fuel") IS NOT NULL
+   ORDER BY fuel_consumed DESC
+   LIMIT 100
+   ```
 
-2. Route efficiency:
-   SELECT "Origin ICAO", "Destination ICAO", 
-          COUNT(*) as flight_count,
-          AVG("Uplift weight") as avg_uplift
+2. Route analysis with complete flight information:
+   ```sql
+   SELECT *,
+          ("Block off Fuel" - "Block on Fuel") as fuel_consumed,
+          "Uplift weight" as fuel_uplifted
    FROM clean_flights
-   GROUP BY "Origin ICAO", "Destination ICAO"
+   WHERE "Origin ICAO" IS NOT NULL AND "Destination ICAO" IS NOT NULL
+   ORDER BY "Date", "ATD (UTC) Block out"
+   LIMIT 500
+   ```
 
-3. Error analysis:
-   SELECT "Error_Category", COUNT(*) as error_count
-   FROM error_flights
-   GROUP BY "Error_Category"
-   ORDER BY error_count DESC
+3. Error investigation with complete context:
+   ```sql
+   SELECT ef.*,
+          cf.*
+   FROM error_flights ef
+   LEFT JOIN clean_flights cf ON (
+       ef."A/C Registration" = cf."A/C Registration" AND 
+       ef."Flight" = cf."Flight" AND 
+       ef."Date" = cf."Date"
+   )
+   ORDER BY ef."Error_Category", ef."Row_Index"
+   ```
 
-Generate efficient, accurate DuckDB SQL queries based on the user's question."""
+4. Aircraft performance with full operational context:
+   ```sql
+   WITH fuel_analysis AS (
+       SELECT *,
+              ("Block off Fuel" - "Block on Fuel") as fuel_consumed,
+              ("Remaining Fuel From Prev. Flight" + "Uplift weight") as total_fuel_available
+       FROM clean_flights
+       WHERE "Block off Fuel" IS NOT NULL AND "Block on Fuel" IS NOT NULL
+   )
+   SELECT *
+   FROM fuel_analysis
+   WHERE fuel_consumed > 0
+   ORDER BY fuel_consumed DESC
+   LIMIT 200
+   ```
+
+5. Time-based analysis with complete flight records:
+   ```sql
+   SELECT *,
+          strptime("ATD (UTC) Block out", '%H:%M') as departure_time,
+          strptime("ATA (UTC) Block in", '%H:%M') as arrival_time
+   FROM clean_flights
+   WHERE "ATD (UTC) Block out" IS NOT NULL 
+     AND "ATA (UTC) Block in" IS NOT NULL
+   ORDER BY "Date", departure_time
+   LIMIT 300
+   ```
+
+SUMMARY QUERIES WITH SAMPLE COMPLETE ROWS:
+When user asks for summaries, provide both aggregated data AND sample complete rows:
+
+```sql
+-- Example: Aircraft summary with sample complete rows
+WITH aircraft_summary AS (
+    SELECT "A/C Registration",
+           COUNT(*) as flight_count,
+           AVG("Block off Fuel" - "Block on Fuel") as avg_fuel_consumption,
+           MIN("Date") as first_flight_date,
+           MAX("Date") as last_flight_date
+    FROM clean_flights
+    GROUP BY "A/C Registration"
+),
+sample_flights AS (
+    SELECT *,
+           ROW_NUMBER() OVER (PARTITION BY "A/C Registration" ORDER BY "Date" DESC) as rn
+    FROM clean_flights
+)
+SELECT s.*, 
+       a.flight_count,
+       a.avg_fuel_consumption,
+       a.first_flight_date,
+       a.last_flight_date
+FROM sample_flights s
+JOIN aircraft_summary a ON s."A/C Registration" = a."A/C Registration"
+WHERE s.rn = 1  -- Most recent flight per aircraft
+ORDER BY a.avg_fuel_consumption DESC
+```
+
+REMEMBER: The goal is to always provide complete, comprehensive row data that gives full operational context for every query, enabling thorough analysis and understanding of the flight operations.
+
+Generate efficient, accurate DuckDB SQL queries that ALWAYS return complete row information."""
+
 
         try:
             response = self.llm_client.chat.completions.create(
@@ -694,17 +912,68 @@ Provide a comprehensive answer based on this flight data."""
         return "\n".join(summary)
     
     def _build_detailed_schema_context(self, schemas: Dict[str, Any]) -> str:
-        """Build detailed schema context for SQL generation"""
+        """Build detailed schema context with statistics for SQL generation"""
         context = []
+        
         for table_name, schema in schemas.items():
-            context.append(f"\nTable: {table_name}")
+            context.append(f"\n📊 Table: {table_name}")
+            
             if isinstance(schema, list):
-                for col in schema[:10]:  # Limit columns to prevent context overflow
-                    col_name = col.get('column_name', col.get('name', 'unknown'))
-                    col_type = col.get('column_type', col.get('type', 'unknown'))
-                    context.append(f"  - {col_name} ({col_type})")
-                if len(schema) > 10:
-                    context.append(f"  ... and {len(schema) - 10} more columns")
+                for col in schema[:15]:  # Limit columns to prevent context overflow
+                    col_name = col.get('column_name', 'unknown')
+                    col_type = col.get('data_type', 'unknown')
+                    
+                    # Build column description with statistics
+                    col_desc = f"  - {col_name} ({col_type})"
+                    
+                    # Add min/max if available
+                    if col.get('min_value') is not None and col.get('max_value') is not None:
+                        min_val = col['min_value']
+                        max_val = col['max_value']
+                        
+                        # Format values based on type
+                        if isinstance(min_val, (int, float)):
+                            col_desc += f" [Range: {min_val} to {max_val}]"
+                        else:
+                            # For strings, show length range if available
+                            if col.get('min_length') is not None:
+                                col_desc += f" [Length: {col['min_length']}-{col['max_length']} chars]"
+                            else:
+                                col_desc += f" [Range: '{min_val}' to '{max_val}']"
+                    
+                    # Add distinct count
+                    if col.get('distinct_count') is not None:
+                        total_count = col.get('total_count', 0)
+                        distinct_count = col['distinct_count']
+                        if total_count > 0:
+                            uniqueness_pct = round((distinct_count / total_count) * 100, 1)
+                            col_desc += f" [{distinct_count} distinct values, {uniqueness_pct}% unique]"
+                    
+                    # Add null count if significant
+                    if col.get('null_count', 0) > 0:
+                        null_count = col['null_count']
+                        total_count = col.get('total_count', 0)
+                        if total_count > 0:
+                            null_pct = round((null_count / total_count) * 100, 1)
+                            col_desc += f" [{null_pct}% nulls]"
+                    
+                    # Add sample values for categorical data
+                    if col.get('sample_values'):
+                        samples = col['sample_values'][:3]  # Show first 3 samples
+                        sample_str = "', '".join(str(v) for v in samples)
+                        col_desc += f" [Examples: '{sample_str}']"
+                    
+                    # Add top values for categorical data
+                    if col.get('top_values'):
+                        top_vals = col['top_values'][:3]  # Show top 3
+                        top_str = ", ".join(f"'{v['value']}' ({v['frequency']})" for v in top_vals)
+                        col_desc += f" [Top values: {top_str}]"
+                    
+                    context.append(col_desc)
+                
+                if len(schema) > 15:
+                    context.append(f"  ... and {len(schema) - 15} more columns")
+        
         return "\n".join(context)
     
     def _estimate_tokens(self, data: List[Dict]) -> int:
