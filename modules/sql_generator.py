@@ -1,11 +1,11 @@
 """
-SQL Agent for Flight Data Analysis - LangChain Implementation
+SQL Agent for Flight Data Analysis - Direct DuckDB Implementation
 
-A simplified SQL agent using LangChain's SQLDatabaseChain for natural language
-to SQL conversion and execution with DuckDB.
+A simplified SQL agent using direct DuckDB connection with OpenAI for
+natural language to SQL conversion, avoiding LangChain connection conflicts.
 
 Author: Flight Data Analysis System
-Dependencies: langchain, langchain-openai, duckdb, openai
+Dependencies: openai, duckdb
 """
 
 import os
@@ -16,15 +16,6 @@ from typing_extensions import TypedDict
 from datetime import datetime
 import duckdb
 import openai
-
-# LangChain imports
-from langchain_community.utilities import SQLDatabase
-from langchain_community.agent_toolkits import create_sql_agent
-from langchain_openai import OpenAI
-from langchain.prompts import PromptTemplate
-from langchain.schema import BaseOutputParser
-from langchain.agents import AgentType
-from langchain_community.agent_toolkits.sql.toolkit import SQLDatabaseToolkit
 
 from config import Config
 
@@ -97,14 +88,28 @@ class FlightDataSQLAgent:
     def _setup_langchain_components(self):
         """Setup LangChain SQL database and agent"""
         try:
-            # Create DuckDB connection first to ensure database exists
-            import duckdb
-            conn = duckdb.connect(self.db_path)
-            conn.close()
+            # First close any existing DuckDB connection to avoid conflicts
+            if hasattr(self, 'duckdb_conn') and self.duckdb_conn:
+                self.duckdb_conn.close()
+                self.duckdb_conn = None
             
             # Create SQLDatabase instance for DuckDB using duckdb-engine
+            # Use a unique connection string to avoid conflicts
             database_uri = f"duckdb:///{self.db_path}"
-            self.db = SQLDatabase.from_uri(database_uri, engine_args={"pool_pre_ping": True})
+            
+            # Configure engine with proper settings for DuckDB
+            engine_args = {
+                "pool_pre_ping": False,  # Disable ping to avoid connection conflicts
+                "poolclass": None,  # Disable connection pooling
+                "connect_args": {
+                    "read_only": False,
+                    "config": {
+                        "threads": 1  # Limit threads to avoid conflicts
+                    }
+                }
+            }
+            
+            self.db = SQLDatabase.from_uri(database_uri, engine_args=engine_args)
             logger.info(f"✅ Connected to DuckDB via LangChain: {self.db_path}")
             
             # Initialize OpenAI LLM
@@ -145,7 +150,82 @@ class FlightDataSQLAgent:
             except ImportError:
                 logger.error("❌ duckdb-engine is NOT installed - this is required for LangChain DuckDB integration")
             
-            raise Exception(f"Could not initialize LangChain SQL agent: {e}")
+            # Check if database file is locked or in use
+            try:
+                import psutil
+                import os
+                if os.path.exists(self.db_path):
+                    for proc in psutil.process_iter(['pid', 'name', 'open_files']):
+                        try:
+                            for file in proc.info['open_files'] or []:
+                                if file.path == self.db_path:
+                                    logger.warning(f"Database file {self.db_path} is open by process {proc.info['pid']} ({proc.info['name']})")
+                        except (psutil.NoSuchProcess, psutil.AccessDenied):
+                            pass
+            except ImportError:
+                pass
+            
+    def _process_with_direct_duckdb(self, question: str) -> Dict[str, Any]:
+        """Process query using direct DuckDB connection and OpenAI"""
+        try:
+            logger.info("🔄 Using direct DuckDB + OpenAI processing...")
+            
+            # Get table schemas for context
+            table_info = self._get_table_info_direct()
+            
+            # Generate SQL using OpenAI
+            sql_query = self._generate_sql_with_openai(question, table_info)
+            
+            if not sql_query:
+                raise Exception("Failed to generate SQL query")
+            
+            logger.info(f"📊 Generated SQL: {sql_query}")
+            
+            # Execute query
+            result = self.duckdb_conn.execute(sql_query).fetchall()
+            columns = [desc[0] for desc in self.duckdb_conn.description]
+            
+            # Convert to list of dicts
+            data = [dict(zip(columns, row)) for row in result]
+            
+            # Generate natural language answer
+            answer = self._generate_answer_with_openai(question, sql_query, data)
+            
+            logger.info(f"✅ Direct DuckDB processing successful")
+            
+            return {
+                "success": True,
+                "answer": answer,
+                "metadata": {
+                    "sql_query": sql_query,
+                    "row_count": len(data),
+                    "method": "direct_duckdb",
+                    "data_sample": data[:5] if data else []
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Direct DuckDB processing failed: {e}")
+            raise
+    
+    def _is_flight_data_relevant(self, question: str) -> bool:
+        """Simple relevance check for flight data questions"""
+        flight_keywords = [
+            'aircraft', 'flight', 'fuel', 'airport', 'icao', 'registration',
+            'departure', 'arrival', 'block', 'uplift', 'route', 'efficiency',
+            'consumption', 'aviation', 'airline', 'a/c', 'atd', 'ata', 'error'
+        ]
+        
+        question_lower = question.lower()
+        return any(keyword in question_lower for keyword in flight_keywords)
+    
+    def _generate_not_relevant_response(self) -> Dict[str, Any]:
+        """Generate response for non-flight-data questions"""
+        return {
+            "success": False,
+            "answer": "I can only help with questions about flight operations data, including aircraft performance, fuel consumption, routes, and operational metrics. Please ask a question related to the flight data in our system.",
+            "metadata": {"relevance": "not_relevant"}
+        }
     
     def _enhance_question_with_context(self, question: str) -> str:
         """Enhance the question with flight data context"""
@@ -293,7 +373,35 @@ Provide a clear, comprehensive answer to the question based on this flight opera
             
         except Exception as e:
             logger.error(f"Failed to generate answer with OpenAI: {e}")
-            return f"Found {len(data)} records. Please check the query results."
+    def get_table_schemas(self) -> Dict[str, Any]:
+        """Get table schema information using direct DuckDB"""
+        try:
+            schemas = {}
+            tables = self.duckdb_conn.execute("SHOW TABLES").fetchall()
+            
+            for table_row in tables:
+                table_name = table_row[0]
+                
+                # Get column info
+                columns = self.duckdb_conn.execute(f"DESCRIBE {table_name}").fetchall()
+                schemas[table_name] = {
+                    "columns": [{"name": col[0], "type": col[1]} for col in columns]
+                }
+                
+                # Get sample data
+                try:
+                    sample = self.duckdb_conn.execute(f"SELECT * FROM {table_name} LIMIT 5").fetchall()
+                    if sample:
+                        col_names = [desc[0] for desc in self.duckdb_conn.description]
+                        schemas[table_name]["sample"] = [dict(zip(col_names, row)) for row in sample]
+                except Exception as e:
+                    logger.warning(f"Could not get sample data for {table_name}: {e}")
+            
+            return schemas
+                
+        except Exception as e:
+            logger.error(f"Failed to get table schemas: {e}")
+            return {}
     
     def _test_connection(self):
         """Test the database connection"""
@@ -321,17 +429,14 @@ Provide a clear, comprehensive answer to the question based on this flight opera
         logger.info(f"🔍 Processing query for session: {session_id}")
         logger.info(f"📍 Using database: {self.db_path}")
         logger.info(f"❓ Question: {question}")
-        logger.info(f"🔧 Using LangChain: {self.use_langchain}")
         
         try:
             # Check if question is relevant to flight data
             if not self._is_flight_data_relevant(question):
                 return self._generate_not_relevant_response()
             
-            if self.use_langchain and self.sql_agent:
-                return self._process_with_langchain(question)
-            else:
-                return self._process_with_direct_duckdb(question)
+            # Process with direct DuckDB approach
+            return self._process_with_direct_duckdb(question)
                 
         except Exception as e:
             logger.error(f"❌ SQL processing failed: {e}")
@@ -342,10 +447,48 @@ Provide a clear, comprehensive answer to the question based on this flight opera
                 "metadata": {"error_details": str(e)}
             }
     
-    def _process_with_langchain(self, question: str) -> Dict[str, Any]:
-        """Process query using LangChain SQL agent"""
+    def _process_with_direct_duckdb(self, question: str) -> Dict[str, Any]:
+        """Process query using direct DuckDB connection and OpenAI"""
         try:
-            enhanced_question = self._enhance_question_with_context(question)
+            logger.info("🔄 Using direct DuckDB + OpenAI processing...")
+            
+            # Get table schemas for context
+            table_info = self._get_table_info_direct()
+            
+            # Generate SQL using OpenAI
+            sql_query = self._generate_sql_with_openai(question, table_info)
+            
+            if not sql_query:
+                raise Exception("Failed to generate SQL query")
+            
+            logger.info(f"📊 Generated SQL: {sql_query}")
+            
+            # Execute query
+            result = self.duckdb_conn.execute(sql_query).fetchall()
+            columns = [desc[0] for desc in self.duckdb_conn.description]
+            
+            # Convert to list of dicts
+            data = [dict(zip(columns, row)) for row in result]
+            
+            # Generate natural language answer
+            answer = self._generate_answer_with_openai(question, sql_query, data)
+            
+            logger.info(f"✅ Direct DuckDB processing successful")
+            
+            return {
+                "success": True,
+                "answer": answer,
+                "metadata": {
+                    "sql_query": sql_query,
+                    "row_count": len(data),
+                    "method": "direct_duckdb",
+                    "data_sample": data[:5] if data else []
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Direct DuckDB processing failed: {e}")
+            raise_question_with_context(question)
             logger.info("🔄 Running LangChain SQL agent...")
             
             result = self.sql_agent.invoke({"input": enhanced_question})
@@ -435,84 +578,41 @@ Provide a clear, comprehensive answer to the question based on this flight opera
             "metadata": {"relevance": "not_relevant"}
         }
     
-    def get_table_schemas(self) -> Dict[str, Any]:
-        """Get table schema information"""
-        try:
-            if self.use_langchain and self.db:
-                # Use LangChain method
-                schemas = {}
-                table_names = self.db.get_table_names()
-                
-                for table_name in table_names:
-                    table_info = self.db.get_table_info([table_name])
-                    schemas[table_name] = {"info": table_info}
-                    
-                    try:
-                        sample_data = self.db.run(f"SELECT * FROM {table_name} LIMIT 5")
-                        schemas[table_name]["sample"] = sample_data
-                    except Exception as e:
-                        logger.warning(f"Could not get sample data for {table_name}: {e}")
-                
-                return schemas
-            
-            elif self.duckdb_conn:
-                # Use direct DuckDB method
-                schemas = {}
-                tables = self.duckdb_conn.execute("SHOW TABLES").fetchall()
-                
-                for table_row in tables:
-                    table_name = table_row[0]
-                    
-                    # Get column info
-                    columns = self.duckdb_conn.execute(f"DESCRIBE {table_name}").fetchall()
-                    schemas[table_name] = {
-                        "columns": [{"name": col[0], "type": col[1]} for col in columns]
-                    }
-                    
-                    # Get sample data
-                    try:
-                        sample = self.duckdb_conn.execute(f"SELECT * FROM {table_name} LIMIT 5").fetchall()
-                        if sample:
-                            col_names = [desc[0] for desc in self.duckdb_conn.description]
-                            schemas[table_name]["sample"] = [dict(zip(col_names, row)) for row in sample]
-                    except Exception as e:
-                        logger.warning(f"Could not get sample data for {table_name}: {e}")
-                
-                return schemas
-            
-            else:
-                return {}
-                
-        except Exception as e:
-            logger.error(f"Failed to get table schemas: {e}")
-            return {}
-    
     def close(self):
         """Close database connections"""
         try:
-            if self.use_langchain and hasattr(self, 'db') and self.db:
-                if hasattr(self.db, '_engine') and self.db._engine:
-                    self.db._engine.dispose()
-                logger.info("✅ Closed LangChain database connection")
-            
-            if self.duckdb_conn:
+            if self.owns_connection and self.duckdb_conn:
                 self.duckdb_conn.close()
                 logger.info("✅ Closed direct DuckDB connection")
+            elif not self.owns_connection:
+                logger.info("✅ Left existing DuckDB connection open (not owned by agent)")
                 
         except Exception as e:
             logger.warning(f"Error closing database connections: {e}")
 
 
 # ============================================================================
+# FACTORY FUNCTIONS (Updated)
+# ============================================================================
+
+def create_sql_agent(db_path: str = None, session_id: str = None, enhanced: bool = False, existing_connection=None) -> FlightDataSQLAgent:
+    """Factory function to create SQL agent instance"""
+    return FlightDataSQLAgent(db_path, session_id, existing_connection)
+
+
+# ============================================================================
 # ENHANCED LANGCHAIN AGENT WITH CUSTOM TOOLS
 # ============================================================================
 
+# ============================================================================
+# ENHANCED AGENT (Simplified)
+# ============================================================================
+
 class EnhancedFlightDataSQLAgent(FlightDataSQLAgent):
-    """Enhanced version with additional customization - now same as base class"""
+    """Enhanced version - now same as base class due to simplified approach"""
     
-    def __init__(self, db_path: str = None, session_id: str = None):
-        # Enhanced agent is now the same as the base agent
-        super().__init__(db_path, session_id)
+    def __init__(self, db_path: str = None, session_id: str = None, existing_connection=None):
+        super().__init__(db_path, session_id, existing_connection)
     
     def process_query_enhanced(self, question: str, session_id: str) -> Dict[str, Any]:
         """Process query using enhanced agent - same as base implementation"""
