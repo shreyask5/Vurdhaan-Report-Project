@@ -118,6 +118,15 @@ class FlightDataSQLAgent:
     def _setup_langchain_components(self):
         """Setup LangChain SQL database and agent using direct DuckDB approach"""
         try:
+            # Debug: Check LangChain version and function signature
+            import inspect
+            try:
+                sig = inspect.signature(create_sql_agent)
+                logger.info(f"🔍 create_sql_agent signature: {sig}")
+                logger.info(f"🔍 create_sql_agent parameters: {list(sig.parameters.keys())}")
+            except Exception as debug_e:
+                logger.warning(f"Could not inspect create_sql_agent: {debug_e}")
+            
             # Create a custom SQLDatabase that works with DuckDB
             import duckdb
             
@@ -200,16 +209,44 @@ class FlightDataSQLAgent:
             # Create SQL toolkit
             toolkit = SQLDatabaseToolkit(db=self.db, llm=self.llm)
             
-            # Create SQL agent
-            self.sql_agent = create_sql_agent(
-                llm=self.llm,
-                toolkit=toolkit,
-                agent_type=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
-                verbose=True,
-                max_iterations=3,
-                early_stopping_method="generate",
-                handle_parsing_errors=True
-            )
+            # Create SQL agent with the correct signature
+            # Different LangChain versions have different signatures
+            try:
+                # Method 1: Try db parameter (newer versions)
+                self.sql_agent = create_sql_agent(
+                    db=self.db,
+                    llm=self.llm,
+                    agent_type=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
+                    verbose=True,
+                    handle_parsing_errors=True
+                )
+                logger.info("✅ Created SQL agent using db parameter")
+            except TypeError as e1:
+                try:
+                    # Method 2: Try positional arguments
+                    self.sql_agent = create_sql_agent(
+                        self.llm,
+                        toolkit,
+                        agent_type=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
+                        verbose=True,
+                        handle_parsing_errors=True
+                    )
+                    logger.info("✅ Created SQL agent using positional arguments")
+                except TypeError as e2:
+                    try:
+                        # Method 3: Minimal parameters
+                        self.sql_agent = create_sql_agent(
+                            llm=self.llm,
+                            db=self.db,
+                            verbose=True
+                        )
+                        logger.info("✅ Created SQL agent using minimal parameters")
+                    except TypeError as e3:
+                        logger.error(f"All create_sql_agent methods failed:")
+                        logger.error(f"Method 1: {e1}")
+                        logger.error(f"Method 2: {e2}")
+                        logger.error(f"Method 3: {e3}")
+                        raise Exception("Could not create SQL agent with any method")
             
             logger.info("✅ LangChain SQL agent with DuckDB adapter initialized successfully")
             
