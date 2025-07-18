@@ -16,6 +16,12 @@ duckdb
 # Data processing
 numpy==1.26.3
 
+# LangChain dependencies for SQL Agent
+langchain==0.1.0
+langchain-openai==0.0.5
+langchain-community==0.0.10
+sqlalchemy>=1.4.0,<3.0.0
+
 # Utilities
 werkzeug==3.0.1
 uuid==1.30
