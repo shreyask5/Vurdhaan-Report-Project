@@ -30,8 +30,8 @@ class PostgreSQLManager:
         self.pg_config = {
             'host': os.getenv('POSTGRES_HOST', 'localhost'),
             'port': os.getenv('POSTGRES_PORT', 5432),
-            'user': os.getenv('POSTGRES_USER', 'app_user'),
-            'password': os.getenv('POSTGRES_PASSWORD', '1234')
+            'user': os.getenv('POSTGRES_USER', 'postgres'),
+            'password': os.getenv('POSTGRES_PASSWORD', 'postgres')
         }
         
         # Create database name based on session_id (PostgreSQL database names must be lowercase)
@@ -445,6 +445,14 @@ class PostgreSQLManager:
         except Exception as e:
             logger.error(f"Failed to get table info: {e}")
             return {}
+    
+    def get_connection_string(self) -> str:
+        """Get SQLAlchemy connection string for PostgreSQL"""
+        return (
+            f"postgresql://{self.pg_config['user']}:{self.pg_config['password']}"
+            f"@{self.pg_config['host']}:{self.pg_config['port']}"
+            f"/{self.db_name}"
+        )
     
     def close(self):
         """Close database connection"""
