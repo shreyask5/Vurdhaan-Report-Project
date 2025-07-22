@@ -40,7 +40,7 @@ except ImportError as e:
     LANGCHAIN_AVAILABLE = False
 
 from config import Config
-from modules.database import PostgreSQLManager
+from database import PostgreSQLManager
 
 logger = logging.getLogger(__name__)
 
@@ -112,7 +112,7 @@ class FlightDataPostgreSQLAgent:
             api_key=Config.OPENAI_API_KEY,
             model=Config.OPENAI_MODEL,
             temperature=0.1,
-            max_tokens=Config.OPENAI_MAX_TOKENS
+            max_tokens=min(getattr(Config, 'OPENAI_MAX_TOKENS', 4096), 16384)  # Cap at o4-mini's limit
         )
         
         # Build the workflow
@@ -548,9 +548,9 @@ IMPORTANT NOTES:
         
         try:
             response = self.openai_client.chat.completions.create(
-                model=Config.OPENAI_MODEL,
+                model=getattr(Config, 'OPENAI_MODEL', 'o4-mini'),
                 messages=[{"role": "user", "content": prompt}],
-                max_tokens=500,
+                max_tokens=1000,  # Reasonable limit for SQL generation
                 temperature=0.1
             )
             
@@ -586,9 +586,9 @@ Include specific numbers and insights.
         
         try:
             response = self.openai_client.chat.completions.create(
-                model=Config.OPENAI_MODEL,
+                model=getattr(Config, 'OPENAI_MODEL', 'o4-mini'),
                 messages=[{"role": "user", "content": prompt}],
-                max_tokens=800,
+                max_tokens=2000,  # More tokens for comprehensive answers
                 temperature=0.3
             )
             
