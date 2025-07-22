@@ -305,22 +305,22 @@ class PostgreSQLManager:
     def _create_indexes(self):
         """Create indexes on frequently queried columns"""
         index_columns = {
-            'clean_flights': ['Date', '"A/C Registration"', 'Flight', '"Origin ICAO"', '"Destination ICAO"'],
+            'clean_flights': ['Date', 'A/C Registration', 'Flight', 'Origin ICAO', 'Destination ICAO'],
             'error_flights': ['Error_Category', 'Row_Index', 'Date']
         }
-        
         cursor = self.conn.cursor()
-        
         for table, columns in index_columns.items():
             for column in columns:
                 try:
+                    # Always quote column names for PostgreSQL (case-sensitive)
+                    quoted_column = f'"{column}"'
                     clean_column = column.replace(' ', '_').replace('/', '_').replace('"', '')
                     index_name = f"idx_{table}_{clean_column}"
-                    cursor.execute(f"CREATE INDEX IF NOT EXISTS {index_name} ON {table}({column})")
+                    cursor.execute(f"CREATE INDEX IF NOT EXISTS {index_name} ON {table}({quoted_column})")
                     logger.info(f"Created index {index_name}")
                 except Exception as e:
                     logger.warning(f"Could not create index on {table}.{column}: {e}")
-        
+                    self.conn.rollback()  # Rollback failed transaction and continue
         self.conn.commit()
         cursor.close()
     

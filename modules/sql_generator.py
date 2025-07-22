@@ -168,29 +168,22 @@ class FlightDataPostgreSQLAgent:
         """Get database schema information"""
         inspector = inspect(self.engine)
         schema = ""
-        
         for table_name in inspector.get_table_names():
             schema += f"\nTable: {table_name}\n"
             for column in inspector.get_columns(table_name):
                 col_name = column["name"]
                 col_type = str(column["type"])
                 nullable = "NULL" if column.get("nullable", True) else "NOT NULL"
-                
-                # Add primary key info
                 pk_constraint = inspector.get_pk_constraint(table_name)
                 is_pk = col_name in pk_constraint.get("constrained_columns", [])
                 pk_info = ", PRIMARY KEY" if is_pk else ""
-                
-                # Add foreign key info
                 fk_info = ""
                 for fk in inspector.get_foreign_keys(table_name):
                     if col_name in fk.get("constrained_columns", []):
                         ref_table = fk["referred_table"]
                         ref_cols = fk["referred_columns"]
                         fk_info = f", FOREIGN KEY -> {ref_table}({', '.join(ref_cols)})"
-                
                 schema += f"  - {col_name}: {col_type} {nullable}{pk_info}{fk_info}\n"
-            
             # Add sample data
             try:
                 with self.engine.connect() as conn:
@@ -199,10 +192,19 @@ class FlightDataPostgreSQLAgent:
                     if rows:
                         schema += "  Sample data:\n"
                         for row in rows:
-                            schema += f"    {dict(row)}\n"
+                            # Use row._mapping if available (SQLAlchemy 1.4+), else fallback
+                            try:
+                                if hasattr(row, '_mapping'):
+                                    row_dict = dict(row._mapping)
+                                elif hasattr(row, 'keys'):
+                                    row_dict = dict(zip(row.keys(), row))
+                                else:
+                                    row_dict = dict(row)
+                                schema += f"    {row_dict}\n"
+                            except Exception as e:
+                                schema += f"    [Could not convert row to dict: {e}]\n"
             except Exception as e:
                 logger.warning(f"Could not get sample data for {table_name}: {e}")
-        
         return schema
     
     def _convert_nl_to_sql(self, state: AgentState) -> AgentState:
@@ -240,7 +242,11 @@ Generate ONLY the SQL query without any explanation or markdown formatting.
                 structured_llm = self.llm.with_structured_output(ConvertToSQL)
                 sql_generator = convert_prompt | structured_llm
                 result = sql_generator.invoke({"question": question})
-                state["sql_query"] = result.sql_query
+                # Use dict access for result
+                if isinstance(result, dict):
+                    state["sql_query"] = result.get("sql_query", "")
+                else:
+                    state["sql_query"] = getattr(result, "sql_query", "")
             else:
                 # Fallback to direct OpenAI
                 chain = convert_prompt | self.llm | StrOutputParser()
@@ -372,7 +378,11 @@ Rewrite the question to avoid this error and be more specific:""")
                 structured_llm = self.llm.with_structured_output(RewrittenQuestion)
                 rewriter = rewrite_prompt | structured_llm
                 result = rewriter.invoke({})
-                state["question"] = result.question
+                # Use dict access for result
+                if isinstance(result, dict):
+                    state["question"] = result.get("question", "")
+                else:
+                    state["question"] = getattr(result, "question", "")
             else:
                 chain = rewrite_prompt | self.llm | StrOutputParser()
                 state["question"] = chain.invoke({})
@@ -420,7 +430,8 @@ Rewrite the question to avoid this error and be more specific:""")
         logger.info(f"🔍 Processing query for session: {session_id}")
         logger.info(f"❓ Question: {question}")
         
-        # Initialize state
+        # Ensure max_attempts is always an integer
+        max_attempts = self.max_attempts if isinstance(self.max_attempts, int) and self.max_attempts > 0 else 3
         initial_state = {
             "question": question,
             "session_id": session_id,
@@ -430,7 +441,7 @@ Rewrite the question to avoid this error and be more specific:""")
             "success": False,
             "error_message": "",
             "attempts": 0,
-            "max_attempts": self.max_attempts,
+            "max_attempts": max_attempts,
             "metadata": {},
             "final_answer": "",
             "sql_error": False
