@@ -556,17 +556,31 @@ Sample of results:
 {json.dumps(sample_data, indent=2, default=str)}
 """
         
+        # Escape curly braces in context for prompt template
+        safe_context = context.replace('{', '{{').replace('}', '}}')
         generate_prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
-            ("human", context + "\n\nProvide a clear, comprehensive answer to the question based on this data.")
+            ("human", safe_context + "\n\nProvide a clear, comprehensive answer to the question based on this data.")
         ])
         
         try:
             chain = generate_prompt | self.llm | StrOutputParser()
             answer = chain.invoke({})
-            state["final_answer"] = answer
-            state["query_result"] = answer
-            logger.info("✅ Generated human-readable answer")
+            # Append markdown table of rows if available
+            markdown_table = ""
+            if sample_data:
+                headers = list(sample_data[0].keys())
+                # Build markdown table header
+                markdown_table += "\n\n**Retrieved Rows:**\n\n"
+                markdown_table += "| " + " | ".join(headers) + " |\n"
+                markdown_table += "| " + " | ".join(["---"] * len(headers)) + " |\n"
+                # Add up to 50 rows
+                for row in sample_data:
+                    row_values = [str(row.get(h, "")) for h in headers]
+                    markdown_table += "| " + " | ".join(row_values) + " |\n"
+            state["final_answer"] = answer + markdown_table
+            state["query_result"] = answer + markdown_table
+            logger.info("✅ Generated human-readable answer with markdown table")
             
         except Exception as e:
             logger.error(f"Failed to generate answer: {e}")
