@@ -858,11 +858,7 @@ def process_chat_query(session_id):
         
         # Process query through SQL agent
         print("⚡ [CHAT] Processing query through SQL agent...")
-        agent_result = sql_agent.process_query(
-            question=query,
-            session_id=session_id,
-            table_schemas=table_schemas
-        )
+        agent_result = sql_agent.process_query(query)
         
         # Update session
         session_manager.update_session(session_id, {
