@@ -30,8 +30,8 @@ class PostgreSQLManager:
         self.pg_config = {
             'host': os.getenv('POSTGRES_HOST', 'localhost'),
             'port': os.getenv('POSTGRES_PORT', 5432),
-            'user': os.getenv('POSTGRES_USER', 'postgres'),
-            'password': os.getenv('POSTGRES_PASSWORD', 'postgres')
+            'user': os.getenv('POSTGRES_USER', 'app_user'),
+            'password': os.getenv('POSTGRES_PASSWORD', '1234')
         }
         
         # Create database name based on session_id (PostgreSQL database names must be lowercase)
