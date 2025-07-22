@@ -345,9 +345,21 @@ Sample of results:
         try:
             chain = generate_prompt | self.llm | StrOutputParser()
             answer = chain.invoke({})
-            state["final_answer"] = answer
-            state["query_result"] = answer
-            logger.info("✅ Generated human-readable answer")
+            # Append markdown table of rows if available
+            markdown_table = ""
+            if sample_data:
+                headers = list(sample_data[0].keys())
+                # Build markdown table header
+                markdown_table += "\n\n**Retrieved Rows:**\n\n"
+                markdown_table += "| " + " | ".join(headers) + " |\n"
+                markdown_table += "| " + " | ".join(["---"] * len(headers)) + " |\n"
+                # Add up to 50 rows
+                for row in sample_data:
+                    row_values = [str(row.get(h, "")) for h in headers]
+                    markdown_table += "| " + " | ".join(row_values) + " |\n"
+            state["final_answer"] = answer + markdown_table
+            state["query_result"] = answer + markdown_table
+            logger.info("✅ Generated human-readable answer with markdown table")
             
         except Exception as e:
             logger.error(f"Failed to generate answer: {e}")
@@ -583,7 +595,7 @@ IMPORTANT NOTES:
     def _generate_answer_with_openai(self, question: str, sql_query: str, data: List[Dict]) -> str:
         """Generate natural language answer using OpenAI"""
         # Limit data for context
-        sample_data = data[:50] if data else []
+        sample_data = data if data else []
         
         prompt = f"""Question: {question}
 
