@@ -19,6 +19,13 @@ class PostgreSQLManager:
     def __init__(self, session_id: str, db_path: str = None):
         self.session_id = session_id
         
+        # Keep the same directory structure for compatibility
+        self.db_dir = os.path.join('/var/lib/duckdb', 'sessions')
+        os.makedirs(self.db_dir, exist_ok=True)
+        
+        # Create a marker file to track session (for compatibility with existing code)
+        self.db_path = os.path.join(self.db_dir, f"{session_id}.db")
+        
         # PostgreSQL connection parameters for the main server
         self.pg_config = {
             'host': os.getenv('POSTGRES_HOST', 'localhost'),
@@ -34,6 +41,21 @@ class PostgreSQLManager:
         # Create the session database if it doesn't exist
         self._create_database_if_not_exists()
         self._connect()
+        
+        # Create marker file for session tracking
+        self._create_session_marker()
+    
+    def _create_session_marker(self):
+        """Create a marker file to track the session for compatibility"""
+        try:
+            # Create an empty marker file
+            with open(self.db_path, 'w') as f:
+                f.write(f"PostgreSQL Database: {self.db_name}\n")
+                f.write(f"Session ID: {self.session_id}\n")
+                f.write(f"Created: {datetime.now().isoformat()}\n")
+            print(f"📝 [DEBUG] PostgreSQL Manager → Created session marker: {self.db_path}", flush=True)
+        except Exception as e:
+            print(f"⚠️ [DEBUG] PostgreSQL Manager → Failed to create marker file: {str(e)}", flush=True)
     
     def _create_database_if_not_exists(self):
         """Create a PostgreSQL database for this session if it doesn't exist"""
@@ -446,7 +468,7 @@ class PostgreSQLManager:
             
             # Get all session databases
             cursor.execute("""
-                SELECT datname, (pg_stat_file('base/'||oid ||'/PG_VERSION')).modification as creation_time
+                SELECT datname
                 FROM pg_database
                 WHERE datname LIKE 'session_%'
             """)
@@ -454,17 +476,31 @@ class PostgreSQLManager:
             databases = cursor.fetchall()
             current_time = datetime.now()
             
-            for db_name, creation_time in databases:
-                if creation_time:
-                    age = current_time - creation_time
-                    if age.total_seconds() > max_age_hours * 3600:
-                        # Drop old database
-                        cursor.execute(
-                            sql.SQL("DROP DATABASE IF EXISTS {}").format(
-                                sql.Identifier(db_name)
+            # Also clean up marker files
+            for filename in os.listdir(self.db_dir):
+                if filename.endswith('.db'):
+                    file_path = os.path.join(self.db_dir, filename)
+                    file_age = current_time - datetime.fromtimestamp(os.path.getctime(file_path))
+                    
+                    if file_age.total_seconds() > max_age_hours * 3600:
+                        # Extract session_id from filename
+                        session_id = filename[:-3]  # Remove .db extension
+                        db_name = f"session_{session_id.lower().replace('-', '_')}"
+                        
+                        # Drop database if exists
+                        try:
+                            cursor.execute(
+                                sql.SQL("DROP DATABASE IF EXISTS {}").format(
+                                    sql.Identifier(db_name)
+                                )
                             )
-                        )
-                        logger.info(f"Removed old session database: {db_name}")
+                            logger.info(f"Dropped old session database: {db_name}")
+                        except Exception as e:
+                            logger.warning(f"Could not drop database {db_name}: {e}")
+                        
+                        # Remove marker file
+                        os.remove(file_path)
+                        logger.info(f"Removed old session marker: {filename}")
             
             cursor.close()
             conn.close()
