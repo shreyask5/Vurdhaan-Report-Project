@@ -826,46 +826,36 @@ def initialize_chat_session():
 def process_chat_query(session_id):
     """Process natural language query via SQL agent"""
     print(f"🤖 [CHAT] Processing query for session: {session_id}")
-    
     try:
         # Validate session
         session = session_manager.get_session(session_id)
         if not session:
             print(f"❌ [ERROR] Invalid or expired session: {session_id}")
             return jsonify({'error': 'Invalid or expired session'}), 404
-        
         # Get query from request
         data = request.get_json()
         query = data.get('query', '').strip()
-        
         if not query:
             print("❌ [ERROR] No query provided")
             return jsonify({'error': 'No query provided'}), 400
-        
         print(f"🔍 [CHAT] Processing query: '{query}'")
-        
         # Initialize database connection
         db_manager = DuckDBManager(session_id, session['db_path'])
-        
         # Get table schemas for SQL agent
         print("🗄️ [CHAT] Getting table schemas...")
         table_schemas = db_manager.get_table_info()
         print(f"📊 [CHAT] Available tables: {list(table_schemas.keys())}")
-        
         # Initialize SQL agent
         print("🤖 [CHAT] Initializing SQL agent...")
-        sql_agent = create_sql_agent(db_manager,3,None,session_id,True);
-        
+        sql_agent = create_sql_agent(db_manager, session_id, 3, None, True)
         # Process query through SQL agent
         print("⚡ [CHAT] Processing query through SQL agent...")
         agent_result = sql_agent.process_query(query)
-        
         # Update session
         session_manager.update_session(session_id, {
             'message_count': session.get('message_count', 0) + 1,
             'last_query': query
         })
-        
         # Format results for response
         if agent_result['success']:
             print("✅ [CHAT] Query processed successfully")
@@ -873,17 +863,13 @@ def process_chat_query(session_id):
                 'status': 'success',
                 'response': agent_result['answer'],
                 'sql_query': agent_result['metadata'].get('sql_query'),
-                'total_rows': agent_result['metadata'].get('total_rows'),
-                'data_sample': agent_result['metadata'].get('data_sample', [])
+                'total_rows': agent_result.get('metadata', {}).get('row_count', 0)
             }
-            
-            # Format results if available
-            if 'data_sample' in agent_result['metadata'] and agent_result['metadata']['data_sample']:
-                result['results'] = format_query_results(
-                    agent_result['metadata']['data_sample'], 
-                    max_rows=100
-                )
-                print(f"📊 [CHAT] Formatted {len(result['results'])} result rows")
+            # Handle table data separately
+            if 'table_rows' in agent_result and agent_result['table_rows']:
+                result['table_data'] = agent_result['table_rows']
+                result['total_rows'] = len(agent_result['table_rows'])
+                print(f"📊 [CHAT] Sending {len(agent_result['table_rows'])} data rows")
         else:
             print(f"❌ [CHAT] Query processing failed: {agent_result.get('error', 'Unknown error')}")
             result = {
@@ -891,12 +877,9 @@ def process_chat_query(session_id):
                 'response': agent_result['answer'],
                 'error': agent_result.get('error', 'Query processing failed')
             }
-        
         # Close database connection
         db_manager.close()
-        
         return jsonify(result), 200
-        
     except Exception as e:
         print(f"❌ [ERROR] Failed to process query: {e}")
         print(f"Traceback: {traceback.format_exc()}")

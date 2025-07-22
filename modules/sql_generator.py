@@ -40,7 +40,7 @@ except ImportError as e:
     LANGCHAIN_AVAILABLE = False
 
 from config import Config
-from modules.database import PostgreSQLManager
+from database import PostgreSQLManager
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +80,229 @@ if LANGCHAIN_AVAILABLE:
         question: str = Field(
             description="The rewritten question for better SQL generation."
         )
+
+
+# ============================================================================
+# SUMMARY DETECTION AND GENERATION
+# ============================================================================
+
+def is_summary_request(question: str) -> bool:
+    """Detect if the question is asking for a summary"""
+    summary_keywords = [
+        'summary', 'summarize', 'summarise', 'overview', 'describe',
+        'statistics', 'stats', 'breakdown', 'analysis', 'profile',
+        'what is in', 'tell me about', 'show me the data',
+        'table info', 'table information', 'data profile'
+    ]
+    
+    question_lower = question.lower()
+    return any(keyword in question_lower for keyword in summary_keywords)
+
+
+def generate_table_summary(conn, table_name: str, schema: str = 'public', max_top: int = 5) -> str:
+    """Generate a detailed summary of a PostgreSQL table with comprehensive statistics"""
+    import psycopg2
+    import psycopg2.extras
+    
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    
+    try:
+        # 1. Get column names and types
+        cursor.execute("""
+            SELECT 
+                column_name,
+                data_type,
+                is_nullable,
+                column_default
+            FROM information_schema.columns
+            WHERE table_schema = %s AND table_name = %s
+            ORDER BY ordinal_position
+        """, (schema, table_name))
+        columns = cursor.fetchall()
+        
+        # 2. Get total row count
+        cursor.execute(f'SELECT COUNT(*) as count FROM "{table_name}"')
+        total_rows = cursor.fetchone()['count']
+        
+        # 3. Get table size
+        cursor.execute("""
+            SELECT pg_size_pretty(pg_total_relation_size(%s)) as size
+        """, (table_name,))
+        table_size = cursor.fetchone()['size']
+        
+        # Start building summary
+        summary = [
+            f"# 📊 Table Summary: `{table_name}`",
+            f"\n## Overview",
+            f"- **Total Rows**: {total_rows:,}",
+            f"- **Total Columns**: {len(columns)}",
+            f"- **Table Size**: {table_size}",
+            f"\n## Column Details\n"
+        ]
+        
+        # 4. Analyze each column
+        for col_info in columns:
+            col = col_info['column_name']
+            dtype = col_info['data_type']
+            nullable = col_info['is_nullable']
+            
+            summary.append(f"### 📋 Column: `{col}`")
+            summary.append(f"- **Type**: {dtype}")
+            summary.append(f"- **Nullable**: {nullable}")
+            
+            # Get null count
+            cursor.execute(f'''
+                SELECT 
+                    COUNT(*) - COUNT("{col}") as null_count,
+                    ROUND(100.0 * (COUNT(*) - COUNT("{col}")) / COUNT(*), 2) as null_percentage
+                FROM "{table_name}"
+            ''')
+            null_info = cursor.fetchone()
+            summary.append(f"- **Null Values**: {null_info['null_count']:,} ({null_info['null_percentage']}%)")
+            
+            # Analyze based on data type
+            if dtype in ('integer', 'bigint', 'numeric', 'double precision', 'real', 'smallint', 'decimal'):
+                # Numeric analysis
+                cursor.execute(f'''
+                    SELECT 
+                        AVG("{col}")::numeric(10,2) AS avg_value,
+                        MIN("{col}") AS min_value,
+                        MAX("{col}") AS max_value,
+                        STDDEV("{col}")::numeric(10,2) AS std_dev,
+                        PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY "{col}") AS q1,
+                        PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY "{col}") AS median,
+                        PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY "{col}") AS q3
+                    FROM "{table_name}"
+                    WHERE "{col}" IS NOT NULL
+                ''')
+                stats = cursor.fetchone()
+                
+                if stats and stats['avg_value'] is not None:
+                    summary.append("\n**📈 Statistical Summary:**")
+                    summary.append(f"- Average: {stats['avg_value']:,.2f}")
+                    summary.append(f"- Min: {stats['min_value']:,}")
+                    summary.append(f"- Max: {stats['max_value']:,}")
+                    summary.append(f"- Std Dev: {stats['std_dev']:,.2f}" if stats['std_dev'] else "- Std Dev: N/A")
+                    summary.append(f"- Quartiles: Q1={stats['q1']:,}, Median={stats['median']:,}, Q3={stats['q3']:,}")
+                
+            elif dtype in ('date', 'timestamp', 'timestamp without time zone', 'timestamp with time zone'):
+                # Date/time analysis
+                cursor.execute(f'''
+                    SELECT 
+                        MIN("{col}") AS earliest,
+                        MAX("{col}") AS latest,
+                        MAX("{col}") - MIN("{col}") AS date_range
+                    FROM "{table_name}"
+                    WHERE "{col}" IS NOT NULL
+                ''')
+                date_stats = cursor.fetchone()
+                
+                if date_stats and date_stats['earliest']:
+                    summary.append("\n**📅 Date Range:**")
+                    summary.append(f"- Earliest: {date_stats['earliest']}")
+                    summary.append(f"- Latest: {date_stats['latest']}")
+                    summary.append(f"- Range: {date_stats['date_range']}")
+                
+            elif dtype in ('character varying', 'text', 'varchar', 'char'):
+                # Text analysis
+                cursor.execute(f'''
+                    SELECT 
+                        COUNT(DISTINCT "{col}") as distinct_count,
+                        AVG(LENGTH("{col}")) as avg_length,
+                        MIN(LENGTH("{col}")) as min_length,
+                        MAX(LENGTH("{col}")) as max_length
+                    FROM "{table_name}"
+                    WHERE "{col}" IS NOT NULL
+                ''')
+                text_stats = cursor.fetchone()
+                
+                if text_stats:
+                    summary.append("\n**📝 Text Statistics:**")
+                    summary.append(f"- Distinct Values: {text_stats['distinct_count']:,}")
+                    summary.append(f"- Avg Length: {text_stats['avg_length']:.1f}" if text_stats['avg_length'] else "- Avg Length: N/A")
+                    summary.append(f"- Length Range: {text_stats['min_length']} - {text_stats['max_length']}")
+                
+                # Top values
+                cursor.execute(f'''
+                    SELECT "{col}", COUNT(*) AS frequency
+                    FROM "{table_name}"
+                    WHERE "{col}" IS NOT NULL
+                    GROUP BY "{col}"
+                    ORDER BY frequency DESC
+                    LIMIT %s
+                ''', (max_top,))
+                top_values = cursor.fetchall()
+                
+                if top_values:
+                    summary.append(f"\n**🔝 Top {len(top_values)} Values:**")
+                    for row in top_values:
+                        summary.append(f"- `{row['frequency']:,}x` → {row[col]}")
+            
+            summary.append("")  # Add blank line between columns
+        
+        # 5. Add any special analysis for flight data tables
+        if table_name == 'clean_flights':
+            summary.append("\n## ✈️ Flight-Specific Analysis")
+            
+            # Most common routes
+            cursor.execute('''
+                SELECT 
+                    "Origin ICAO" || ' → ' || "Destination ICAO" as route,
+                    COUNT(*) as flight_count
+                FROM clean_flights
+                GROUP BY "Origin ICAO", "Destination ICAO"
+                ORDER BY flight_count DESC
+                LIMIT 5
+            ''')
+            routes = cursor.fetchall()
+            
+            if routes:
+                summary.append("\n**Most Common Routes:**")
+                for route in routes:
+                    summary.append(f"- {route['route']}: {route['flight_count']:,} flights")
+            
+            # Fuel efficiency stats
+            cursor.execute('''
+                SELECT 
+                    AVG("Block off Fuel" - "Block on Fuel") as avg_fuel_consumed,
+                    MAX("Block off Fuel" - "Block on Fuel") as max_fuel_consumed
+                FROM clean_flights
+                WHERE "Block off Fuel" IS NOT NULL AND "Block on Fuel" IS NOT NULL
+            ''')
+            fuel_stats = cursor.fetchone()
+            
+            if fuel_stats and fuel_stats['avg_fuel_consumed']:
+                summary.append("\n**⛽ Fuel Consumption:**")
+                summary.append(f"- Average Fuel Consumed: {fuel_stats['avg_fuel_consumed']:,.2f}")
+                summary.append(f"- Maximum Fuel Consumed: {fuel_stats['max_fuel_consumed']:,.2f}")
+        
+        elif table_name == 'error_flights':
+            summary.append("\n## ❌ Error Analysis")
+            
+            # Error distribution
+            cursor.execute('''
+                SELECT 
+                    "Error_Category",
+                    COUNT(*) as error_count,
+                    ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 2) as percentage
+                FROM error_flights
+                GROUP BY "Error_Category"
+                ORDER BY error_count DESC
+            ''')
+            errors = cursor.fetchall()
+            
+            if errors:
+                summary.append("\n**Error Distribution:**")
+                for error in errors:
+                    summary.append(f"- {error['Error_Category']}: {error['error_count']} ({error['percentage']}%)")
+        
+        cursor.close()
+        return "\n".join(summary)
+        
+    except Exception as e:
+        cursor.close()
+        logger.error(f"Failed to generate table summary: {e}")
+        raise
 
 
 # ============================================================================
@@ -168,22 +391,29 @@ class FlightDataPostgreSQLAgent:
         """Get database schema information"""
         inspector = inspect(self.engine)
         schema = ""
+        
         for table_name in inspector.get_table_names():
             schema += f"\nTable: {table_name}\n"
             for column in inspector.get_columns(table_name):
                 col_name = column["name"]
                 col_type = str(column["type"])
                 nullable = "NULL" if column.get("nullable", True) else "NOT NULL"
+                
+                # Add primary key info
                 pk_constraint = inspector.get_pk_constraint(table_name)
                 is_pk = col_name in pk_constraint.get("constrained_columns", [])
                 pk_info = ", PRIMARY KEY" if is_pk else ""
+                
+                # Add foreign key info
                 fk_info = ""
                 for fk in inspector.get_foreign_keys(table_name):
                     if col_name in fk.get("constrained_columns", []):
                         ref_table = fk["referred_table"]
                         ref_cols = fk["referred_columns"]
                         fk_info = f", FOREIGN KEY -> {ref_table}({', '.join(ref_cols)})"
+                
                 schema += f"  - {col_name}: {col_type} {nullable}{pk_info}{fk_info}\n"
+            
             # Add sample data
             try:
                 with self.engine.connect() as conn:
@@ -192,19 +422,10 @@ class FlightDataPostgreSQLAgent:
                     if rows:
                         schema += "  Sample data:\n"
                         for row in rows:
-                            # Use row._mapping if available (SQLAlchemy 1.4+), else fallback
-                            try:
-                                if hasattr(row, '_mapping'):
-                                    row_dict = dict(row._mapping)
-                                elif hasattr(row, 'keys'):
-                                    row_dict = dict(zip(row.keys(), row))
-                                else:
-                                    row_dict = dict(row)
-                                schema += f"    {row_dict}\n"
-                            except Exception as e:
-                                schema += f"    [Could not convert row to dict: {e}]\n"
+                            schema += f"    {dict(row)}\n"
             except Exception as e:
                 logger.warning(f"Could not get sample data for {table_name}: {e}")
+        
         return schema
     
     def _convert_nl_to_sql(self, state: AgentState) -> AgentState:
@@ -214,22 +435,23 @@ class FlightDataPostgreSQLAgent:
         
         logger.info(f"🔄 Converting question to SQL: {question}")
         
-        # Escape curly braces in schema for prompt template
-        safe_schema = schema.replace('{', '{{').replace('}', '}}')
-        system_prompt = (
-            "You are an expert SQL generator for flight operations data using PostgreSQL.\n\n"
-            "DATABASE SCHEMA:\n"
-            f"{safe_schema}\n\n"
-            "KEY POINTS:\n"
-            "1. Use double quotes for column names with spaces or special characters\n"
-            "2. PostgreSQL is case-sensitive for quoted identifiers\n"
-            "3. For date comparisons, use proper PostgreSQL date functions\n"
-            "4. Handle NULL values appropriately\n"
-            "5. Use LIMIT to prevent overwhelming results\n\n"
-            "FUEL CALCULATIONS:\n"
-            "- Fuel consumed = \"Block off Fuel\" - \"Block on Fuel\"\n\n"
-            "Generate ONLY the SQL query without any explanation or markdown formatting.\n"
-        )
+        system_prompt = f"""You are an expert SQL generator for flight operations data using PostgreSQL.
+
+DATABASE SCHEMA:
+{schema}
+
+KEY POINTS:
+1. Use double quotes for column names with spaces or special characters
+2. PostgreSQL is case-sensitive for quoted identifiers
+3. For date comparisons, use proper PostgreSQL date functions
+4. Handle NULL values appropriately
+5. Use LIMIT to prevent overwhelming results
+
+FUEL CALCULATIONS:
+- Fuel consumed = "Block off Fuel" - "Block on Fuel"
+
+Generate ONLY the SQL query without any explanation or markdown formatting.
+"""
         
         convert_prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
@@ -241,11 +463,7 @@ class FlightDataPostgreSQLAgent:
                 structured_llm = self.llm.with_structured_output(ConvertToSQL)
                 sql_generator = convert_prompt | structured_llm
                 result = sql_generator.invoke({"question": question})
-                # Use dict access for result
-                if isinstance(result, dict):
-                    state["sql_query"] = result.get("sql_query", "")
-                else:
-                    state["sql_query"] = getattr(result, "sql_query", "")
+                state["sql_query"] = result.sql_query
             else:
                 # Fallback to direct OpenAI
                 chain = convert_prompt | self.llm | StrOutputParser()
@@ -335,31 +553,17 @@ Sample of results:
 {json.dumps(sample_data, indent=2, default=str)}
 """
         
-        # Escape curly braces in context for prompt template
-        safe_context = context.replace('{', '{{').replace('}', '}}')
         generate_prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
-            ("human", safe_context + "\n\nProvide a clear, comprehensive answer to the question based on this data.")
+            ("human", context + "\n\nProvide a clear, comprehensive answer to the question based on this data.")
         ])
         
         try:
             chain = generate_prompt | self.llm | StrOutputParser()
             answer = chain.invoke({})
-            # Append markdown table of rows if available
-            markdown_table = ""
-            if sample_data:
-                headers = list(sample_data[0].keys())
-                # Build markdown table header
-                markdown_table += "\n\n**Retrieved Rows:**\n\n"
-                markdown_table += "| " + " | ".join(headers) + " |\n"
-                markdown_table += "| " + " | ".join(["---"] * len(headers)) + " |\n"
-                # Add up to 50 rows
-                for row in sample_data:
-                    row_values = [str(row.get(h, "")) for h in headers]
-                    markdown_table += "| " + " | ".join(row_values) + " |\n"
-            state["final_answer"] = answer + markdown_table
-            state["query_result"] = answer + markdown_table
-            logger.info("✅ Generated human-readable answer with markdown table")
+            state["final_answer"] = answer
+            state["query_result"] = answer
+            logger.info("✅ Generated human-readable answer")
             
         except Exception as e:
             logger.error(f"Failed to generate answer: {e}")
@@ -374,16 +578,16 @@ Sample of results:
         
         logger.info(f"🔄 Regenerating query (attempt {state['attempts'] + 1}/{state['max_attempts']})")
         
-        # Escape curly braces in error_message for prompt template
-        safe_error_message = error_message.replace('{', '{{').replace('}', '}}')
-        system_prompt = (
-            "You are an assistant that reformulates questions to enable better SQL query generation.\n"
-            "Given the original question and the error encountered, rewrite the question to be more specific \n"
-            "and avoid the error. Preserve all necessary details for accurate data retrieval."
-        )
+        system_prompt = """You are an assistant that reformulates questions to enable better SQL query generation.
+Given the original question and the error encountered, rewrite the question to be more specific 
+and avoid the error. Preserve all necessary details for accurate data retrieval."""
+        
         rewrite_prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
-            ("human", f"""Original Question: {{question}}\nError encountered: {safe_error_message}\n\nRewrite the question to avoid this error and be more specific:""")
+            ("human", f"""Original Question: {question}
+Error encountered: {error_message}
+
+Rewrite the question to avoid this error and be more specific:""")
         ])
         
         try:
@@ -391,11 +595,7 @@ Sample of results:
                 structured_llm = self.llm.with_structured_output(RewrittenQuestion)
                 rewriter = rewrite_prompt | structured_llm
                 result = rewriter.invoke({})
-                # Use dict access for result
-                if isinstance(result, dict):
-                    state["question"] = result.get("question", "")
-                else:
-                    state["question"] = getattr(result, "question", "")
+                state["question"] = result.question
             else:
                 chain = rewrite_prompt | self.llm | StrOutputParser()
                 state["question"] = chain.invoke({})
@@ -443,31 +643,7 @@ Sample of results:
         logger.info(f"🔍 Processing query for session: {session_id}")
         logger.info(f"❓ Question: {question}")
         
-        # --- SUMMARY DETECTION ---
-        if is_summary_request(question):
-            # Try to detect table name from question, fallback to clean_flights
-            table_name = 'clean_flights'
-            if 'error' in question.lower():
-                table_name = 'error_flights'
-            try:
-                from modules.database import summarize_table
-                summary_md = summarize_table(self.db_manager.conn, table_name)
-                return {
-                    "success": True,
-                    "answer": summary_md,
-                    "metadata": {"method": "summary", "table": table_name, "session_id": session_id}
-                }
-            except Exception as e:
-                logger.error(f"Failed to generate summary: {e}")
-                return {
-                    "success": False,
-                    "answer": f"Could not generate summary: {e}",
-                    "error": str(e),
-                    "metadata": {"method": "summary", "table": table_name, "session_id": session_id}
-                }
-        # --- NORMAL FLOW ---
-        # Ensure max_attempts is always an integer
-        max_attempts = self.max_attempts if isinstance(self.max_attempts, int) and self.max_attempts > 0 else 3
+        # Initialize state
         initial_state = {
             "question": question,
             "session_id": session_id,
@@ -477,7 +653,7 @@ Sample of results:
             "success": False,
             "error_message": "",
             "attempts": 0,
-            "max_attempts": max_attempts,
+            "max_attempts": self.max_attempts,
             "metadata": {},
             "final_answer": "",
             "sql_error": False
@@ -618,7 +794,7 @@ IMPORTANT NOTES:
     def _generate_answer_with_openai(self, question: str, sql_query: str, data: List[Dict]) -> str:
         """Generate natural language answer using OpenAI"""
         # Limit data for context
-        sample_data = data if data else []
+        sample_data = data[:50] if data else []
         
         prompt = f"""Question: {question}
 
@@ -782,9 +958,7 @@ if __name__ == "__main__":
         "Show me flights from KJFK to KLAX",
         "What's the average fuel efficiency by aircraft type?",
         "Show me any data quality errors in the system",
-        "What are the errors?",
-        "Summarize the clean_flights table",
-        "Summarize the error_flights table"
+        "What are the errors?"  # Your specific query
     ]
     
     for question in test_questions:

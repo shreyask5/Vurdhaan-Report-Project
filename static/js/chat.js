@@ -196,19 +196,14 @@ class FlightOpsChat {
     
     async sendMessage(event) {
         event.preventDefault();
-        
         const message = this.chatInput.value.trim();
         if (!message || !this.isInitialized) return;
-        
         // Clear input
         this.chatInput.value = '';
-        
         // Add user message
         this.addMessage('user', message);
-        
         // Show loading
         this.showLoading();
-        
         try {
             // Send query
             const response = await fetch(`/chat/${this.sessionId}/query`, {
@@ -218,16 +213,18 @@ class FlightOpsChat {
                 },
                 body: JSON.stringify({ query: message })
             });
-            
             if (!response.ok) {
                 throw new Error('Failed to process query');
             }
-            
             const data = await response.json();
-            
-            // Add assistant response
-            this.addAssistantResponse(data);
-            
+            // Check if it's a summary response (no table data)
+            if (data.metadata && data.metadata.method === 'summary') {
+                // For summaries, just add the formatted markdown response
+                this.addMessage('assistant', data.answer || data.response);
+            } else {
+                // For SQL queries, add response with table if available
+                this.addAssistantResponse(data);
+            }
         } catch (error) {
             this.showError('Failed to process your query. Please try again.');
         } finally {
@@ -261,88 +258,118 @@ class FlightOpsChat {
     addAssistantResponse(data) {
         const messageDiv = document.createElement('div');
         messageDiv.className = 'chat-message assistant';
-        
         const avatar = document.createElement('div');
         avatar.className = 'message-avatar';
         avatar.textContent = 'A';
-        
         const content = document.createElement('div');
         content.className = 'message-content';
-        
         // Add response text
         const textDiv = document.createElement('div');
         textDiv.className = 'message-text';
         textDiv.innerHTML = window.markdownit().render(data.response);
         content.appendChild(textDiv);
-        
         // Add SQL query if available
-        if (data.sql) {
+        if (data.sql_query) {
             const sqlDiv = document.createElement('div');
             sqlDiv.className = 'message-sql';
-            sqlDiv.innerHTML = `<strong>SQL Query:</strong><br><code>${this.escapeHtml(data.sql)}</code>`;
+            sqlDiv.innerHTML = `<strong>SQL Query:</strong><br><code>${this.escapeHtml(data.sql_query)}</code>`;
             content.appendChild(sqlDiv);
         }
-        
-        // Add results if available
-        if (data.results && data.results.data && data.results.data.length > 0) {
-            const resultsDiv = document.createElement('div');
-            resultsDiv.className = 'message-results';
-            
-            // Create table
-            const table = this.createResultsTable(data.results.data);
-            resultsDiv.appendChild(table);
-            
-            // Add summary
-            if (data.results.total_rows > data.results.displayed_rows) {
-                const summary = document.createElement('div');
-                summary.className = 'results-summary';
-                summary.textContent = `Showing ${data.results.displayed_rows} of ${data.results.total_rows} total results`;
-                resultsDiv.appendChild(summary);
-            }
-            
-            content.appendChild(resultsDiv);
+        // Add collapsible table if data is available
+        if (data.table_data && data.table_data.length > 0) {
+            const tableContainer = this.createCollapsibleTable(data.table_data);
+            content.appendChild(tableContainer);
         }
-        
         messageDiv.appendChild(avatar);
         messageDiv.appendChild(content);
-        
         this.chatMessages.appendChild(messageDiv);
         this.scrollToBottom();
     }
-    
-    createResultsTable(data) {
-        const table = document.createElement('table');
-        table.className = 'results-table';
-        
+
+    createCollapsibleTable(data) {
+        const container = document.createElement('div');
+        container.className = 'table-container';
         // Create header
+        const header = document.createElement('div');
+        header.className = 'table-header';
+        const headerTitle = document.createElement('div');
+        headerTitle.className = 'table-header-title';
+        headerTitle.textContent = 'Query Results';
+        const headerInfo = document.createElement('div');
+        headerInfo.className = 'table-header-info';
+        headerInfo.textContent = `${data.length} rows`;
+        const toggleIcon = document.createElement('svg');
+        toggleIcon.className = 'toggle-icon';
+        toggleIcon.innerHTML = `
+            <svg viewBox="0 0 20 20" fill="currentColor">
+                <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
+            </svg>
+        `;
+        header.appendChild(headerTitle);
+        header.appendChild(headerInfo);
+        header.appendChild(toggleIcon);
+        // Create content area
+        const contentArea = document.createElement('div');
+        contentArea.className = 'table-content';
+        // Create the actual table
+        const table = document.createElement('table');
+        table.className = 'data-table';
+        // Create table header
         const thead = document.createElement('thead');
         const headerRow = document.createElement('tr');
-        
         const columns = Object.keys(data[0]);
         columns.forEach(col => {
             const th = document.createElement('th');
             th.textContent = col;
+            th.title = col; // Tooltip for long column names
             headerRow.appendChild(th);
         });
-        
         thead.appendChild(headerRow);
         table.appendChild(thead);
-        
-        // Create body
+        // Create table body
         const tbody = document.createElement('tbody');
-        
-        data.slice(0, 10).forEach(row => {
+        data.forEach((row, index) => {
             const tr = document.createElement('tr');
             columns.forEach(col => {
                 const td = document.createElement('td');
-                td.textContent = row[col] !== null ? row[col] : '';
+                const value = row[col];
+                td.textContent = value !== null && value !== undefined ? value : '';
+                td.title = td.textContent; // Tooltip for long values
                 tr.appendChild(td);
             });
             tbody.appendChild(tr);
         });
-        
         table.appendChild(tbody);
-        return table;
+        contentArea.appendChild(table);
+        // Add click handler for expand/collapse
+        header.addEventListener('click', () => {
+            const isExpanded = contentArea.classList.contains('expanded');
+            if (isExpanded) {
+                contentArea.classList.remove('expanded');
+                toggleIcon.classList.remove('expanded');
+            } else {
+                contentArea.classList.add('expanded');
+                toggleIcon.classList.add('expanded');
+                // Scroll table into view if needed
+                setTimeout(() => {
+                    const rect = container.getBoundingClientRect();
+                    const windowHeight = window.innerHeight;
+                    if (rect.bottom > windowHeight) {
+                        container.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    }
+                }, 300);
+            }
+        });
+        container.appendChild(header);
+        container.appendChild(contentArea);
+        return container;
+    }
+
+    createEmptyTableMessage(message) {
+        const emptyDiv = document.createElement('div');
+        emptyDiv.className = 'empty-table';
+        emptyDiv.textContent = message || 'No data available';
+        return emptyDiv;
     }
     
     askQuestion(question) {

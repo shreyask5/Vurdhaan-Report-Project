@@ -304,24 +304,32 @@ class PostgreSQLManager:
     
     def _create_indexes(self):
         """Create indexes on frequently queried columns"""
-        index_columns = {
-            'clean_flights': ['Date', 'A/C Registration', 'Flight', 'Origin ICAO', 'Destination ICAO'],
-            'error_flights': ['Error_Category', 'Row_Index', 'Date']
-        }
+        index_definitions = [
+            # For clean_flights - note that column names are case-sensitive in PostgreSQL
+            ('idx_clean_flights_date', 'clean_flights', '"Date"'),
+            ('idx_clean_flights_registration', 'clean_flights', '"A/C Registration"'),
+            ('idx_clean_flights_flight', 'clean_flights', '"Flight"'),
+            ('idx_clean_flights_origin', 'clean_flights', '"Origin ICAO"'),
+            ('idx_clean_flights_destination', 'clean_flights', '"Destination ICAO"'),
+            # For error_flights
+            ('idx_error_flights_category', 'error_flights', '"Error_Category"'),
+            ('idx_error_flights_row_index', 'error_flights', '"Row_Index"'),
+            ('idx_error_flights_date', 'error_flights', '"Date"')
+        ]
+        
         cursor = self.conn.cursor()
-        for table, columns in index_columns.items():
-            for column in columns:
-                try:
-                    # Always quote column names for PostgreSQL (case-sensitive)
-                    quoted_column = f'"{column}"'
-                    clean_column = column.replace(' ', '_').replace('/', '_').replace('"', '')
-                    index_name = f"idx_{table}_{clean_column}"
-                    cursor.execute(f"CREATE INDEX IF NOT EXISTS {index_name} ON {table}({quoted_column})")
-                    logger.info(f"Created index {index_name}")
-                except Exception as e:
-                    logger.warning(f"Could not create index on {table}.{column}: {e}")
-                    self.conn.rollback()  # Rollback failed transaction and continue
-        self.conn.commit()
+        
+        for index_name, table_name, column_name in index_definitions:
+            try:
+                # Create index with proper quoting
+                create_index_sql = f"CREATE INDEX IF NOT EXISTS {index_name} ON {table_name}({column_name})"
+                cursor.execute(create_index_sql)
+                self.conn.commit()  # Commit after each successful index
+                logger.info(f"Created index {index_name}")
+            except Exception as e:
+                self.conn.rollback()  # Rollback on error
+                logger.warning(f"Could not create index on {table_name}.{column_name}: {e}")
+        
         cursor.close()
     
     def _get_table_schema(self, table_name: str) -> List[Dict[str, str]]:
@@ -519,66 +527,3 @@ class PostgreSQLManager:
 
 # For backward compatibility, alias the class name
 DuckDBManager = PostgreSQLManager
-
-def summarize_table(conn, table_name, schema='public', max_top=5):
-    """Generate a detailed markdown summary of a PostgreSQL table."""
-    import psycopg2
-    cursor = conn.cursor()
-    # 1. Get column names and types
-    cursor.execute("""
-        SELECT column_name, data_type
-        FROM information_schema.columns
-        WHERE table_schema = %s AND table_name = %s
-    """, (schema, table_name))
-    columns = cursor.fetchall()
-    # 2. Get total row count
-    cursor.execute(f'SELECT COUNT(*) FROM "{table_name}"')
-    total_rows = cursor.fetchone()[0]
-    summary = [f"### Table `{table_name}`", f"- **Total rows:** {total_rows}"]
-    for col, dtype in columns:
-        summary.append(f"\n#### Column `{col}` ({dtype})")
-        if dtype in ('integer', 'bigint', 'numeric', 'double precision', 'real', 'smallint', 'decimal'):
-            cursor.execute(f'''
-                SELECT COUNT("{col}") AS non_nulls,
-                       COUNT(*) - COUNT("{col}") AS nulls,
-                       AVG("{col}") AS avg_value,
-                       SUM("{col}") AS sum_value,
-                       MIN("{col}") AS min_value,
-                       MAX("{col}") AS max_value
-                FROM "{table_name}"
-            ''')
-            stats = cursor.fetchone()
-            summary.append(
-                f"- Non-nulls: {stats[0]}, Nulls: {stats[1]}, Avg: {stats[2]}, Sum: {stats[3]}, Min: {stats[4]}, Max: {stats[5]}"
-            )
-        elif dtype in ('date', 'timestamp', 'timestamp without time zone', 'timestamp with time zone'):
-            cursor.execute(f'''
-                SELECT COUNT("{col}") AS non_nulls,
-                       COUNT(*) - COUNT("{col}") AS nulls,
-                       MIN("{col}") AS earliest,
-                       MAX("{col}") AS latest
-                FROM "{table_name}"
-            ''')
-            stats = cursor.fetchone()
-            summary.append(
-                f"- Non-nulls: {stats[0]}, Nulls: {stats[1]}, Earliest: {stats[2]}, Latest: {stats[3]}"
-            )
-        elif dtype in ('character varying', 'text', 'varchar', 'char'):
-            cursor.execute(f'SELECT COUNT(DISTINCT "{col}") FROM "{table_name}"')
-            distinct = cursor.fetchone()[0]
-            summary.append(f"- Distinct values: {distinct}")
-            cursor.execute(f'''
-                SELECT "{col}", COUNT(*) AS freq
-                FROM "{table_name}"
-                GROUP BY "{col}"
-                ORDER BY freq DESC
-                LIMIT %s
-            ''', (max_top,))
-            top = cursor.fetchall()
-            if top:
-                summary.append("- Top values:")
-                for value, freq in top:
-                    summary.append(f"    - `{value}`: {freq}")
-        # Add more types as needed
-    cursor.close()
-    return "\n".join(summary)
