@@ -519,3 +519,66 @@ class PostgreSQLManager:
 
 # For backward compatibility, alias the class name
 DuckDBManager = PostgreSQLManager
+
+def summarize_table(conn, table_name, schema='public', max_top=5):
+    """Generate a detailed markdown summary of a PostgreSQL table."""
+    import psycopg2
+    cursor = conn.cursor()
+    # 1. Get column names and types
+    cursor.execute("""
+        SELECT column_name, data_type
+        FROM information_schema.columns
+        WHERE table_schema = %s AND table_name = %s
+    """, (schema, table_name))
+    columns = cursor.fetchall()
+    # 2. Get total row count
+    cursor.execute(f'SELECT COUNT(*) FROM "{table_name}"')
+    total_rows = cursor.fetchone()[0]
+    summary = [f"### Table `{table_name}`", f"- **Total rows:** {total_rows}"]
+    for col, dtype in columns:
+        summary.append(f"\n#### Column `{col}` ({dtype})")
+        if dtype in ('integer', 'bigint', 'numeric', 'double precision', 'real', 'smallint', 'decimal'):
+            cursor.execute(f'''
+                SELECT COUNT("{col}") AS non_nulls,
+                       COUNT(*) - COUNT("{col}") AS nulls,
+                       AVG("{col}") AS avg_value,
+                       SUM("{col}") AS sum_value,
+                       MIN("{col}") AS min_value,
+                       MAX("{col}") AS max_value
+                FROM "{table_name}"
+            ''')
+            stats = cursor.fetchone()
+            summary.append(
+                f"- Non-nulls: {stats[0]}, Nulls: {stats[1]}, Avg: {stats[2]}, Sum: {stats[3]}, Min: {stats[4]}, Max: {stats[5]}"
+            )
+        elif dtype in ('date', 'timestamp', 'timestamp without time zone', 'timestamp with time zone'):
+            cursor.execute(f'''
+                SELECT COUNT("{col}") AS non_nulls,
+                       COUNT(*) - COUNT("{col}") AS nulls,
+                       MIN("{col}") AS earliest,
+                       MAX("{col}") AS latest
+                FROM "{table_name}"
+            ''')
+            stats = cursor.fetchone()
+            summary.append(
+                f"- Non-nulls: {stats[0]}, Nulls: {stats[1]}, Earliest: {stats[2]}, Latest: {stats[3]}"
+            )
+        elif dtype in ('character varying', 'text', 'varchar', 'char'):
+            cursor.execute(f'SELECT COUNT(DISTINCT "{col}") FROM "{table_name}"')
+            distinct = cursor.fetchone()[0]
+            summary.append(f"- Distinct values: {distinct}")
+            cursor.execute(f'''
+                SELECT "{col}", COUNT(*) AS freq
+                FROM "{table_name}"
+                GROUP BY "{col}"
+                ORDER BY freq DESC
+                LIMIT %s
+            ''', (max_top,))
+            top = cursor.fetchall()
+            if top:
+                summary.append("- Top values:")
+                for value, freq in top:
+                    summary.append(f"    - `{value}`: {freq}")
+        # Add more types as needed
+    cursor.close()
+    return "\n".join(summary)

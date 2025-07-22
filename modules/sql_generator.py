@@ -443,6 +443,29 @@ Sample of results:
         logger.info(f"🔍 Processing query for session: {session_id}")
         logger.info(f"❓ Question: {question}")
         
+        # --- SUMMARY DETECTION ---
+        if is_summary_request(question):
+            # Try to detect table name from question, fallback to clean_flights
+            table_name = 'clean_flights'
+            if 'error' in question.lower():
+                table_name = 'error_flights'
+            try:
+                from modules.database import summarize_table
+                summary_md = summarize_table(self.db_manager.conn, table_name)
+                return {
+                    "success": True,
+                    "answer": summary_md,
+                    "metadata": {"method": "summary", "table": table_name, "session_id": session_id}
+                }
+            except Exception as e:
+                logger.error(f"Failed to generate summary: {e}")
+                return {
+                    "success": False,
+                    "answer": f"Could not generate summary: {e}",
+                    "error": str(e),
+                    "metadata": {"method": "summary", "table": table_name, "session_id": session_id}
+                }
+        # --- NORMAL FLOW ---
         # Ensure max_attempts is always an integer
         max_attempts = self.max_attempts if isinstance(self.max_attempts, int) and self.max_attempts > 0 else 3
         initial_state = {
@@ -759,7 +782,9 @@ if __name__ == "__main__":
         "Show me flights from KJFK to KLAX",
         "What's the average fuel efficiency by aircraft type?",
         "Show me any data quality errors in the system",
-        "What are the errors?"  # Your specific query
+        "What are the errors?",
+        "Summarize the clean_flights table",
+        "Summarize the error_flights table"
     ]
     
     for question in test_questions:
