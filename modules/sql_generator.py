@@ -636,14 +636,35 @@ Rewrite the question to avoid this error and be more specific:""")
             return "max_iterations"
     
     def process_query(self, question: str, session_id: str = None) -> Dict[str, Any]:
-        """Main entry point for processing natural language queries"""
-        
         session_id = session_id or self.session_id
-        
         logger.info(f"🔍 Processing query for session: {session_id}")
         logger.info(f"❓ Question: {question}")
-        
-        # Initialize state
+
+        # --- SUMMARY DETECTION ---
+        if is_summary_request(question):
+            # Try to detect table name from question, fallback to clean_flights
+            table_name = 'clean_flights'
+            if 'error' in question.lower():
+                table_name = 'error_flights'
+            try:
+                summary_md = generate_table_summary(self.db_manager.conn, table_name)
+                return {
+                    "success": True,
+                    "answer": summary_md,
+                    "metadata": {"method": "summary", "table": table_name, "session_id": session_id}
+                }
+            except Exception as e:
+                logger.error(f"Failed to generate summary: {e}")
+                return {
+                    "success": False,
+                    "answer": f"Could not generate summary: {e}",
+                    "error": str(e),
+                    "metadata": {"method": "summary", "table": table_name, "session_id": session_id}
+                }
+
+        # --- NORMAL FLOW ---
+        # Ensure max_attempts is always an integer
+        max_attempts = self.max_attempts if isinstance(self.max_attempts, int) and self.max_attempts > 0 else 3
         initial_state = {
             "question": question,
             "session_id": session_id,
@@ -653,17 +674,13 @@ Rewrite the question to avoid this error and be more specific:""")
             "success": False,
             "error_message": "",
             "attempts": 0,
-            "max_attempts": self.max_attempts,
+            "max_attempts": max_attempts,
             "metadata": {},
             "final_answer": "",
             "sql_error": False
         }
-        
         try:
-            # Run the workflow
             result = self.app.invoke(initial_state)
-            
-            # Prepare response
             response = {
                 "success": result.get("success", False),
                 "answer": result.get("final_answer") or result.get("query_result", "No answer generated"),
@@ -672,15 +689,13 @@ Rewrite the question to avoid this error and be more specific:""")
                     "row_count": len(result.get("query_rows", [])),
                     "attempts": result.get("attempts", 0),
                     "session_id": session_id
-                }
+                },
+                "table_rows": result.get("query_rows", [])
             }
-            
             if result.get("error_message"):
                 response["error"] = result["error_message"]
-            
             logger.info(f"✅ Query processing completed. Success: {response['success']}")
             return response
-            
         except Exception as e:
             logger.error(f"❌ Query processing failed: {e}")
             return {
