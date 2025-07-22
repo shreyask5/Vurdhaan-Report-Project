@@ -40,7 +40,7 @@ except ImportError as e:
     LANGCHAIN_AVAILABLE = False
 
 from config import Config
-from database import PostgreSQLManager
+from modules.database import PostgreSQLManager
 
 logger = logging.getLogger(__name__)
 
