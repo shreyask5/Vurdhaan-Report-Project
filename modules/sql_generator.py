@@ -435,23 +435,22 @@ class FlightDataPostgreSQLAgent:
         
         logger.info(f"🔄 Converting question to SQL: {question}")
         
-        system_prompt = f"""You are an expert SQL generator for flight operations data using PostgreSQL.
-
-DATABASE SCHEMA:
-{schema}
-
-KEY POINTS:
-1. Use double quotes for column names with spaces or special characters
-2. PostgreSQL is case-sensitive for quoted identifiers
-3. For date comparisons, use proper PostgreSQL date functions
-4. Handle NULL values appropriately
-5. Use LIMIT to prevent overwhelming results
-
-FUEL CALCULATIONS:
-- Fuel consumed = "Block off Fuel" - "Block on Fuel"
-
-Generate ONLY the SQL query without any explanation or markdown formatting.
-"""
+        # Escape curly braces in schema for prompt template
+        safe_schema = schema.replace('{', '{{').replace('}', '}}')
+        system_prompt = (
+            "You are an expert SQL generator for flight operations data using PostgreSQL.\n\n"
+            "DATABASE SCHEMA:\n"
+            f"{safe_schema}\n\n"
+            "KEY POINTS:\n"
+            "1. Use double quotes for column names with spaces or special characters\n"
+            "2. PostgreSQL is case-sensitive for quoted identifiers\n"
+            "3. For date comparisons, use proper PostgreSQL date functions\n"
+            "4. Handle NULL values appropriately\n"
+            "5. Use LIMIT to prevent overwhelming results\n\n"
+            "FUEL CALCULATIONS:\n"
+            "- Fuel consumed = \"Block off Fuel\" - \"Block on Fuel\"\n\n"
+            "Generate ONLY the SQL query without any explanation or markdown formatting.\n"
+        )
         
         convert_prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
@@ -463,7 +462,11 @@ Generate ONLY the SQL query without any explanation or markdown formatting.
                 structured_llm = self.llm.with_structured_output(ConvertToSQL)
                 sql_generator = convert_prompt | structured_llm
                 result = sql_generator.invoke({"question": question})
-                state["sql_query"] = result.sql_query
+                # Use dict access for result
+                if isinstance(result, dict):
+                    state["sql_query"] = result.get("sql_query", "")
+                else:
+                    state["sql_query"] = getattr(result, "sql_query", "")
             else:
                 # Fallback to direct OpenAI
                 chain = convert_prompt | self.llm | StrOutputParser()
@@ -578,16 +581,16 @@ Sample of results:
         
         logger.info(f"🔄 Regenerating query (attempt {state['attempts'] + 1}/{state['max_attempts']})")
         
-        system_prompt = """You are an assistant that reformulates questions to enable better SQL query generation.
-Given the original question and the error encountered, rewrite the question to be more specific 
-and avoid the error. Preserve all necessary details for accurate data retrieval."""
-        
+        # Escape curly braces in error_message for prompt template
+        safe_error_message = error_message.replace('{', '{{').replace('}', '}}')
+        system_prompt = (
+            "You are an assistant that reformulates questions to enable better SQL query generation.\n"
+            "Given the original question and the error encountered, rewrite the question to be more specific \n"
+            "and avoid the error. Preserve all necessary details for accurate data retrieval."
+        )
         rewrite_prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
-            ("human", f"""Original Question: {question}
-Error encountered: {error_message}
-
-Rewrite the question to avoid this error and be more specific:""")
+            ("human", f"""Original Question: {{question}}\nError encountered: {safe_error_message}\n\nRewrite the question to avoid this error and be more specific:""")
         ])
         
         try:
@@ -595,7 +598,11 @@ Rewrite the question to avoid this error and be more specific:""")
                 structured_llm = self.llm.with_structured_output(RewrittenQuestion)
                 rewriter = rewrite_prompt | structured_llm
                 result = rewriter.invoke({})
-                state["question"] = result.question
+                # Use dict access for result
+                if isinstance(result, dict):
+                    state["question"] = result.get("question", "")
+                else:
+                    state["question"] = getattr(result, "question", "")
             else:
                 chain = rewrite_prompt | self.llm | StrOutputParser()
                 state["question"] = chain.invoke({})
