@@ -37,7 +37,7 @@ from config import Config
 # Import modules for chat functionality
 from modules.session_manager import SessionManager
 from modules.database import DuckDBManager
-from modules.sql_generator import create_sql_agent, FlightDataSQLAgent
+from modules.sql_generator import create_sql_agent
 from modules.utils import setup_logging, validate_csv_file, format_query_results
 
 # Import existing helpers for validation and reporting
@@ -854,7 +854,7 @@ def process_chat_query(session_id):
         
         # Initialize SQL agent
         print("🤖 [CHAT] Initializing SQL agent...")
-        sql_agent = create_sql_agent(session['db_path'],session_id)
+        sql_agent = create_sql_agent(db_manager,3,None,session_id,True);
         
         # Process query through SQL agent
         print("⚡ [CHAT] Processing query through SQL agent...")
