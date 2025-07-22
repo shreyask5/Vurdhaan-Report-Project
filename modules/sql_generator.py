@@ -335,9 +335,11 @@ Sample of results:
 {json.dumps(sample_data, indent=2, default=str)}
 """
         
+        # Escape curly braces in context for prompt template
+        safe_context = context.replace('{', '{{').replace('}', '}}')
         generate_prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
-            ("human", context + "\n\nProvide a clear, comprehensive answer to the question based on this data.")
+            ("human", safe_context + "\n\nProvide a clear, comprehensive answer to the question based on this data.")
         ])
         
         try:
