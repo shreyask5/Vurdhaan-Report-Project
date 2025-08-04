@@ -8,6 +8,15 @@ Add these settings to your existing Config class.
 import os
 from typing import Optional
 
+# Load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+    print("✅ Environment variables loaded from .env file")
+except ImportError:
+    print("⚠️  python-dotenv not installed. Install with: pip install python-dotenv")
+    print("    Or set environment variables manually.")
+
 class Config:
     """Configuration class with dual LLM support"""
     
@@ -18,8 +27,9 @@ class Config:
     # Database Configuration
     DB_HOST = os.getenv('DB_HOST', 'localhost')
     DB_PORT = int(os.getenv('DB_PORT', 5432))
-    DB_USER = os.getenv('DB_USER', 'app_user')
-    DB_PASSWORD = os.getenv('DB_PASSWORD', '1234')
+    DB_NAME = os.getenv('DB_NAME', 'flight_data')
+    DB_USER = os.getenv('DB_USER', 'postgres')
+    DB_PASSWORD = os.getenv('DB_PASSWORD', 'postgres')
     
     # Basic OpenAI Configuration
     OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
@@ -108,11 +118,11 @@ class Config:
             errors.append("DB_PASSWORD is required")
         
         # Validate model names
-        valid_analysis_models = ['gpt-4.1', 'gpt-4', 'gpt-4-0613']
+        valid_analysis_models = ['gpt-4.1']
         if cls.OPENAI_ANALYSIS_MODEL not in valid_analysis_models:
             errors.append(f"OPENAI_ANALYSIS_MODEL must be one of: {valid_analysis_models}")
         
-        valid_execution_models = ['o4-mini', 'gpt-3.5-turbo', 'gpt-4o']
+        valid_execution_models = ['o4-mini']
         if cls.OPENAI_EXECUTION_MODEL not in valid_execution_models:
             errors.append(f"OPENAI_EXECUTION_MODEL must be one of: {valid_execution_models}")
         
