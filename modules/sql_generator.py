@@ -184,66 +184,6 @@ EXAMPLES:
         )
 
 
-def analyze_and_improve_query(question: str) -> QueryAnalysis:
-    """Use GPT-4.1 with function calling to analyze and improve the query"""
-    
-    # Initialize GPT-4.1 for query analysis
-    analysis_llm = ChatOpenAI(
-        api_key=Config.OPENAI_API_KEY,
-        model=getattr(Config, 'OPENAI_ANALYSIS_MODEL', 'gpt-4-turbo'),
-        temperature=getattr(Config, 'OPENAI_ANALYSIS_TEMPERATURE', 0.1),
-        max_tokens=getattr(Config, 'OPENAI_ANALYSIS_MAX_TOKENS', 1000)
-    )
-    
-    system_prompt = """You are an expert flight data analyst. Analyze user questions about flight operations data and improve them for better SQL query generation.
-
-AVAILABLE TABLES:
-- clean_flights: Main flight operations data with details like aircraft registration, routes, fuel consumption, timestamps
-- error_flights: Data quality errors and issues in flight operations
-
-ANALYSIS GUIDELINES:
-1. Determine if the user wants a table summary/overview vs specific data queries
-2. Improve the question to be more specific and SQL-friendly
-3. Identify the most appropriate target table
-4. Assess query complexity for proper processing
-
-EXAMPLES:
-- "What are the errors?" → Summary request for error_flights table
-- "Show me fuel consumption" → Specific data query for clean_flights table
-- "Tell me about the data" → Summary request for clean_flights table
-- "Which flights used the most fuel?" → Analytical query for clean_flights table
-"""
-    
-    analysis_prompt = ChatPromptTemplate.from_messages([
-        ("system", system_prompt),
-        ("human", "Analyze and improve this flight data question: {question}")
-    ])
-    
-    try:
-        structured_llm = analysis_llm.with_structured_output(QueryAnalysis)
-        analyzer = analysis_prompt | structured_llm
-        result = analyzer.invoke({"question": question})
-        
-        logger.info(f"🧠 GPT-4.1 Analysis - Summary: {result.is_summary_request}, "
-                   f"Table: {result.target_table}, Type: {result.query_type}")
-        logger.info(f"📝 Improved query: {result.improved_query}")
-        
-        return result
-        
-    except Exception as e:
-        logger.error(f"Failed to analyze query with GPT-4.1: {e}")
-        # Fallback to simple analysis
-        return QueryAnalysis(
-            is_summary_request=any(keyword in question.lower() for keyword in [
-                'summary', 'overview', 'describe', 'stats', 'what is in', 'tell me about'
-            ]),
-            improved_query=question,
-            target_table="error_flights" if "error" in question.lower() else "clean_flights",
-            query_type="exploratory",
-            complexity_level="medium"
-        )
-
-
 def generate_table_summary(db_manager, table_name: str, schema: str = 'public', max_top: int = 5) -> str:
     """Generate a detailed summary of a PostgreSQL table with comprehensive statistics"""
     
@@ -463,20 +403,17 @@ def generate_table_summary(db_manager, table_name: str, schema: str = 'public', 
 class FlightDataPostgreSQLAgent:
     """SQL Agent using LangGraph for PostgreSQL with GPT-4.1 analysis and GPT-4o-mini execution"""
     
-    def __init__(self, db_manager: PostgreSQLManager = None, 
-                 session_id: str = None, 
-                 max_attempts: int = 3,
-                 db_config: Dict[str, str] = None):
-        """Initialize SQL Agent with PostgreSQL support and dual LLM setup"""
+    def __init__(self, db_manager, session_id: str = None, max_attempts: int = 3):
+        """Initialize SQL Agent with existing database manager"""
         
         self.session_id = session_id or "default_session"
         self.max_attempts = max_attempts
         
-        # Initialize database manager
-        if db_manager:
-            self.db_manager = db_manager
-        else:
-            self.db_manager = PostgreSQLManager(self.session_id, db_config)
+        # Use the provided database manager (required)
+        if not db_manager:
+            raise ValueError("db_manager is required - cannot be None")
+        
+        self.db_manager = db_manager
         
         # Get SQLAlchemy engine for LangChain
         self.engine = create_engine(self.db_manager.get_connection_string())
@@ -1007,12 +944,12 @@ def create_sql_agent(db_manager, session_id: str = None, max_attempts: int = 3,
 class SQLGenerator:
     """Legacy interface wrapper for backward compatibility with session-based database"""
     
-    def __init__(self, db_manager=None, session_id: str = None):
+    def __init__(self, db_manager, session_id: str = None):
         """Initialize with existing database manager"""
         if not db_manager:
             raise ValueError("db_manager is required for session-based architecture")
         
-        self.agent = create_sql_agent(db_manager, session_id, 3, None, True)
+        self.agent = create_sql_agent(db_manager, session_id, 3)
     
     def generate_sql(self, natural_query: str, table_schemas: Dict[str, List[Dict]] = None, 
                     context: Optional[str] = None) -> Tuple[str, Dict]:
