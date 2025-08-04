@@ -47,7 +47,7 @@ Create a `.env` file in your project root:
 ```bash
 # OpenAI Configuration
 OPENAI_API_KEY=your_openai_api_key_here
-OPENAI_MODEL=gpt-4o-mini
+OPENAI_MODEL=o4-mini
 OPENAI_MAX_TOKENS=128000
 
 # DuckDB Configuration (optional, defaults shown)

@@ -1,13 +1,38 @@
 # sql_generator.py
 
 """
-SQL Agent for Flight Data Analysis - PostgreSQL Implementation
+SQL Agent for Flight Data Analysis - PostgreSQL Implementation with Dual LLM Architecture
 
 A sophisticated SQL agent using LangChain's SQL tools and LangGraph for natural language
-to SQL conversion and execution with PostgreSQL, with iterative refinement capabilities.
+to SQL conversion and execution with PostgreSQL, featuring:
+
+DUAL LLM ARCHITECTURE:
+- GPT-4.1 (gpt-4.1): Query analysis, improvement, and strategic decision-making
+- o4-mini: SQL generation, execution, and detailed response generation
+
+WORKFLOW:
+1. GPT-4.1 analyzes the user question and determines if it's a summary request
+2. GPT-4.1 improves the query for better SQL generation
+3. o4-mini generates optimized SQL queries
+4. o4-mini provides comprehensive analysis of results
 
 Author: Flight Data Analysis System
 Dependencies: langchain, langchain-openai, langchain-community, psycopg2, openai, langgraph
+
+REQUIRED CONFIG.PY ADDITIONS:
+```python
+class Config:
+    # Existing config...
+    
+    # Dual LLM Configuration
+    OPENAI_ANALYSIS_MODEL = os.getenv('OPENAI_ANALYSIS_MODEL', 'gpt-4.1')
+    OPENAI_ANALYSIS_TEMPERATURE = float(os.getenv('OPENAI_ANALYSIS_TEMPERATURE', 0.1))
+    OPENAI_ANALYSIS_MAX_TOKENS = int(os.getenv('OPENAI_ANALYSIS_MAX_TOKENS', 1000))
+    
+    OPENAI_EXECUTION_MODEL = os.getenv('OPENAI_EXECUTION_MODEL', 'o4-mini')
+    OPENAI_EXECUTION_TEMPERATURE = float(os.getenv('OPENAI_EXECUTION_TEMPERATURE', 0.1))
+    OPENAI_EXECUTION_MAX_TOKENS = int(os.getenv('OPENAI_EXECUTION_MAX_TOKENS', 4096))
+```
 """
 
 import os
@@ -21,23 +46,17 @@ import openai
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import Engine
 
-# LangChain imports
-try:
-    from langchain_community.utilities import SQLDatabase
-    from langchain_community.agent_toolkits import create_sql_agent
-    from langchain_openai import ChatOpenAI
-    from langchain.prompts import ChatPromptTemplate
-    from langchain.schema import BaseOutputParser
-    from langchain.agents import AgentType
-    from langchain_community.agent_toolkits.sql.toolkit import SQLDatabaseToolkit
-    from langchain_core.output_parsers import StrOutputParser
-    from langgraph.graph import StateGraph, END
-    from pydantic import BaseModel, Field
-    LANGCHAIN_AVAILABLE = True
-except ImportError as e:
-    logger = logging.getLogger(__name__)
-    logger.warning(f"LangChain not available: {e}. Will use direct PostgreSQL fallback.")
-    LANGCHAIN_AVAILABLE = False
+# LangChain imports - REQUIRED
+from langchain_community.utilities import SQLDatabase
+from langchain_community.agent_toolkits import create_sql_agent
+from langchain_openai import ChatOpenAI
+from langchain.prompts import ChatPromptTemplate
+from langchain.schema import BaseOutputParser
+from langchain.agents import AgentType
+from langchain_community.agent_toolkits.sql.toolkit import SQLDatabaseToolkit
+from langchain_core.output_parsers import StrOutputParser
+from langgraph.graph import StateGraph, END
+from pydantic import BaseModel, Field
 
 from config import Config
 from modules.database import PostgreSQLManager
@@ -68,35 +87,100 @@ class AgentState(TypedDict):
 # PYDANTIC MODELS FOR STRUCTURED OUTPUT
 # ============================================================================
 
-if LANGCHAIN_AVAILABLE:
-    class ConvertToSQL(BaseModel):
-        """Model for SQL query generation"""
-        sql_query: str = Field(
-            description="The SQL query corresponding to the user's natural language question."
-        )
-    
-    class RewrittenQuestion(BaseModel):
-        """Model for question rewriting"""
-        question: str = Field(
-            description="The rewritten question for better SQL generation."
-        )
+class ConvertToSQL(BaseModel):
+    """Model for SQL query generation"""
+    sql_query: str = Field(
+        description="The SQL query corresponding to the user's natural language question."
+    )
+
+class RewrittenQuestion(BaseModel):
+    """Model for question rewriting"""
+    question: str = Field(
+        description="The rewritten question for better SQL generation."
+    )
 
 
 # ============================================================================
-# SUMMARY DETECTION AND GENERATION
+# SUMMARY DETECTION AND QUERY IMPROVEMENT WITH GPT-4.1
 # ============================================================================
 
-def is_summary_request(question: str) -> bool:
-    """Detect if the question is asking for a summary"""
-    summary_keywords = [
-        'summary', 'summarize', 'summarise', 'overview', 'describe',
-        'statistics', 'stats', 'breakdown', 'analysis', 'profile',
-        'what is in', 'tell me about', 'show me the data',
-        'table info', 'table information', 'data profile'
-    ]
+class QueryAnalysis(BaseModel):
+    """Model for query analysis results"""
+    is_summary_request: bool = Field(
+        description="Whether the question is asking for a table summary or overview"
+    )
+    improved_query: str = Field(
+        description="An improved, more specific version of the original question"
+    )
+    target_table: str = Field(
+        description="The most appropriate table for this query (clean_flights or error_flights)",
+        default="clean_flights"
+    )
+    query_type: str = Field(
+        description="Type of query: summary, analytical, specific_data, or exploratory"
+    )
+    complexity_level: str = Field(
+        description="Complexity level: simple, medium, complex"
+    )
+
+def analyze_and_improve_query(question: str) -> QueryAnalysis:
+    """Use GPT-4.1 with function calling to analyze and improve the query"""
     
-    question_lower = question.lower()
-    return any(keyword in question_lower for keyword in summary_keywords)
+    # Initialize GPT-4.1 for query analysis
+    analysis_llm = ChatOpenAI(
+        api_key=Config.OPENAI_API_KEY,
+        model=getattr(Config, 'OPENAI_ANALYSIS_MODEL', 'gpt-4.1'),
+        temperature=getattr(Config, 'OPENAI_ANALYSIS_TEMPERATURE', 0.1),
+        max_tokens=getattr(Config, 'OPENAI_ANALYSIS_MAX_TOKENS', 1000)
+    )
+    
+    system_prompt = """You are an expert flight data analyst. Analyze user questions about flight operations data and improve them for better SQL query generation.
+
+AVAILABLE TABLES:
+- clean_flights: Main flight operations data with details like aircraft registration, routes, fuel consumption, timestamps
+- error_flights: Data quality errors and issues in flight operations
+
+ANALYSIS GUIDELINES:
+1. Determine if the user wants a table summary/overview vs specific data queries
+2. Improve the question to be more specific and SQL-friendly
+3. Identify the most appropriate target table
+4. Assess query complexity for proper processing
+
+EXAMPLES:
+- "What are the errors?" → Summary request for error_flights table
+- "Show me fuel consumption" → Specific data query for clean_flights table
+- "Tell me about the data" → Summary request for clean_flights table
+- "Which flights used the most fuel?" → Analytical query for clean_flights table
+"""
+    
+    analysis_prompt = ChatPromptTemplate.from_messages([
+        ("system", system_prompt),
+        ("human", "Analyze and improve this flight data question: {question}")
+    ])
+    
+    try:
+        structured_llm = analysis_llm.with_structured_output(QueryAnalysis)
+        analyzer = analysis_prompt | structured_llm
+        result = analyzer.invoke({"question": question})
+        
+        logger.info(f"🧠 GPT-4.1 Analysis - Summary: {result.is_summary_request}, "
+                   f"Table: {result.target_table}, Type: {result.query_type}")
+        logger.info(f"📝 Improved query: {result.improved_query}")
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Failed to analyze query with GPT-4.1: {e}")
+        # Fallback to simple analysis
+        return QueryAnalysis(
+            is_summary_request=any(keyword in question.lower() for keyword in [
+                'summary', 'overview', 'describe', 'stats', 'what is in', 'tell me about'
+            ]),
+            improved_query=question,
+            target_table="error_flights" if "error" in question.lower() else "clean_flights",
+            query_type="exploratory",
+            complexity_level="medium"
+        )
 
 
 def generate_table_summary(conn, table_name: str, schema: str = 'public', max_top: int = 5) -> str:
@@ -310,13 +394,13 @@ def generate_table_summary(conn, table_name: str, schema: str = 'public', max_to
 # ============================================================================
 
 class FlightDataPostgreSQLAgent:
-    """SQL Agent using LangGraph for PostgreSQL with iterative refinement"""
+    """SQL Agent using LangGraph for PostgreSQL with GPT-4.1 analysis and o4-mini execution"""
     
     def __init__(self, db_manager: PostgreSQLManager = None, 
                  session_id: str = None, 
                  max_attempts: int = 3,
                  db_config: Dict[str, str] = None):
-        """Initialize SQL Agent with PostgreSQL support"""
+        """Initialize SQL Agent with PostgreSQL support and dual LLM setup"""
         
         self.session_id = session_id or "default_session"
         self.max_attempts = max_attempts
@@ -330,18 +414,27 @@ class FlightDataPostgreSQLAgent:
         # Get SQLAlchemy engine for LangChain
         self.engine = create_engine(self.db_manager.get_connection_string())
         
-        # Initialize LLM
-        self.llm = ChatOpenAI(
+        # Initialize GPT-4.1 for query analysis and improvement
+        self.analysis_llm = ChatOpenAI(
             api_key=Config.OPENAI_API_KEY,
-            model=Config.OPENAI_MODEL,
-            temperature=0.1,
-            max_tokens=min(getattr(Config, 'OPENAI_MAX_TOKENS', 4096), 16384)  # Cap at o4-mini's limit
+            model=getattr(Config, 'OPENAI_ANALYSIS_MODEL', 'gpt-4.1'),
+            temperature=getattr(Config, 'OPENAI_ANALYSIS_TEMPERATURE', 0.1),
+            max_tokens=getattr(Config, 'OPENAI_ANALYSIS_MAX_TOKENS', 1000)
+        )
+        
+        # Initialize o4-mini for SQL generation and answer generation
+        self.execution_llm = ChatOpenAI(
+            api_key=Config.OPENAI_API_KEY,
+            model=getattr(Config, 'OPENAI_EXECUTION_MODEL', 'o4-mini'),
+            temperature=getattr(Config, 'OPENAI_EXECUTION_TEMPERATURE', 0.1),
+            max_tokens=getattr(Config, 'OPENAI_EXECUTION_MAX_TOKENS', 4096)
         )
         
         # Build the workflow
         self._build_workflow()
         
-        logger.info(f"🚀 Successfully initialized PostgreSQL SQL Agent for session: {self.session_id}")
+        logger.info(f"🚀 Successfully initialized PostgreSQL SQL Agent with dual LLM setup for session: {self.session_id}")
+        logger.info(f"🧠 Analysis LLM: gpt-4.1 | 🔧 Execution LLM: o4-mini")
     
     def _build_workflow(self):
         """Build the LangGraph workflow for SQL agent"""
@@ -429,11 +522,11 @@ class FlightDataPostgreSQLAgent:
         return schema
     
     def _convert_nl_to_sql(self, state: AgentState) -> AgentState:
-        """Convert natural language question to SQL query"""
+        """Convert natural language question to SQL query using o4-mini"""
         question = state["question"]
         schema = self._get_database_schema()
         
-        logger.info(f"🔄 Converting question to SQL: {question}")
+        logger.info(f"🔄 Converting question to SQL using o4-mini: {question}")
         
         # Escape curly braces in schema for prompt template
         safe_schema = schema.replace('{', '{{').replace('}', '}}')
@@ -458,21 +551,18 @@ class FlightDataPostgreSQLAgent:
         ])
         
         try:
-            if LANGCHAIN_AVAILABLE:
-                structured_llm = self.llm.with_structured_output(ConvertToSQL)
-                sql_generator = convert_prompt | structured_llm
-                result = sql_generator.invoke({"question": question})
-                # Use dict access for result
-                if isinstance(result, dict):
-                    state["sql_query"] = result.get("sql_query", "")
-                else:
-                    state["sql_query"] = getattr(result, "sql_query", "")
-            else:
-                # Fallback to direct OpenAI
-                chain = convert_prompt | self.llm | StrOutputParser()
-                state["sql_query"] = chain.invoke({"question": question})
+            # Use o4-mini for SQL generation
+            structured_llm = self.execution_llm.with_structured_output(ConvertToSQL)
+            sql_generator = convert_prompt | structured_llm
+            result = sql_generator.invoke({"question": question})
             
-            logger.info(f"📊 Generated SQL: {state['sql_query']}")
+            # Handle structured output
+            if isinstance(result, dict):
+                state["sql_query"] = result.get("sql_query", "")
+            else:
+                state["sql_query"] = getattr(result, "sql_query", "")
+            
+            logger.info(f"📊 Generated SQL with o4-mini: {state['sql_query']}")
             
         except Exception as e:
             logger.error(f"Failed to generate SQL: {e}")
@@ -527,32 +617,46 @@ class FlightDataPostgreSQLAgent:
         return state
     
     def _generate_human_readable_answer(self, state: AgentState) -> AgentState:
-        """Generate a human-readable answer from query results"""
+        """Generate a human-readable answer from query results using o4-mini for complex analysis"""
         sql_query = state.get("sql_query", "")
         query_rows = state.get("query_rows", [])
         question = state["question"]
         
-        logger.info("📝 Generating human-readable answer")
+        logger.info("📝 Generating human-readable answer with o4-mini")
         
         # Limit data for context window
         sample_data = query_rows[:50] if query_rows else []
         
-        system_prompt = """You are an assistant that converts SQL query results into clear, 
-comprehensive natural language responses for flight operations data. 
-Include specific numbers and insights from the data."""
+        system_prompt = """You are an expert flight operations data analyst using o4-mini for complex analysis. 
+Your task is to convert SQL query results into clear, comprehensive, and insightful natural language responses.
+
+ANALYSIS REQUIREMENTS:
+1. Provide specific numbers, statistics, and quantitative insights
+2. Identify patterns, trends, and anomalies in the data
+3. Offer operational insights relevant to flight operations
+4. Use professional aviation terminology where appropriate
+5. Structure the response with clear sections and key findings
+6. Highlight any data quality issues or limitations
+
+RESPONSE FORMAT:
+- Start with a concise summary of key findings
+- Provide detailed analysis with specific metrics
+- Include operational recommendations if relevant
+- End with any caveats or additional insights"""
         
         # Build context based on results
         if not query_rows:
             context = "The query returned no results."
         else:
             context = f"""
-Question: {question}
+Original Question: {question}
 
-SQL Query: {sql_query}
+SQL Query Executed: {sql_query}
 
-Query returned {len(query_rows)} total rows.
+Query Results Summary:
+- Total rows returned: {len(query_rows)}
+- Data sample (first {len(sample_data)} rows):
 
-Sample of results:
 {json.dumps(sample_data, indent=2, default=str)}
 """
         
@@ -560,62 +664,65 @@ Sample of results:
         safe_context = context.replace('{', '{{').replace('}', '}}')
         generate_prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
-            ("human", safe_context + "\n\nProvide a clear, comprehensive answer to the question based on this data.")
+            ("human", safe_context + "\n\nProvide a comprehensive analysis and answer to the original question based on this flight operations data.")
         ])
         
         try:
-            chain = generate_prompt | self.llm | StrOutputParser()
+            # Use o4-mini for complex analysis and answer generation
+            chain = generate_prompt | self.execution_llm | StrOutputParser()
             answer = chain.invoke({})
-            # Append markdown table of rows if available
-            if sample_data:
-                headers = list(sample_data[0].keys())
             state["final_answer"] = answer
-            logger.info("✅ Generated human-readable answer")
+            logger.info("✅ Generated comprehensive analysis with o4-mini")
             
         except Exception as e:
             logger.error(f"Failed to generate answer: {e}")
-            state["final_answer"] = f"Found {len(query_rows)} results but could not generate summary."
+            state["final_answer"] = f"Found {len(query_rows)} results but could not generate comprehensive analysis."
         
         return state
     
     def _regenerate_query(self, state: AgentState) -> AgentState:
-        """Regenerate the SQL query by rewriting the question"""
+        """Regenerate the SQL query by rewriting the question using GPT-4.1"""
         question = state["question"]
         error_message = state.get("error_message", "")
         
-        logger.info(f"🔄 Regenerating query (attempt {state['attempts'] + 1}/{state['max_attempts']})")
+        logger.info(f"🔄 Regenerating query with GPT-4.1 (attempt {state['attempts'] + 1}/{state['max_attempts']})")
         
         # Escape curly braces in error_message for prompt template
         safe_error_message = error_message.replace('{', '{{').replace('}', '}}')
         system_prompt = (
-            "You are an assistant that reformulates questions to enable better SQL query generation.\n"
-            "Given the original question and the error encountered, rewrite the question to be more specific \n"
-            "and avoid the error. Preserve all necessary details for accurate data retrieval."
+            "You are an expert flight data analyst using GPT-4.1 for query improvement.\n"
+            "Given the original question and the SQL execution error, rewrite the question to be more specific, "
+            "clearer, and likely to generate working SQL. Consider the database schema and common SQL pitfalls.\n\n"
+            "COMMON ISSUES TO AVOID:\n"
+            "- Column name case sensitivity and special characters\n"
+            "- Missing table qualifiers\n"
+            "- Incorrect date/time formats\n"
+            "- Ambiguous joins or relationships\n"
+            "- NULL value handling\n\n"
+            "Preserve all necessary details for accurate data retrieval while making the question more SQL-friendly."
         )
         rewrite_prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
-            ("human", f"""Original Question: {{question}}\nError encountered: {safe_error_message}\n\nRewrite the question to avoid this error and be more specific:""")
+            ("human", f"""Original Question: {{question}}\nSQL Error encountered: {safe_error_message}\n\nRewrite the question to avoid this error and be more specific for SQL generation:""")
         ])
         
         try:
-            if LANGCHAIN_AVAILABLE:
-                structured_llm = self.llm.with_structured_output(RewrittenQuestion)
-                rewriter = rewrite_prompt | structured_llm
-                result = rewriter.invoke({})
-                # Use dict access for result
-                if isinstance(result, dict):
-                    state["question"] = result.get("question", "")
-                else:
-                    state["question"] = getattr(result, "question", "")
+            # Use GPT-4.1 for intelligent query rewriting
+            structured_llm = self.analysis_llm.with_structured_output(RewrittenQuestion)
+            rewriter = rewrite_prompt | structured_llm
+            result = rewriter.invoke({})
+            
+            # Handle structured output
+            if isinstance(result, dict):
+                state["question"] = result.get("question", "")
             else:
-                chain = rewrite_prompt | self.llm | StrOutputParser()
-                state["question"] = chain.invoke({})
+                state["question"] = getattr(result, "question", "")
             
             state["attempts"] += 1
-            logger.info(f"📝 Rewritten question: {state['question']}")
+            logger.info(f"📝 GPT-4.1 rewritten question: {state['question']}")
             
         except Exception as e:
-            logger.error(f"Failed to rewrite question: {e}")
+            logger.error(f"Failed to rewrite question with GPT-4.1: {e}")
             state["attempts"] += 1
         
         return state
@@ -649,35 +756,76 @@ Sample of results:
     def process_query(self, question: str, session_id: str = None) -> Dict[str, Any]:
         session_id = session_id or self.session_id
         logger.info(f"🔍 Processing query for session: {session_id}")
-        logger.info(f"❓ Question: {question}")
+        logger.info(f"❓ Original question: {question}")
 
-        # --- SUMMARY DETECTION ---
-        if is_summary_request(question):
-            # Try to detect table name from question, fallback to clean_flights
-            table_name = 'clean_flights'
-            if 'error' in question.lower():
-                table_name = 'error_flights'
+        # --- STEP 1: ANALYZE AND IMPROVE QUERY WITH GPT-4.1 ---
+        try:
+            query_analysis = analyze_and_improve_query(question)
+            improved_question = query_analysis.improved_query
+            target_table = query_analysis.target_table
+            is_summary = query_analysis.is_summary_request
+            query_type = query_analysis.query_type
+            complexity = query_analysis.complexity_level
+            
+            logger.info(f"🧠 GPT-4.1 Analysis Complete:")
+            logger.info(f"   - Summary Request: {is_summary}")
+            logger.info(f"   - Target Table: {target_table}")
+            logger.info(f"   - Query Type: {query_type}")
+            logger.info(f"   - Complexity: {complexity}")
+            logger.info(f"   - Improved Question: {improved_question}")
+            
+        except Exception as e:
+            logger.error(f"Failed to analyze query with GPT-4.1: {e}")
+            # Fallback to original question
+            improved_question = question
+            target_table = 'error_flights' if 'error' in question.lower() else 'clean_flights'
+            is_summary = any(keyword in question.lower() for keyword in [
+                'summary', 'overview', 'describe', 'stats', 'what is in', 'tell me about'
+            ])
+            query_type = "exploratory"
+            complexity = "medium"
+
+        # --- STEP 2: HANDLE SUMMARY REQUESTS ---
+        if is_summary:
+            logger.info(f"📊 Processing summary request for table: {target_table}")
             try:
-                summary_md = generate_table_summary(self.db_manager.conn, table_name)
+                summary_md = generate_table_summary(self.db_manager.conn, target_table)
                 return {
                     "success": True,
                     "answer": summary_md,
-                    "metadata": {"method": "summary", "table": table_name, "session_id": session_id}
+                    "metadata": {
+                        "method": "summary", 
+                        "table": target_table, 
+                        "session_id": session_id,
+                        "original_question": question,
+                        "improved_question": improved_question,
+                        "query_type": query_type,
+                        "complexity": complexity,
+                        "analysis_model": "gpt-4.1"
+                    }
                 }
             except Exception as e:
                 logger.error(f"Failed to generate summary: {e}")
                 return {
                     "success": False,
-                    "answer": f"Could not generate summary: {e}",
+                    "answer": f"Could not generate summary for {target_table}: {e}",
                     "error": str(e),
-                    "metadata": {"method": "summary", "table": table_name, "session_id": session_id}
+                    "metadata": {
+                        "method": "summary", 
+                        "table": target_table, 
+                        "session_id": session_id,
+                        "original_question": question,
+                        "analysis_model": "gpt-4.1"
+                    }
                 }
 
-        # --- NORMAL FLOW ---
+        # --- STEP 3: NORMAL FLOW WITH IMPROVED QUESTION ---
+        logger.info(f"🔄 Processing analytical query with improved question")
+        
         # Ensure max_attempts is always an integer
         max_attempts = self.max_attempts if isinstance(self.max_attempts, int) and self.max_attempts > 0 else 3
         initial_state = {
-            "question": question,
+            "question": improved_question,  # Use improved question from GPT-4.1
             "session_id": session_id,
             "sql_query": "",
             "query_result": None,
@@ -686,10 +834,19 @@ Sample of results:
             "error_message": "",
             "attempts": 0,
             "max_attempts": max_attempts,
-            "metadata": {},
+            "metadata": {
+                "original_question": question,
+                "improved_question": improved_question,
+                "target_table": target_table,
+                "query_type": query_type,
+                "complexity": complexity,
+                "analysis_model": "gpt-4.1",
+                "execution_model": "o4-mini"
+            },
             "final_answer": "",
             "sql_error": False
         }
+        
         try:
             result = self.app.invoke(initial_state)
             response = {
@@ -699,7 +856,15 @@ Sample of results:
                     "sql_query": result.get("sql_query", ""),
                     "row_count": len(result.get("query_rows", [])),
                     "attempts": result.get("attempts", 0),
-                    "session_id": session_id
+                    "session_id": session_id,
+                    "method": "langgraph",
+                    "original_question": question,
+                    "improved_question": improved_question,
+                    "target_table": target_table,
+                    "query_type": query_type,
+                    "complexity": complexity,
+                    "analysis_model": "gpt-4.1",
+                    "execution_model": "o4-mini"
                 },
                 "table_rows": result.get("query_rows", [])
             }
@@ -713,7 +878,14 @@ Sample of results:
                 "success": False,
                 "answer": f"I encountered an error while processing your query: {str(e)}",
                 "error": str(e),
-                "metadata": {"session_id": session_id}
+                "metadata": {
+                    "session_id": session_id, 
+                    "method": "langgraph",
+                    "original_question": question,
+                    "improved_question": improved_question,
+                    "analysis_model": "gpt-4.1",
+                    "execution_model": "o4-mini"
+                }
             }
     
     def get_table_schemas(self) -> Dict[str, Any]:
@@ -730,207 +902,17 @@ Sample of results:
 
 
 # ============================================================================
-# DIRECT POSTGRESQL IMPLEMENTATION (FALLBACK)
-# ============================================================================
-
-class DirectPostgreSQLAgent:
-    """Direct PostgreSQL implementation without LangChain"""
-    
-    def __init__(self, db_manager: PostgreSQLManager = None,
-                 session_id: str = None,
-                 max_attempts: int = 3,
-                 db_config: Dict[str, str] = None):
-        """Initialize direct PostgreSQL agent"""
-        
-        self.session_id = session_id or "default_session"
-        self.max_attempts = max_attempts
-        
-        # Initialize database manager
-        if db_manager:
-            self.db_manager = db_manager
-        else:
-            self.db_manager = PostgreSQLManager(self.session_id, db_config)
-        
-        # Initialize OpenAI client
-        self.openai_client = openai.OpenAI(api_key=Config.OPENAI_API_KEY)
-        
-        logger.info(f"🚀 Initialized Direct PostgreSQL Agent for session: {self.session_id}")
-    
-    def _get_table_info_direct(self) -> str:
-        """Get table information for context"""
-        table_info = self.db_manager.get_table_info()
-        
-        schema_text = ""
-        for table_name, info in table_info.items():
-            schema_text += f"\nTable: {table_name} ({info['row_count']} rows)\n"
-            schema_text += "Columns:\n"
-            
-            for col in info['schema']:
-                schema_text += f"  - {col['column_name']} ({col['data_type']})"
-                if not col.get('nullable', True):
-                    schema_text += " NOT NULL"
-                schema_text += "\n"
-        
-        return schema_text
-    
-    def _generate_sql_with_openai(self, question: str, attempt: int = 0, previous_error: str = None) -> str:
-        """Generate SQL using OpenAI directly"""
-        table_info = self._get_table_info_direct()
-        
-        prompt = f"""You are an expert SQL generator for flight operations data using PostgreSQL.
-
-DATABASE SCHEMA:
-{table_info}
-
-IMPORTANT NOTES:
-1. Use double quotes for column names with spaces: "A/C Registration", "Origin ICAO", etc.
-2. PostgreSQL is case-sensitive for quoted identifiers
-3. For fuel calculations: Fuel consumed = "Block off Fuel" - "Block on Fuel"
-4. Always include LIMIT 1000 for SELECT queries unless specifically asked for all data
-5. Handle NULL values appropriately
-"""
-        
-        if previous_error:
-            prompt += f"\n\nPREVIOUS ATTEMPT FAILED WITH ERROR:\n{previous_error}\nPlease fix the issue in your SQL.\n"
-        
-        prompt += f"\n\nGenerate ONLY the SQL query (no explanations) for: {question}"
-        
-        try:
-            response = self.openai_client.chat.completions.create(
-                model=getattr(Config, 'OPENAI_MODEL', 'o4-mini'),
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=1000,  # Reasonable limit for SQL generation
-                temperature=0.1
-            )
-            
-            sql_query = response.choices[0].message.content.strip()
-            
-            # Clean up the SQL query
-            if sql_query.startswith("```sql"):
-                sql_query = sql_query[6:]
-            if sql_query.endswith("```"):
-                sql_query = sql_query[:-3]
-            
-            return sql_query.strip()
-            
-        except Exception as e:
-            logger.error(f"Failed to generate SQL with OpenAI: {e}")
-            return ""
-    
-    def _generate_answer_with_openai(self, question: str, sql_query: str, data: List[Dict]) -> str:
-        """Generate natural language answer using OpenAI"""
-        # Limit data for context
-        sample_data = data[:50] if data else []
-        
-        prompt = f"""Question: {question}
-
-SQL Query Used: {sql_query}
-
-Query Results ({len(data)} total rows):
-{json.dumps(sample_data, indent=2, default=str)}
-
-Provide a clear, comprehensive answer to the question based on this flight operations data. 
-Include specific numbers and insights.
-"""
-        
-        try:
-            response = self.openai_client.chat.completions.create(
-                model=getattr(Config, 'OPENAI_MODEL', 'o4-mini'),
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=2000,  # More tokens for comprehensive answers
-                temperature=0.3
-            )
-            
-            return response.choices[0].message.content.strip()
-            
-        except Exception as e:
-            logger.error(f"Failed to generate answer with OpenAI: {e}")
-            return f"Found {len(data)} records. Please check the query results."
-    
-    def process_query(self, question: str, session_id: str = None) -> Dict[str, Any]:
-        """Process query with retry logic"""
-        session_id = session_id or self.session_id
-        
-        logger.info(f"🔍 Processing query for session: {session_id}")
-        logger.info(f"❓ Question: {question}")
-        
-        attempt = 0
-        last_error = None
-        
-        while attempt < self.max_attempts:
-            attempt += 1
-            logger.info(f"🔄 Attempt {attempt}/{self.max_attempts}")
-            
-            # Generate SQL
-            sql_query = self._generate_sql_with_openai(question, attempt - 1, last_error)
-            
-            if not sql_query:
-                last_error = "Failed to generate SQL query"
-                continue
-            
-            logger.info(f"📊 Generated SQL: {sql_query}")
-            
-            # Execute query
-            data, error = self.db_manager.execute_query(sql_query)
-            
-            if error:
-                last_error = error
-                logger.error(f"SQL execution error: {error}")
-                continue
-            
-            # Success! Generate answer
-            logger.info(f"✅ Query executed successfully: {len(data)} rows")
-            
-            answer = self._generate_answer_with_openai(question, sql_query, data)
-            
-            return {
-                "success": True,
-                "answer": answer,
-                "metadata": {
-                    "sql_query": sql_query,
-                    "row_count": len(data),
-                    "attempts": attempt,
-                    "method": "direct_postgresql",
-                    "session_id": session_id
-                }
-            }
-        
-        # Max attempts reached
-        logger.error(f"❌ Failed after {self.max_attempts} attempts")
-        return {
-            "success": False,
-            "answer": f"I was unable to process your query after {self.max_attempts} attempts. Last error: {last_error}",
-            "error": last_error,
-            "metadata": {
-                "attempts": self.max_attempts,
-                "session_id": session_id
-            }
-        }
-    
-    def close(self):
-        """Close database connections"""
-        if hasattr(self, 'db_manager'):
-            self.db_manager.close()
-        logger.info("✅ Closed Direct PostgreSQL Agent")
-
-
-# ============================================================================
 # FACTORY FUNCTIONS
 # ============================================================================
 
 def create_sql_agent(db_manager: PostgreSQLManager = None,
                     session_id: str = None,
                     max_attempts: int = 3,
-                    db_config: Dict[str, str] = None,
-                    use_langgraph: bool = True) -> Any:
-    """Factory function to create SQL agent instance"""
+                    db_config: Dict[str, str] = None) -> FlightDataPostgreSQLAgent:
+    """Factory function to create SQL agent instance - LangChain/LangGraph only"""
     
-    if use_langgraph and LANGCHAIN_AVAILABLE:
-        logger.info("🔧 Creating LangGraph-based SQL Agent")
-        return FlightDataPostgreSQLAgent(db_manager, session_id, max_attempts, db_config)
-    else:
-        logger.info("🔧 Creating Direct PostgreSQL Agent")
-        return DirectPostgreSQLAgent(db_manager, session_id, max_attempts, db_config)
+    logger.info("🔧 Creating LangGraph-based SQL Agent")
+    return FlightDataPostgreSQLAgent(db_manager, session_id, max_attempts, db_config)
 
 
 # ============================================================================
@@ -941,7 +923,7 @@ class SQLGenerator:
     """Legacy interface wrapper for backward compatibility"""
     
     def __init__(self):
-        self.agent = create_sql_agent(use_langgraph=False)
+        self.agent = create_sql_agent()
     
     def generate_sql(self, natural_query: str, table_schemas: Dict[str, List[Dict]], 
                     context: Optional[str] = None) -> Tuple[str, Dict]:
@@ -970,37 +952,65 @@ if __name__ == "__main__":
         'password': 'postgres'
     }
     
-    # Create agent with custom configuration
+    # Create agent with dual LLM configuration
     agent = create_sql_agent(
         session_id="test_session",
         max_attempts=3,
-        db_config=db_config,
-        use_langgraph=True  # Set to False to use direct implementation
+        db_config=db_config
     )
     
-    # Test queries
+    # Test queries demonstrating dual LLM workflow
     test_questions = [
+        # Summary requests (will be detected by GPT-4.1)
+        "What are the errors?",
+        "Give me an overview of the flight data",
+        "Tell me about the statistics in the clean flights table",
+        
+        # Analytical queries (will be improved by GPT-4.1, executed by o4-mini)
         "What are the top 10 aircraft by fuel consumption?",
         "Show me flights from KJFK to KLAX",
         "What's the average fuel efficiency by aircraft type?",
-        "Show me any data quality errors in the system",
-        "What are the errors?"  # Your specific query
+        "Which routes have the highest fuel consumption?",
+        
+        # Complex queries (will showcase o4-mini's analysis capabilities)
+        "Analyze fuel efficiency trends across different aircraft types and identify outliers",
+        "Compare fuel consumption patterns between domestic and international flights"
     ]
     
     for question in test_questions:
-        print(f"\n{'='*60}")
+        print(f"\n{'='*80}")
         print(f"🔍 Question: {question}")
-        print(f"{'='*60}")
+        print(f"{'='*80}")
         
         result = agent.process_query(question)
         
         print(f"\n📊 Success: {result['success']}")
         print(f"\n💬 Answer:\n{result['answer']}")
         
-        if result['success'] and 'sql_query' in result['metadata']:
-            print(f"\n🔧 SQL Query:\n{result['metadata']['sql_query']}")
-            print(f"\n📈 Rows returned: {result['metadata']['row_count']}")
-            print(f"🔄 Attempts: {result['metadata']['attempts']}")
+        # Show the dual LLM workflow information
+        metadata = result['metadata']
+        print(f"\n🔧 Workflow Details:")
+        if 'original_question' in metadata:
+            print(f"   Original Question: {metadata['original_question']}")
+            print(f"   Improved Question: {metadata['improved_question']}")
+            print(f"   Query Type: {metadata.get('query_type', 'N/A')}")
+            print(f"   Complexity: {metadata.get('complexity', 'N/A')}")
+            print(f"   Analysis Model: {metadata.get('analysis_model', 'N/A')}")
+            print(f"   Execution Model: {metadata.get('execution_model', 'N/A')}")
+        
+        if result['success'] and 'sql_query' in metadata and metadata['sql_query']:
+            print(f"\n🔧 Generated SQL:\n{metadata['sql_query']}")
+            print(f"\n📈 Rows returned: {metadata['row_count']}")
+            print(f"🔄 Attempts: {metadata['attempts']}")
+        
+        print(f"\n⚡ Method: {metadata.get('method', 'N/A')}")
     
     # Clean up
     agent.close()
+    
+    print(f"\n{'='*80}")
+    print("🎯 DUAL LLM WORKFLOW SUMMARY:")
+    print("   1. GPT-4.1 (gpt-4.1): Query analysis & improvement")
+    print("   2. o4-mini: SQL generation & comprehensive analysis")
+    print("   3. Enhanced accuracy through specialized model roles")
+    print(f"{'='*80}")
