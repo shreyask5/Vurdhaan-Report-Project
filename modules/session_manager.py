@@ -19,9 +19,9 @@ class SessionManager:
     
     def __init__(self):
         self.sessions = {}
-        self.db_dir = Config.DATABASE_DIR
-        self.upload_dir = Config.UPLOAD_FOLDER
-        self.log_dir = os.path.dirname(Config.LOG_FILE)
+        self.db_dir = '/var/lib/duckdb/sessions'
+        self.upload_dir = '/root/report/uploads'
+        self.log_dir = '/var/log/flight-analyzer/app.log'
         self._ensure_directories()
         self._load_existing_sessions()
     
