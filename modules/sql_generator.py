@@ -7,14 +7,14 @@ A sophisticated SQL agent using LangChain's SQL tools and LangGraph for natural 
 to SQL conversion and execution with PostgreSQL, featuring:
 
 DUAL LLM ARCHITECTURE:
-- GPT-4.1 (gpt-4.1): Query analysis, improvement, and strategic decision-making
-- o4-mini: SQL generation, execution, and detailed response generation
+- GPT-4.1 (gpt-4-turbo): Query analysis, improvement, and strategic decision-making
+- GPT-4o-mini: SQL generation, execution, and detailed response generation
 
 WORKFLOW:
 1. GPT-4.1 analyzes the user question and determines if it's a summary request
 2. GPT-4.1 improves the query for better SQL generation
-3. o4-mini generates optimized SQL queries
-4. o4-mini provides comprehensive analysis of results
+3. GPT-4o-mini generates optimized SQL queries
+4. GPT-4o-mini provides comprehensive analysis of results
 
 Author: Flight Data Analysis System
 Dependencies: langchain, langchain-openai, langchain-community, psycopg2, openai, langgraph
@@ -25,11 +25,11 @@ class Config:
     # Existing config...
     
     # Dual LLM Configuration
-    OPENAI_ANALYSIS_MODEL = os.getenv('OPENAI_ANALYSIS_MODEL', 'gpt-4.1')
+    OPENAI_ANALYSIS_MODEL = os.getenv('OPENAI_ANALYSIS_MODEL', 'gpt-4-turbo')
     OPENAI_ANALYSIS_TEMPERATURE = float(os.getenv('OPENAI_ANALYSIS_TEMPERATURE', 0.1))
     OPENAI_ANALYSIS_MAX_TOKENS = int(os.getenv('OPENAI_ANALYSIS_MAX_TOKENS', 1000))
     
-    OPENAI_EXECUTION_MODEL = os.getenv('OPENAI_EXECUTION_MODEL', 'o4-mini')
+    OPENAI_EXECUTION_MODEL = os.getenv('OPENAI_EXECUTION_MODEL', 'gpt-4o-mini')
     OPENAI_EXECUTION_TEMPERATURE = float(os.getenv('OPENAI_EXECUTION_TEMPERATURE', 0.1))
     OPENAI_EXECUTION_MAX_TOKENS = int(os.getenv('OPENAI_EXECUTION_MAX_TOKENS', 4096))
 ```
@@ -42,6 +42,7 @@ from typing import Dict, List, Tuple, Optional, Any
 from typing_extensions import TypedDict
 from datetime import datetime
 import psycopg2
+import psycopg2.extras
 import openai
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import Engine
@@ -129,7 +130,7 @@ def analyze_and_improve_query(question: str) -> QueryAnalysis:
     # Initialize GPT-4.1 for query analysis
     analysis_llm = ChatOpenAI(
         api_key=Config.OPENAI_API_KEY,
-        model=getattr(Config, 'OPENAI_ANALYSIS_MODEL', 'gpt-4.1'),
+        model=getattr(Config, 'OPENAI_ANALYSIS_MODEL', 'gpt-4-turbo'),
         temperature=getattr(Config, 'OPENAI_ANALYSIS_TEMPERATURE', 0.1),
         max_tokens=getattr(Config, 'OPENAI_ANALYSIS_MAX_TOKENS', 1000)
     )
@@ -183,14 +184,76 @@ EXAMPLES:
         )
 
 
-def generate_table_summary(conn, table_name: str, schema: str = 'public', max_top: int = 5) -> str:
-    """Generate a detailed summary of a PostgreSQL table with comprehensive statistics"""
-    import psycopg2
-    import psycopg2.extras
+def analyze_and_improve_query(question: str) -> QueryAnalysis:
+    """Use GPT-4.1 with function calling to analyze and improve the query"""
     
+    # Initialize GPT-4.1 for query analysis
+    analysis_llm = ChatOpenAI(
+        api_key=Config.OPENAI_API_KEY,
+        model=getattr(Config, 'OPENAI_ANALYSIS_MODEL', 'gpt-4-turbo'),
+        temperature=getattr(Config, 'OPENAI_ANALYSIS_TEMPERATURE', 0.1),
+        max_tokens=getattr(Config, 'OPENAI_ANALYSIS_MAX_TOKENS', 1000)
+    )
+    
+    system_prompt = """You are an expert flight data analyst. Analyze user questions about flight operations data and improve them for better SQL query generation.
+
+AVAILABLE TABLES:
+- clean_flights: Main flight operations data with details like aircraft registration, routes, fuel consumption, timestamps
+- error_flights: Data quality errors and issues in flight operations
+
+ANALYSIS GUIDELINES:
+1. Determine if the user wants a table summary/overview vs specific data queries
+2. Improve the question to be more specific and SQL-friendly
+3. Identify the most appropriate target table
+4. Assess query complexity for proper processing
+
+EXAMPLES:
+- "What are the errors?" → Summary request for error_flights table
+- "Show me fuel consumption" → Specific data query for clean_flights table
+- "Tell me about the data" → Summary request for clean_flights table
+- "Which flights used the most fuel?" → Analytical query for clean_flights table
+"""
+    
+    analysis_prompt = ChatPromptTemplate.from_messages([
+        ("system", system_prompt),
+        ("human", "Analyze and improve this flight data question: {question}")
+    ])
+    
+    try:
+        structured_llm = analysis_llm.with_structured_output(QueryAnalysis)
+        analyzer = analysis_prompt | structured_llm
+        result = analyzer.invoke({"question": question})
+        
+        logger.info(f"🧠 GPT-4.1 Analysis - Summary: {result.is_summary_request}, "
+                   f"Table: {result.target_table}, Type: {result.query_type}")
+        logger.info(f"📝 Improved query: {result.improved_query}")
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Failed to analyze query with GPT-4.1: {e}")
+        # Fallback to simple analysis
+        return QueryAnalysis(
+            is_summary_request=any(keyword in question.lower() for keyword in [
+                'summary', 'overview', 'describe', 'stats', 'what is in', 'tell me about'
+            ]),
+            improved_query=question,
+            target_table="error_flights" if "error" in question.lower() else "clean_flights",
+            query_type="exploratory",
+            complexity_level="medium"
+        )
+
+
+def generate_table_summary(db_manager, table_name: str, schema: str = 'public', max_top: int = 5) -> str:
+    """Generate a detailed summary of a PostgreSQL table with comprehensive statistics"""
+    
+    # Use the database manager's connection
+    conn = db_manager.conn
     cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     
     try:
+        logger.info(f"📊 Generating summary for table: {table_name} in session: {db_manager.session_id}")
+        
         # 1. Get column names and types
         cursor.execute("""
             SELECT 
@@ -217,6 +280,8 @@ def generate_table_summary(conn, table_name: str, schema: str = 'public', max_to
         # Start building summary
         summary = [
             f"# 📊 Table Summary: `{table_name}`",
+            f"\n**Session**: `{db_manager.session_id}`",
+            f"**Database**: `{db_manager.db_name}`",
             f"\n## Overview",
             f"- **Total Rows**: {total_rows:,}",
             f"- **Total Columns**: {len(columns)}",
@@ -381,10 +446,12 @@ def generate_table_summary(conn, table_name: str, schema: str = 'public', max_to
                     summary.append(f"- {error['Error_Category']}: {error['error_count']} ({error['percentage']}%)")
         
         cursor.close()
+        logger.info(f"✅ Generated summary for {table_name}: {len(summary)} lines")
         return "\n".join(summary)
         
     except Exception as e:
-        cursor.close()
+        if cursor:
+            cursor.close()
         logger.error(f"Failed to generate table summary: {e}")
         raise
 
@@ -394,7 +461,7 @@ def generate_table_summary(conn, table_name: str, schema: str = 'public', max_to
 # ============================================================================
 
 class FlightDataPostgreSQLAgent:
-    """SQL Agent using LangGraph for PostgreSQL with GPT-4.1 analysis and o4-mini execution"""
+    """SQL Agent using LangGraph for PostgreSQL with GPT-4.1 analysis and GPT-4o-mini execution"""
     
     def __init__(self, db_manager: PostgreSQLManager = None, 
                  session_id: str = None, 
@@ -417,15 +484,15 @@ class FlightDataPostgreSQLAgent:
         # Initialize GPT-4.1 for query analysis and improvement
         self.analysis_llm = ChatOpenAI(
             api_key=Config.OPENAI_API_KEY,
-            model=getattr(Config, 'OPENAI_ANALYSIS_MODEL', 'gpt-4.1'),
+            model=getattr(Config, 'OPENAI_ANALYSIS_MODEL', 'gpt-4-turbo'),
             temperature=getattr(Config, 'OPENAI_ANALYSIS_TEMPERATURE', 0.1),
             max_tokens=getattr(Config, 'OPENAI_ANALYSIS_MAX_TOKENS', 1000)
         )
         
-        # Initialize o4-mini for SQL generation and answer generation
+        # Initialize GPT-4o-mini for SQL generation and answer generation
         self.execution_llm = ChatOpenAI(
             api_key=Config.OPENAI_API_KEY,
-            model=getattr(Config, 'OPENAI_EXECUTION_MODEL', 'o4-mini'),
+            model=getattr(Config, 'OPENAI_EXECUTION_MODEL', 'gpt-4o-mini'),
             temperature=getattr(Config, 'OPENAI_EXECUTION_TEMPERATURE', 0.1),
             max_tokens=getattr(Config, 'OPENAI_EXECUTION_MAX_TOKENS', 4096)
         )
@@ -434,7 +501,7 @@ class FlightDataPostgreSQLAgent:
         self._build_workflow()
         
         logger.info(f"🚀 Successfully initialized PostgreSQL SQL Agent with dual LLM setup for session: {self.session_id}")
-        logger.info(f"🧠 Analysis LLM: gpt-4.1 | 🔧 Execution LLM: o4-mini")
+        logger.info(f"🧠 Analysis LLM: gpt-4-turbo | 🔧 Execution LLM: gpt-4o-mini")
     
     def _build_workflow(self):
         """Build the LangGraph workflow for SQL agent"""
@@ -481,52 +548,45 @@ class FlightDataPostgreSQLAgent:
         logger.info("✅ SQL Agent workflow compiled successfully")
     
     def _get_database_schema(self) -> str:
-        """Get database schema information"""
-        inspector = inspect(self.engine)
-        schema = ""
-        
-        for table_name in inspector.get_table_names():
-            schema += f"\nTable: {table_name}\n"
-            for column in inspector.get_columns(table_name):
-                col_name = column["name"]
-                col_type = str(column["type"])
-                nullable = "NULL" if column.get("nullable", True) else "NOT NULL"
-                
-                # Add primary key info
-                pk_constraint = inspector.get_pk_constraint(table_name)
-                is_pk = col_name in pk_constraint.get("constrained_columns", [])
-                pk_info = ", PRIMARY KEY" if is_pk else ""
-                
-                # Add foreign key info
-                fk_info = ""
-                for fk in inspector.get_foreign_keys(table_name):
-                    if col_name in fk.get("constrained_columns", []):
-                        ref_table = fk["referred_table"]
-                        ref_cols = fk["referred_columns"]
-                        fk_info = f", FOREIGN KEY -> {ref_table}({', '.join(ref_cols)})"
-                
-                schema += f"  - {col_name}: {col_type} {nullable}{pk_info}{fk_info}\n"
+        """Get database schema information using the session database manager"""
+        try:
+            # Use the database manager's get_table_info method
+            table_info = self.db_manager.get_table_info()
+            schema = ""
             
-            # Add sample data
-            try:
-                with self.engine.connect() as conn:
-                    result = conn.execute(text(f'SELECT * FROM "{table_name}" LIMIT 3'))
-                    rows = result.fetchall()
-                    if rows:
+            for table_name, info in table_info.items():
+                schema += f"\nTable: {table_name} ({info['row_count']} rows)\n"
+                
+                for column in info['schema']:
+                    col_name = column["column_name"]
+                    col_type = column["data_type"]
+                    nullable = "NULL" if column.get("nullable", True) else "NOT NULL"
+                    
+                    schema += f"  - {col_name}: {col_type} {nullable}\n"
+                
+                # Add sample data using the database manager
+                try:
+                    sample_data, error = self.db_manager.execute_query(f'SELECT * FROM "{table_name}" LIMIT 3')
+                    if not error and sample_data:
                         schema += "  Sample data:\n"
-                        for row in rows:
+                        for row in sample_data:
                             schema += f"    {dict(row)}\n"
-            except Exception as e:
-                logger.warning(f"Could not get sample data for {table_name}: {e}")
-        
-        return schema
+                except Exception as e:
+                    logger.warning(f"Could not get sample data for {table_name}: {e}")
+            
+            logger.info(f"📋 Retrieved schema for {len(table_info)} tables from session database")
+            return schema
+            
+        except Exception as e:
+            logger.error(f"Failed to get database schema: {e}")
+            return "Error: Could not retrieve database schema"
     
     def _convert_nl_to_sql(self, state: AgentState) -> AgentState:
-        """Convert natural language question to SQL query using o4-mini"""
+        """Convert natural language question to SQL query using GPT-4o-mini"""
         question = state["question"]
         schema = self._get_database_schema()
         
-        logger.info(f"🔄 Converting question to SQL using o4-mini: {question}")
+        logger.info(f"🔄 Converting question to SQL using GPT-4o-mini: {question}")
         
         # Escape curly braces in schema for prompt template
         safe_schema = schema.replace('{', '{{').replace('}', '}}')
@@ -551,7 +611,7 @@ class FlightDataPostgreSQLAgent:
         ])
         
         try:
-            # Use o4-mini for SQL generation
+            # Use GPT-4o-mini for SQL generation
             structured_llm = self.execution_llm.with_structured_output(ConvertToSQL)
             sql_generator = convert_prompt | structured_llm
             result = sql_generator.invoke({"question": question})
@@ -562,7 +622,7 @@ class FlightDataPostgreSQLAgent:
             else:
                 state["sql_query"] = getattr(result, "sql_query", "")
             
-            logger.info(f"📊 Generated SQL with o4-mini: {state['sql_query']}")
+            logger.info(f"📊 Generated SQL with GPT-4o-mini: {state['sql_query']}")
             
         except Exception as e:
             logger.error(f"Failed to generate SQL: {e}")
@@ -617,17 +677,17 @@ class FlightDataPostgreSQLAgent:
         return state
     
     def _generate_human_readable_answer(self, state: AgentState) -> AgentState:
-        """Generate a human-readable answer from query results using o4-mini for complex analysis"""
+        """Generate a human-readable answer from query results using GPT-4o-mini for complex analysis"""
         sql_query = state.get("sql_query", "")
         query_rows = state.get("query_rows", [])
         question = state["question"]
         
-        logger.info("📝 Generating human-readable answer with o4-mini")
+        logger.info("📝 Generating human-readable answer with GPT-4o-mini")
         
         # Limit data for context window
         sample_data = query_rows[:50] if query_rows else []
         
-        system_prompt = """You are an expert flight operations data analyst using o4-mini for complex analysis. 
+        system_prompt = """You are an expert flight operations data analyst using GPT-4o-mini for complex analysis. 
 Your task is to convert SQL query results into clear, comprehensive, and insightful natural language responses.
 
 ANALYSIS REQUIREMENTS:
@@ -668,11 +728,11 @@ Query Results Summary:
         ])
         
         try:
-            # Use o4-mini for complex analysis and answer generation
+            # Use GPT-4o-mini for complex analysis and answer generation
             chain = generate_prompt | self.execution_llm | StrOutputParser()
             answer = chain.invoke({})
             state["final_answer"] = answer
-            logger.info("✅ Generated comprehensive analysis with o4-mini")
+            logger.info("✅ Generated comprehensive analysis with GPT-4o-mini")
             
         except Exception as e:
             logger.error(f"Failed to generate answer: {e}")
@@ -756,6 +816,7 @@ Query Results Summary:
     def process_query(self, question: str, session_id: str = None) -> Dict[str, Any]:
         session_id = session_id or self.session_id
         logger.info(f"🔍 Processing query for session: {session_id}")
+        logger.info(f"🗄️ Using database: {self.db_manager.db_name}")
         logger.info(f"❓ Original question: {question}")
 
         # --- STEP 1: ANALYZE AND IMPROVE QUERY WITH GPT-4.1 ---
@@ -789,7 +850,7 @@ Query Results Summary:
         if is_summary:
             logger.info(f"📊 Processing summary request for table: {target_table}")
             try:
-                summary_md = generate_table_summary(self.db_manager.conn, target_table)
+                summary_md = generate_table_summary(self.db_manager, target_table)
                 return {
                     "success": True,
                     "answer": summary_md,
@@ -797,11 +858,12 @@ Query Results Summary:
                         "method": "summary", 
                         "table": target_table, 
                         "session_id": session_id,
+                        "database": self.db_manager.db_name,
                         "original_question": question,
                         "improved_question": improved_question,
                         "query_type": query_type,
                         "complexity": complexity,
-                        "analysis_model": "gpt-4.1"
+                        "analysis_model": "gpt-4-turbo"
                     }
                 }
             except Exception as e:
@@ -814,8 +876,9 @@ Query Results Summary:
                         "method": "summary", 
                         "table": target_table, 
                         "session_id": session_id,
+                        "database": self.db_manager.db_name,
                         "original_question": question,
-                        "analysis_model": "gpt-4.1"
+                        "analysis_model": "gpt-4-turbo"
                     }
                 }
 
@@ -840,8 +903,9 @@ Query Results Summary:
                 "target_table": target_table,
                 "query_type": query_type,
                 "complexity": complexity,
-                "analysis_model": "gpt-4.1",
-                "execution_model": "o4-mini"
+                "analysis_model": "gpt-4-turbo",
+                "execution_model": "gpt-4o-mini",
+                "database": self.db_manager.db_name
             },
             "final_answer": "",
             "sql_error": False
@@ -857,14 +921,15 @@ Query Results Summary:
                     "row_count": len(result.get("query_rows", [])),
                     "attempts": result.get("attempts", 0),
                     "session_id": session_id,
+                    "database": self.db_manager.db_name,
                     "method": "langgraph",
                     "original_question": question,
                     "improved_question": improved_question,
                     "target_table": target_table,
                     "query_type": query_type,
                     "complexity": complexity,
-                    "analysis_model": "gpt-4.1",
-                    "execution_model": "o4-mini"
+                    "analysis_model": "gpt-4-turbo",
+                    "execution_model": "gpt-4o-mini"
                 },
                 "table_rows": result.get("query_rows", [])
             }
@@ -880,52 +945,76 @@ Query Results Summary:
                 "error": str(e),
                 "metadata": {
                     "session_id": session_id, 
+                    "database": self.db_manager.db_name,
                     "method": "langgraph",
                     "original_question": question,
                     "improved_question": improved_question,
-                    "analysis_model": "gpt-4.1",
-                    "execution_model": "o4-mini"
+                    "analysis_model": "gpt-4-turbo",
+                    "execution_model": "gpt-4o-mini"
                 }
             }
     
     def get_table_schemas(self) -> Dict[str, Any]:
-        """Get table schema information"""
+        """Get table schema information using the database manager"""
         return self.db_manager.get_table_info()
     
     def close(self):
-        """Close database connections"""
-        if hasattr(self, 'db_manager'):
-            self.db_manager.close()
+        """Close database connections - delegates to database manager"""
+        if hasattr(self, 'db_manager') and self.db_manager:
+            # Note: We don't close the db_manager here since it might be used elsewhere
+            # The calling code (app4.py) should manage the db_manager lifecycle
+            logger.info(f"🔗 SQL Agent closed for session: {self.session_id}")
         if hasattr(self, 'engine'):
             self.engine.dispose()
-        logger.info("✅ Closed SQL Agent connections")
+            logger.info("✅ SQLAlchemy engine disposed")
+        logger.info("✅ SQL Agent connections cleaned up")
 
 
 # ============================================================================
-# FACTORY FUNCTIONS
+# FACTORY FUNCTIONS - UPDATED FOR SESSION-BASED DATABASE ARCHITECTURE
 # ============================================================================
 
-def create_sql_agent(db_manager: PostgreSQLManager = None,
-                    session_id: str = None,
-                    max_attempts: int = 3,
-                    db_config: Dict[str, str] = None) -> FlightDataPostgreSQLAgent:
-    """Factory function to create SQL agent instance - LangChain/LangGraph only"""
+def create_sql_agent(db_manager, session_id: str = None, max_attempts: int = 3, 
+                    db_config: Dict[str, str] = None, use_langgraph: bool = True) -> FlightDataPostgreSQLAgent:
+    """
+    Factory function to create SQL agent instance with existing database manager
     
-    logger.info("🔧 Creating LangGraph-based SQL Agent")
-    return FlightDataPostgreSQLAgent(db_manager, session_id, max_attempts, db_config)
+    Args:
+        db_manager: Existing PostgreSQL database manager (required)
+        session_id: Session identifier
+        max_attempts: Maximum retry attempts for failed queries
+        db_config: Database configuration (ignored when db_manager is provided)
+        use_langgraph: Use LangGraph implementation (always True now, for backward compatibility)
+    
+    Returns:
+        FlightDataPostgreSQLAgent instance
+    """
+    
+    if not db_manager:
+        raise ValueError("db_manager is required and cannot be None")
+    
+    logger.info("🔧 Creating LangGraph-based SQL Agent with existing database manager")
+    logger.info(f"🗄️ Session database: {getattr(db_manager, 'db_name', 'unknown')}")
+    logger.info(f"🆔 Session ID: {session_id or 'default'}")
+    
+    return FlightDataPostgreSQLAgent(db_manager, session_id, max_attempts)
 
 
 # ============================================================================
-# BACKWARD COMPATIBILITY
+# BACKWARD COMPATIBILITY - UPDATED FOR SESSION-BASED ARCHITECTURE
 # ============================================================================
 
 class SQLGenerator:
-    """Legacy interface wrapper for backward compatibility"""
+    """Legacy interface wrapper for backward compatibility with session-based database"""
     
-    def __init__(self):
-        self.agent = create_sql_agent()
+    def __init__(self, db_manager=None, session_id: str = None):
+        """Initialize with existing database manager"""
+        if not db_manager:
+            raise ValueError("db_manager is required for session-based architecture")
+        
+        self.agent = create_sql_agent(db_manager, session_id, 3, None, True)
     
-    def generate_sql(self, natural_query: str, table_schemas: Dict[str, List[Dict]], 
+    def generate_sql(self, natural_query: str, table_schemas: Dict[str, List[Dict]] = None, 
                     context: Optional[str] = None) -> Tuple[str, Dict]:
         """Legacy method for backward compatibility"""
         
@@ -943,74 +1032,115 @@ class SQLGenerator:
 # ============================================================================
 
 if __name__ == "__main__":
-    # Example configuration
-    db_config = {
-        'host': 'localhost',
-        'port': 5432,
-        'database': 'flight_data',
-        'user': 'postgres',
-        'password': 'postgres'
-    }
+    # Example showing integration with session-based database architecture
+    # This demonstrates how the SQL agent works with your existing database.py setup
     
-    # Create agent with dual LLM configuration
-    agent = create_sql_agent(
-        session_id="test_session",
-        max_attempts=3,
-        db_config=db_config
-    )
+    print("🚀 SQL Agent Example with Session-Based PostgreSQL")
+    print("=" * 80)
     
-    # Test queries demonstrating dual LLM workflow
-    test_questions = [
-        # Summary requests (will be detected by GPT-4.1)
-        "What are the errors?",
-        "Give me an overview of the flight data",
-        "Tell me about the statistics in the clean flights table",
+    # Step 1: Create a database manager (like in your app4.py)
+    try:
+        # Import your database manager
+        from modules.database import PostgreSQLManager
         
-        # Analytical queries (will be improved by GPT-4.1, executed by o4-mini)
-        "What are the top 10 aircraft by fuel consumption?",
-        "Show me flights from KJFK to KLAX",
-        "What's the average fuel efficiency by aircraft type?",
-        "Which routes have the highest fuel consumption?",
+        # Create a test session
+        test_session_id = "test_session_123"
+        print(f"📊 Creating database manager for session: {test_session_id}")
         
-        # Complex queries (will showcase o4-mini's analysis capabilities)
-        "Analyze fuel efficiency trends across different aircraft types and identify outliers",
-        "Compare fuel consumption patterns between domestic and international flights"
-    ]
-    
-    for question in test_questions:
-        print(f"\n{'='*80}")
-        print(f"🔍 Question: {question}")
-        print(f"{'='*80}")
+        # Initialize database manager (this creates the session database)
+        db_manager = PostgreSQLManager(test_session_id)
+        print(f"✅ Database manager created for database: {db_manager.db_name}")
         
-        result = agent.process_query(question)
+        # Step 2: Create SQL agent with existing database manager (like in your app4.py)
+        print(f"🤖 Creating SQL agent with existing database manager...")
+        agent = create_sql_agent(
+            db_manager=db_manager,        # Your existing database manager
+            session_id=test_session_id,   # Session ID
+            max_attempts=3,               # Max retry attempts
+            db_config=None,               # Not used (db_manager provided)
+            use_langgraph=True            # Always True now (backward compatibility)
+        )
+        print(f"✅ SQL agent created successfully")
         
-        print(f"\n📊 Success: {result['success']}")
-        print(f"\n💬 Answer:\n{result['answer']}")
+        # Step 3: Check if tables exist (requires CSV data to be loaded first)
+        table_info = agent.get_table_schemas()
+        if not table_info:
+            print("⚠️  No tables found in session database")
+            print("   In your app4.py, CSV data should be loaded via:")
+            print("   db_manager.load_csv_data(clean_csv_path, error_csv_path)")
+        else:
+            print(f"📋 Available tables: {list(table_info.keys())}")
+            
+            # Step 4: Test queries (only if tables exist)
+            test_questions = [
+                # Summary requests (will be detected by GPT-4.1)
+                "What are the errors?",
+                "Give me an overview of the flight data",
+                
+                # Analytical queries (will be improved by GPT-4.1, executed by GPT-4o-mini)
+                "Show me the top 5 flights by fuel consumption",
+                "What aircraft types are in the data?",
+            ]
+            
+            print(f"\n🔬 Testing dual LLM workflow...")
+            for question in test_questions:
+                print(f"\n" + "-" * 60)
+                print(f"❓ Question: {question}")
+                print(f"-" * 60)
+                
+                result = agent.process_query(question)
+                
+                print(f"📊 Success: {result['success']}")
+                if result['success']:
+                    print(f"💬 Answer: {result['answer'][:200]}...")
+                    
+                    # Show the dual LLM workflow information
+                    metadata = result['metadata']
+                    print(f"\n🔧 Workflow Details:")
+                    print(f"   Database: {metadata.get('database', 'N/A')}")
+                    print(f"   Method: {metadata.get('method', 'N/A')}")
+                    print(f"   Analysis Model: {metadata.get('analysis_model', 'N/A')}")
+                    print(f"   Execution Model: {metadata.get('execution_model', 'N/A')}")
+                    
+                    if metadata.get('sql_query'):
+                        print(f"   SQL Generated: {metadata['sql_query'][:100]}...")
+                        print(f"   Rows Returned: {metadata.get('row_count', 0)}")
+                else:
+                    print(f"❌ Error: {result.get('error', 'Unknown error')}")
         
-        # Show the dual LLM workflow information
-        metadata = result['metadata']
-        print(f"\n🔧 Workflow Details:")
-        if 'original_question' in metadata:
-            print(f"   Original Question: {metadata['original_question']}")
-            print(f"   Improved Question: {metadata['improved_question']}")
-            print(f"   Query Type: {metadata.get('query_type', 'N/A')}")
-            print(f"   Complexity: {metadata.get('complexity', 'N/A')}")
-            print(f"   Analysis Model: {metadata.get('analysis_model', 'N/A')}")
-            print(f"   Execution Model: {metadata.get('execution_model', 'N/A')}")
+        # Step 5: Clean up
+        print(f"\n🧹 Cleaning up...")
+        agent.close()
+        # Note: Don't close db_manager here in real usage - let the calling code manage it
+        # db_manager.close()  # Commented out for this example
         
-        if result['success'] and 'sql_query' in metadata and metadata['sql_query']:
-            print(f"\n🔧 Generated SQL:\n{metadata['sql_query']}")
-            print(f"\n📈 Rows returned: {metadata['row_count']}")
-            print(f"🔄 Attempts: {metadata['attempts']}")
+        print(f"\n" + "=" * 80)
+        print("🎯 SESSION-BASED SQL AGENT INTEGRATION COMPLETE")
+        print("   ✅ Works with your existing database.py architecture")
+        print("   ✅ Each chat session gets its own PostgreSQL database")
+        print("   ✅ GPT-4.1 handles query analysis and improvement")
+        print("   ✅ GPT-4o-mini handles SQL generation and analysis")
+        print("=" * 80)
         
-        print(f"\n⚡ Method: {metadata.get('method', 'N/A')}")
-    
-    # Clean up
-    agent.close()
-    
-    print(f"\n{'='*80}")
-    print("🎯 DUAL LLM WORKFLOW SUMMARY:")
-    print("   1. GPT-4.1 (gpt-4.1): Query analysis & improvement")
-    print("   2. o4-mini: SQL generation & comprehensive analysis")
-    print("   3. Enhanced accuracy through specialized model roles")
-    print(f"{'='*80}")
+    except ImportError as e:
+        print(f"❌ Could not import database module: {e}")
+        print("   Make sure your database.py module is available")
+    except Exception as e:
+        print(f"❌ Error in example: {e}")
+        print("   This is expected if PostgreSQL is not set up or CSV data not loaded")
+        
+        # Show the basic usage pattern anyway
+        print(f"\n📖 BASIC USAGE PATTERN (from your app4.py):")
+        print(f"```python")
+        print(f"# 1. Create database manager for session")
+        print(f"db_manager = DuckDBManager(session_id, session['db_path'])")
+        print(f"")
+        print(f"# 2. Load CSV data into session database")
+        print(f"db_manager.load_csv_data(clean_csv_path, error_csv_path)")
+        print(f"")
+        print(f"# 3. Create SQL agent with database manager")
+        print(f"sql_agent = create_sql_agent(db_manager, session_id, 3, None, True)")
+        print(f"")
+        print(f"# 4. Process queries")
+        print(f"result = sql_agent.process_query('What are the errors?')")
+        print(f"```")
