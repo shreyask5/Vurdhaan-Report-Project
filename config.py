@@ -1,161 +1,403 @@
-#!/usr/bin/env python3
+# config.py - Updated for Ubuntu server with Dual LLM Architecture
+import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+class Config:
+    # ========================================================================
+    # EXISTING CONFIGURATION (BACKWARD COMPATIBLE)
+    # ========================================================================
+    
+    # Flask settings
+    SECRET_KEY = os.getenv('SECRET_KEY', 'dev-secret-key')
+    FLASK_ENV = os.getenv('FLASK_ENV', 'production')
+    
+    # OpenAI settings (existing)
+    OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+    OPENAI_MODEL = os.getenv('OPENAI_MODEL', 'gpt-4o-mini')
+    OPENAI_MAX_TOKENS = int(os.getenv('OPENAI_MAX_TOKENS', '128000'))
+    
+    # Database settings - Updated for local DuckDB
+    DATABASE_DIR = os.getenv('DATABASE_DIR', '/var/lib/duckdb/sessions')
+    SESSION_TIMEOUT_HOURS = int(os.getenv('SESSION_TIMEOUT_HOURS', '24'))
+    
+    # Upload settings - Updated for server
+    UPLOAD_FOLDER = os.getenv('UPLOAD_FOLDER', '/home/ubuntu/project/uploads')
+    MAX_CONTENT_LENGTH = int(os.getenv('MAX_CONTENT_LENGTH', '50485760'))  # 50MB for server
+    
+    # Redis settings (optional)
+    REDIS_URL = os.getenv('REDIS_URL')
+    
+    # Server settings
+    HOST = os.getenv('HOST', '0.0.0.0')  # Listen on all interfaces
+    PORT = int(os.getenv('PORT', '5000'))
+    
+    # Logging settings
+    LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
+    LOG_FILE = os.getenv('LOG_FILE', '/var/log/flight-analyzer/app.log')
+    
+    # ========================================================================
+    # NEW: DUAL LLM ARCHITECTURE CONFIGURATION
+    # ========================================================================
+    
+    # GPT-4.1 (Analysis Model) - for query analysis and improvement
+    OPENAI_ANALYSIS_MODEL = os.getenv('OPENAI_ANALYSIS_MODEL', 'gpt-4-turbo')
+    OPENAI_ANALYSIS_TEMPERATURE = float(os.getenv('OPENAI_ANALYSIS_TEMPERATURE', '0.1'))
+    OPENAI_ANALYSIS_MAX_TOKENS = int(os.getenv('OPENAI_ANALYSIS_MAX_TOKENS', '1000'))
+    
+    # GPT-4o-mini (Execution Model) - for SQL generation and answer generation
+    OPENAI_EXECUTION_MODEL = os.getenv('OPENAI_EXECUTION_MODEL', OPENAI_MODEL)  # Default to existing model
+    OPENAI_EXECUTION_TEMPERATURE = float(os.getenv('OPENAI_EXECUTION_TEMPERATURE', '0.1'))
+    OPENAI_EXECUTION_MAX_TOKENS = int(os.getenv('OPENAI_EXECUTION_MAX_TOKENS', str(OPENAI_MAX_TOKENS)))
+    
+    # Answer generation temperature (for more natural responses)
+    OPENAI_ANSWER_TEMPERATURE = float(os.getenv('OPENAI_ANSWER_TEMPERATURE', '0.3'))
+    
+    # ========================================================================
+    # DUAL LLM WORKFLOW CONFIGURATION
+    # ========================================================================
+    
+    # Enable/disable dual LLM workflow
+    ENABLE_DUAL_LLM = os.getenv('ENABLE_DUAL_LLM', 'true').lower() == 'true'
+    ENABLE_QUERY_ANALYSIS = os.getenv('ENABLE_QUERY_ANALYSIS', 'true').lower() == 'true'
+    ENABLE_QUERY_IMPROVEMENT = os.getenv('ENABLE_QUERY_IMPROVEMENT', 'true').lower() == 'true'
+    
+    # Fallback settings
+    ANALYSIS_FALLBACK_ENABLED = os.getenv('ANALYSIS_FALLBACK_ENABLED', 'true').lower() == 'true'
+    
+    # Caching settings
+    CACHE_QUERY_ANALYSIS = os.getenv('CACHE_QUERY_ANALYSIS', 'true').lower() == 'true'
+    ANALYSIS_CACHE_TTL = int(os.getenv('ANALYSIS_CACHE_TTL', '1800'))  # 30 minutes
+    
+    # ========================================================================
+    # SQL AGENT CONFIGURATION
+    # ========================================================================
+    
+    # SQL Agent settings
+    MAX_SQL_ATTEMPTS = int(os.getenv('MAX_SQL_ATTEMPTS', '3'))
+    DEFAULT_QUERY_LIMIT = int(os.getenv('DEFAULT_QUERY_LIMIT', '1000'))
+    MAX_QUERY_ROWS = int(os.getenv('MAX_QUERY_ROWS', '10000'))
+    MAX_SAMPLE_ROWS = int(os.getenv('MAX_SAMPLE_ROWS', '50'))
+    
+    # PostgreSQL Configuration (if using PostgreSQL)
+    DB_HOST = os.getenv('DB_HOST', 'localhost')
+    DB_PORT = int(os.getenv('DB_PORT', '5432'))
+    DB_NAME = os.getenv('DB_NAME', 'flight_data')
+    DB_USER = os.getenv('DB_USER', 'postgres')
+    DB_PASSWORD = os.getenv('DB_PASSWORD', '')
+    
+    # API Settings
+    OPENAI_TIMEOUT = int(os.getenv('OPENAI_TIMEOUT', '60'))
+    OPENAI_MAX_RETRIES = int(os.getenv('OPENAI_MAX_RETRIES', '3'))
+    
+    # ========================================================================
+    # DIRECTORY CREATION (EXISTING)
+    # ========================================================================
+    
+    # Create necessary directories
+    os.makedirs(DATABASE_DIR, exist_ok=True)
+    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+    os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
+    
+    # ========================================================================
+    # VALIDATION AND UTILITY METHODS
+    # ========================================================================
+    
+    @classmethod
+    def validate_config(cls) -> bool:
+        """Validate the configuration"""
+        errors = []
+        
+        # Check required settings
+        if not cls.OPENAI_API_KEY:
+            errors.append("OPENAI_API_KEY is required")
+        
+        # Validate API key format (should start with sk-)
+        if cls.OPENAI_API_KEY and not cls.OPENAI_API_KEY.startswith('sk-'):
+            errors.append("OPENAI_API_KEY should start with 'sk-'")
+        
+        # Validate temperature ranges
+        if not 0.0 <= cls.OPENAI_ANALYSIS_TEMPERATURE <= 1.0:
+            errors.append("OPENAI_ANALYSIS_TEMPERATURE must be between 0.0 and 1.0")
+        
+        if not 0.0 <= cls.OPENAI_EXECUTION_TEMPERATURE <= 1.0:
+            errors.append("OPENAI_EXECUTION_TEMPERATURE must be between 0.0 and 1.0")
+        
+        # Check directory permissions
+        try:
+            if not os.access(cls.UPLOAD_FOLDER, os.W_OK):
+                errors.append(f"No write permission for UPLOAD_FOLDER: {cls.UPLOAD_FOLDER}")
+        except:
+            errors.append(f"Cannot access UPLOAD_FOLDER: {cls.UPLOAD_FOLDER}")
+        
+        if errors:
+            raise ValueError(f"Configuration errors: {'; '.join(errors)}")
+        
+        return True
+    
+    @classmethod
+    def get_model_info(cls) -> dict:
+        """Get information about the configured models"""
+        return {
+            "analysis_model": {
+                "name": cls.OPENAI_ANALYSIS_MODEL,
+                "temperature": cls.OPENAI_ANALYSIS_TEMPERATURE,
+                "max_tokens": cls.OPENAI_ANALYSIS_MAX_TOKENS,
+                "purpose": "Query analysis and improvement"
+            },
+            "execution_model": {
+                "name": cls.OPENAI_EXECUTION_MODEL,
+                "temperature": cls.OPENAI_EXECUTION_TEMPERATURE,
+                "max_tokens": cls.OPENAI_EXECUTION_MAX_TOKENS,
+                "purpose": "SQL generation and answer generation"
+            },
+            "legacy_model": {
+                "name": cls.OPENAI_MODEL,
+                "max_tokens": cls.OPENAI_MAX_TOKENS,
+                "purpose": "Backward compatibility"
+            },
+            "dual_llm_enabled": cls.ENABLE_DUAL_LLM,
+            "query_analysis_enabled": cls.ENABLE_QUERY_ANALYSIS
+        }
+    
+    @classmethod
+    def print_config_summary(cls):
+        """Print a summary of the current configuration"""
+        print("=" * 60)
+        print("🔧 CONFIGURATION SUMMARY")
+        print("=" * 60)
+        
+        # API Key status
+        if cls.OPENAI_API_KEY:
+            masked_key = f"{cls.OPENAI_API_KEY[:10]}...{cls.OPENAI_API_KEY[-5:]}"
+            print(f"✅ OpenAI API Key: {masked_key}")
+        else:
+            print("❌ OpenAI API Key: NOT SET")
+        
+        # Model configuration
+        print(f"\n🤖 MODEL CONFIGURATION:")
+        print(f"   Analysis Model: {cls.OPENAI_ANALYSIS_MODEL}")
+        print(f"   Execution Model: {cls.OPENAI_EXECUTION_MODEL}")
+        print(f"   Legacy Model: {cls.OPENAI_MODEL}")
+        print(f"   Dual LLM Enabled: {cls.ENABLE_DUAL_LLM}")
+        
+        # Paths
+        print(f"\n📁 PATHS:")
+        print(f"   Database Dir: {cls.DATABASE_DIR}")
+        print(f"   Upload Folder: {cls.UPLOAD_FOLDER}")
+        print(f"   Log File: {cls.LOG_FILE}")
+        
+        # Server settings
+        print(f"\n🌐 SERVER:")
+        print(f"   Host: {cls.HOST}")
+        print(f"   Port: {cls.PORT}")
+        print(f"   Environment: {cls.FLASK_ENV}")
+        
+        print("=" * 60)
+
+
+# ========================================================================
+# STARTUP VALIDATION
+# ========================================================================
+
+if __name__ == "__main__":
+    try:
+        # Print configuration summary
+        Config.print_config_summary()
+        
+        # Validate configuration
+        Config.validate_config()
+        print("✅ Configuration validated successfully")
+        
+    except ValueError as e:
+        print(f"❌ Configuration error: {e}")
+        sys.exit(1)
+    except Exception as e:
+        print(f"❌ Unexpected error: {e}")
+        sys.exit(1)# config.py - Updated for Dual LLM Architecture
+
 """
-Debug script to help identify .env loading issues
-Run this before your main application to verify environment variables are loaded correctly.
+Configuration class for Flight Data SQL Agent with Dual LLM support.
+Add these settings to your existing Config class.
 """
 
 import os
-import sys
-from pathlib import Path
+from typing import Optional
 
-def debug_env_loading():
-    """Debug environment variable loading"""
-    
-    print("🔍 ENVIRONMENT VARIABLE DEBUGGING")
-    print("=" * 60)
-    
-    # Check current working directory
-    print(f"📁 Current working directory: {os.getcwd()}")
-    
-    # Check if .env file exists
-    env_file = Path('.env')
-    if env_file.exists():
-        print(f"✅ .env file found: {env_file.absolute()}")
-        print(f"📏 .env file size: {env_file.stat().st_size} bytes")
-        
-        # Read and display .env content (safely)
-        try:
-            with open('.env', 'r') as f:
-                lines = f.readlines()
-            
-            print(f"\n📋 .env file content ({len(lines)} lines):")
-            for i, line in enumerate(lines[:20], 1):  # Show first 20 lines
-                line = line.strip()
-                if line and not line.startswith('#'):
-                    # Mask sensitive values
-                    if 'API_KEY' in line or 'PASSWORD' in line:
-                        key, _, value = line.partition('=')
-                        if len(value) > 10:
-                            masked_value = f"{value[:5]}...{value[-3:]}"
-                        else:
-                            masked_value = "***"
-                        print(f"   {i:2d}: {key}={masked_value}")
-                    else:
-                        print(f"   {i:2d}: {line}")
-                elif line.startswith('#'):
-                    print(f"   {i:2d}: {line[:50]}...")
-            
-            if len(lines) > 20:
-                print(f"   ... and {len(lines) - 20} more lines")
-                
-        except Exception as e:
-            print(f"❌ Error reading .env file: {e}")
-    else:
-        print(f"❌ .env file not found in current directory")
-        
-        # Look for .env in parent directories
-        current_path = Path.cwd()
-        for parent in current_path.parents:
-            env_in_parent = parent / '.env'
-            if env_in_parent.exists():
-                print(f"🔍 Found .env in parent directory: {env_in_parent}")
-                break
-    
-    print(f"\n" + "=" * 60)
-    
-    # Try loading dotenv
-    print("📦 Testing python-dotenv loading...")
-    try:
-        from dotenv import load_dotenv
-        print("✅ python-dotenv imported successfully")
-        
-        # Try loading .env
-        result = load_dotenv()
-        print(f"📄 load_dotenv() result: {result}")
-        
-        # Try loading with verbose output
-        result_verbose = load_dotenv(verbose=True)
-        print(f"📄 load_dotenv(verbose=True) result: {result_verbose}")
-        
-    except ImportError:
-        print("❌ python-dotenv not installed")
-        print("   Install with: pip install python-dotenv")
-        return False
-    except Exception as e:
-        print(f"❌ Error loading .env: {e}")
-        return False
-    
-    print(f"\n" + "=" * 60)
-    
-    # Check specific environment variables
-    print("🔑 Checking key environment variables...")
-    
-    key_vars = [
-        'OPENAI_API_KEY',
-        'OPENAI_MODEL', 
-        'OPENAI_MAX_TOKENS',
-        'OPENAI_ANALYSIS_MODEL',
-        'OPENAI_EXECUTION_MODEL',
-    ]
-    
-    for var in key_vars:
-        value = os.getenv(var)
-        if value:
-            # Mask sensitive values
-            if 'API_KEY' in var or 'SECRET' in var:
-                if len(value) > 10:
-                    masked_value = f"{value[:5]}...{value[-3:]}"
-                else:
-                    masked_value = "***"
-                print(f"✅ {var}: {masked_value}")
-            else:
-                print(f"✅ {var}: {value}")
-        else:
-            print(f"❌ {var}: NOT SET")
-    
-    print(f"\n" + "=" * 60)
-    
-    # Test import of config
-    print("⚙️  Testing config.py import...")
-    try:
-        # Add current directory to path if needed
-        if os.getcwd() not in sys.path:
-            sys.path.insert(0, os.getcwd())
-            
-        from config import Config
-        print("✅ config.py imported successfully")
-        
-        # Test validation
-        try:
-            Config.validate_config()
-            print("✅ Configuration validation passed")
-            
-            # Print model info
-            model_info = Config.get_model_info()
-            print(f"\n🤖 Configured models:")
-            print(f"   Analysis: {model_info['analysis_model']['name']}")
-            print(f"   Execution: {model_info['execution_model']['name']}")
-            
-        except Exception as e:
-            print(f"❌ Configuration validation failed: {e}")
-            return False
-            
-    except ImportError as e:
-        print(f"❌ Failed to import config.py: {e}")
-        return False
-    except Exception as e:
-        print(f"❌ Error testing config: {e}")
-        return False
-    
-    print(f"\n✅ All checks passed! Your environment is ready.")
-    return True
+# Load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+    print("✅ Environment variables loaded from .env file")
+except ImportError:
+    print("⚠️  python-dotenv not installed. Install with: pip install python-dotenv")
+    print("    Or set environment variables manually.")
 
+class Config:
+    """Configuration class with dual LLM support"""
+    
+    # ========================================================================
+    # EXISTING CONFIGURATION (keep your current settings)
+    # ========================================================================
+    
+    # Database Configuration
+    DB_HOST = os.getenv('DB_HOST', 'localhost')
+    DB_PORT = int(os.getenv('DB_PORT', 5432))
+    DB_NAME = os.getenv('DB_NAME', 'flight_data')
+    DB_USER = os.getenv('DB_USER', 'postgres')
+    DB_PASSWORD = os.getenv('DB_PASSWORD', 'postgres')
+    
+    # Basic OpenAI Configuration
+    OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+    if not OPENAI_API_KEY:
+        raise ValueError("OPENAI_API_KEY environment variable is required")
+    
+    # ========================================================================
+    # NEW: DUAL LLM ARCHITECTURE CONFIGURATION
+    # ========================================================================
+    
+    # GPT-4.1 (Analysis Model) - for query analysis and improvement
+    OPENAI_ANALYSIS_MODEL = os.getenv('OPENAI_ANALYSIS_MODEL', 'gpt-4-turbo')
+    OPENAI_ANALYSIS_TEMPERATURE = float(os.getenv('OPENAI_ANALYSIS_TEMPERATURE', '0.1'))
+    OPENAI_ANALYSIS_MAX_TOKENS = int(os.getenv('OPENAI_ANALYSIS_MAX_TOKENS', '1000'))
+    
+    # GPT-4o-mini (Execution Model) - for SQL generation and answer generation
+    OPENAI_EXECUTION_MODEL = os.getenv('OPENAI_EXECUTION_MODEL', 'gpt-4o-mini')
+    OPENAI_EXECUTION_TEMPERATURE = float(os.getenv('OPENAI_EXECUTION_TEMPERATURE', '0.1'))
+    OPENAI_EXECUTION_MAX_TOKENS = int(os.getenv('OPENAI_EXECUTION_MAX_TOKENS', '4096'))
+    
+    # Answer generation (uses execution model with higher temperature)
+    OPENAI_ANSWER_TEMPERATURE = float(os.getenv('OPENAI_ANSWER_TEMPERATURE', '0.3'))
+    
+    # ========================================================================
+    # WORKFLOW CONFIGURATION
+    # ========================================================================
+    
+    # Enable/disable dual LLM workflow
+    ENABLE_DUAL_LLM = os.getenv('ENABLE_DUAL_LLM', 'true').lower() == 'true'
+    ENABLE_QUERY_ANALYSIS = os.getenv('ENABLE_QUERY_ANALYSIS', 'true').lower() == 'true'
+    ENABLE_QUERY_IMPROVEMENT = os.getenv('ENABLE_QUERY_IMPROVEMENT', 'true').lower() == 'true'
+    
+    # Fallback settings
+    ANALYSIS_FALLBACK_ENABLED = os.getenv('ANALYSIS_FALLBACK_ENABLED', 'true').lower() == 'true'
+    
+    # Caching settings
+    CACHE_QUERY_ANALYSIS = os.getenv('CACHE_QUERY_ANALYSIS', 'true').lower() == 'true'
+    ANALYSIS_CACHE_TTL = int(os.getenv('ANALYSIS_CACHE_TTL', '1800'))  # 30 minutes
+    
+    # ========================================================================
+    # LEGACY COMPATIBILITY (for backward compatibility)
+    # ========================================================================
+    
+    # These maintain compatibility with existing code
+    OPENAI_MODEL = os.getenv('OPENAI_MODEL', OPENAI_EXECUTION_MODEL)
+    OPENAI_TEMPERATURE = OPENAI_EXECUTION_TEMPERATURE
+    OPENAI_MAX_TOKENS = OPENAI_EXECUTION_MAX_TOKENS
+    
+    # ========================================================================
+    # API AND PERFORMANCE SETTINGS
+    # ========================================================================
+    
+    # Request timeouts
+    OPENAI_TIMEOUT = int(os.getenv('OPENAI_TIMEOUT', '60'))
+    OPENAI_MAX_RETRIES = int(os.getenv('OPENAI_MAX_RETRIES', '3'))
+    
+    # Query limits
+    MAX_SQL_ATTEMPTS = int(os.getenv('MAX_SQL_ATTEMPTS', '3'))
+    DEFAULT_QUERY_LIMIT = int(os.getenv('DEFAULT_QUERY_LIMIT', '1000'))
+    MAX_QUERY_ROWS = int(os.getenv('MAX_QUERY_ROWS', '10000'))
+    MAX_SAMPLE_ROWS = int(os.getenv('MAX_SAMPLE_ROWS', '50'))
+    
+    # ========================================================================
+    # LOGGING CONFIGURATION
+    # ========================================================================
+    
+    LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
+    DEBUG = os.getenv('DEBUG', 'false').lower() == 'true'
+    LOG_SQL_QUERIES = os.getenv('LOG_SQL_QUERIES', 'true').lower() == 'true'
+    LOG_PERFORMANCE = os.getenv('LOG_PERFORMANCE', 'true').lower() == 'true'
+    
+    # ========================================================================
+    # VALIDATION METHOD
+    # ========================================================================
+    
+    @classmethod
+    def validate_config(cls) -> bool:
+        """Validate the configuration"""
+        errors = []
+        
+        # Check required settings
+        if not cls.OPENAI_API_KEY:
+            errors.append("OPENAI_API_KEY is required")
+        
+        if not cls.DB_PASSWORD:
+            errors.append("DB_PASSWORD is required")
+        
+        # Validate model names
+        valid_analysis_models = ['gpt-4-turbo', 'gpt-4', 'gpt-4-0613']
+        if cls.OPENAI_ANALYSIS_MODEL not in valid_analysis_models:
+            errors.append(f"OPENAI_ANALYSIS_MODEL must be one of: {valid_analysis_models}")
+        
+        valid_execution_models = ['gpt-4o-mini', 'gpt-3.5-turbo', 'gpt-4o']
+        if cls.OPENAI_EXECUTION_MODEL not in valid_execution_models:
+            errors.append(f"OPENAI_EXECUTION_MODEL must be one of: {valid_execution_models}")
+        
+        # Validate temperature ranges
+        if not 0.0 <= cls.OPENAI_ANALYSIS_TEMPERATURE <= 1.0:
+            errors.append("OPENAI_ANALYSIS_TEMPERATURE must be between 0.0 and 1.0")
+        
+        if not 0.0 <= cls.OPENAI_EXECUTION_TEMPERATURE <= 1.0:
+            errors.append("OPENAI_EXECUTION_TEMPERATURE must be between 0.0 and 1.0")
+        
+        if errors:
+            raise ValueError(f"Configuration errors: {'; '.join(errors)}")
+        
+        return True
+    
+    @classmethod
+    def get_model_info(cls) -> dict:
+        """Get information about the configured models"""
+        return {
+            "analysis_model": {
+                "name": cls.OPENAI_ANALYSIS_MODEL,
+                "temperature": cls.OPENAI_ANALYSIS_TEMPERATURE,
+                "max_tokens": cls.OPENAI_ANALYSIS_MAX_TOKENS,
+                "purpose": "Query analysis and improvement"
+            },
+            "execution_model": {
+                "name": cls.OPENAI_EXECUTION_MODEL,
+                "temperature": cls.OPENAI_EXECUTION_TEMPERATURE,
+                "max_tokens": cls.OPENAI_EXECUTION_MAX_TOKENS,
+                "purpose": "SQL generation and answer generation"
+            },
+            "dual_llm_enabled": cls.ENABLE_DUAL_LLM,
+            "query_analysis_enabled": cls.ENABLE_QUERY_ANALYSIS
+        }
+
+
+# ========================================================================
+# USAGE EXAMPLE
+# ========================================================================
 
 if __name__ == "__main__":
-    success = debug_env_loading()
-    if not success:
-        print(f"\n❌ Environment setup has issues. Please fix them before running your application.")
-        sys.exit(1)
-    else:
-        print(f"\n🚀 Environment setup is working correctly!")
-        sys.exit(0)
+    # Load environment variables
+    from dotenv import load_dotenv
+    load_dotenv()
+    
+    # Validate configuration
+    try:
+        Config.validate_config()
+        print("✅ Configuration validated successfully")
+        
+        # Print model information
+        model_info = Config.get_model_info()
+        print(f"\n🤖 Model Configuration:")
+        print(f"   Analysis Model: {model_info['analysis_model']['name']}")
+        print(f"   Execution Model: {model_info['execution_model']['name']}")
+        print(f"   Dual LLM Enabled: {model_info['dual_llm_enabled']}")
+        
+    except ValueError as e:
+        print(f"❌ Configuration error: {e}")
+        exit(1)
