@@ -444,6 +444,31 @@ body {
     color: var(--text-secondary);
 }
 
+.table-download-btn {
+    background-color: var(--success-color);
+    color: white;
+    border: none;
+    border-radius: var(--border-radius);
+    padding: var(--spacing-xs) var(--spacing-sm);
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    margin-left: var(--spacing-sm);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+}
+
+.table-download-btn:hover {
+    background-color: #059669;
+}
+
+.table-download-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
 .toggle-icon {
     transition: transform 0.3s;
     width: 20px;

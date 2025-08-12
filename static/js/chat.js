@@ -298,6 +298,24 @@ class FlightOpsChat {
         const headerInfo = document.createElement('div');
         headerInfo.className = 'table-header-info';
         headerInfo.textContent = `${data.length} rows`;
+        
+        // Create download button
+        const downloadBtn = document.createElement('button');
+        downloadBtn.className = 'table-download-btn';
+        downloadBtn.title = 'Download as CSV';
+        downloadBtn.innerHTML = `
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7,10 12,15 17,10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            CSV
+        `;
+        downloadBtn.addEventListener('click', (e) => {
+            e.stopPropagation(); // Prevent table toggle when clicking download
+            this.downloadTableAsCSV(data, 'query_results.csv');
+        });
+        
         const toggleIcon = document.createElement('svg');
         toggleIcon.className = 'toggle-icon';
         toggleIcon.innerHTML = `
@@ -307,6 +325,7 @@ class FlightOpsChat {
         `;
         header.appendChild(headerTitle);
         header.appendChild(headerInfo);
+        header.appendChild(downloadBtn);
         header.appendChild(toggleIcon);
         // Create content area
         const contentArea = document.createElement('div');
@@ -416,6 +435,81 @@ class FlightOpsChat {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    }
+    
+    // CSV Download functionality
+    downloadTableAsCSV(data, filename = 'table_data.csv') {
+        try {
+            console.log('🔽 [DEBUG] Chat JS → Starting CSV download for', data.length, 'rows');
+            
+            if (!data || data.length === 0) {
+                console.log('⚠️ [DEBUG] Chat JS → No data to download');
+                this.showError('No data available to download');
+                return;
+            }
+            
+            // Get column headers
+            const columns = Object.keys(data[0]);
+            console.log('📊 [DEBUG] Chat JS → CSV columns:', columns);
+            
+            // Create CSV content
+            let csvContent = '';
+            
+            // Add header row
+            csvContent += columns.map(col => this.escapeCSVField(col)).join(',') + '\n';
+            
+            // Add data rows
+            data.forEach(row => {
+                const rowData = columns.map(col => {
+                    const value = row[col];
+                    return this.escapeCSVField(value);
+                });
+                csvContent += rowData.join(',') + '\n';
+            });
+            
+            console.log('📝 [DEBUG] Chat JS → CSV content length:', csvContent.length);
+            
+            // Create and trigger download
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            
+            if (link.download !== undefined) {
+                const url = URL.createObjectURL(blob);
+                link.setAttribute('href', url);
+                link.setAttribute('download', filename);
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+                
+                console.log('✅ [DEBUG] Chat JS → CSV download triggered successfully');
+                this.logDebug('CSV download completed', { filename, rows: data.length, columns: columns.length });
+            } else {
+                throw new Error('Download not supported in this browser');
+            }
+            
+        } catch (error) {
+            console.error('💥 [DEBUG] Chat JS → CSV download failed:', error);
+            this.logError('CSV download failed', { error: error.message, filename });
+            this.showError('Failed to download CSV: ' + error.message);
+        }
+    }
+    
+    // Helper function to escape CSV fields
+    escapeCSVField(field) {
+        if (field === null || field === undefined) {
+            return '';
+        }
+        
+        let fieldStr = String(field);
+        
+        // If field contains comma, newline, or quote, wrap in quotes and escape internal quotes
+        if (fieldStr.includes(',') || fieldStr.includes('\n') || fieldStr.includes('\r') || fieldStr.includes('"')) {
+            fieldStr = '"' + fieldStr.replace(/"/g, '""') + '"';
+        }
+        
+        return fieldStr;
     }
     
     // Missing UI methods - added for compatibility

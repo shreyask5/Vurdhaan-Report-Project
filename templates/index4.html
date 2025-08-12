@@ -814,6 +814,63 @@
             display: block;
             max-width: 100%;
         }
+
+        /* Download button styles */
+        .download-csv-btn {
+            background-color: var(--success-color);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 4px 8px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            margin-left: 8px;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            min-width: 60px;
+            justify-content: center;
+        }
+
+        .download-csv-btn:hover {
+            background-color: #059669;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(16, 185, 129, 0.2);
+        }
+
+        .download-csv-btn svg {
+            width: 14px;
+            height: 14px;
+        }
+
+        .category-header .download-csv-btn {
+            background-color: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .category-header .download-csv-btn:hover {
+            background-color: rgba(255, 255, 255, 0.3);
+            border-color: rgba(255, 255, 255, 0.5);
+        }
+
+        .reason-header .download-csv-btn {
+            background-color: var(--success-color);
+            color: white;
+        }
+
+        .sequence-table-header .download-csv-btn {
+            background-color: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .sequence-table-header .download-csv-btn:hover {
+            background-color: rgba(255, 255, 255, 0.3);
+            border-color: rgba(255, 255, 255, 0.5);
+        }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 </head>
@@ -844,12 +901,15 @@
             <form id="parametersForm">
                 <div class="form-grid">
                     <div class="form-group">
-                        <label for="startDate">Start Date</label>
-                        <input type="date" id="startDate" name="start_date" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="endDate">End Date</label>
-                        <input type="date" id="endDate" name="end_date" required>
+                        <label for="monitoringYear">Monitoring Year</label>
+                        <select id="monitoringYear" name="monitoring_year" required>
+                            <option value="2020">2020 (01/01/2020 - 31/12/2020)</option>
+                            <option value="2021">2021 (01/01/2021 - 31/12/2021)</option>
+                            <option value="2022">2022 (01/01/2022 - 31/12/2022)</option>
+                            <option value="2023">2023 (01/01/2023 - 31/12/2023)</option>
+                            <option value="2024" selected>2024 (01/01/2024 - 31/12/2024)</option>
+                            <option value="2025">2025 (01/01/2025 - 31/12/2025)</option>
+                        </select>
                     </div>
                     <div class="form-group">
                         <label for="dateFormat">Date Format</label>
@@ -964,6 +1024,186 @@
             applyErrorBoxStyling();
             markLastInSequence();
         });
+
+        // CSV Download Helper Functions
+        function escapeCSVField(field) {
+            if (field === null || field === undefined) {
+                return '';
+            }
+            
+            let fieldStr = String(field);
+            
+            // If field contains comma, newline, or quote, wrap in quotes and escape internal quotes
+            if (fieldStr.includes(',') || fieldStr.includes('\n') || fieldStr.includes('\r') || fieldStr.includes('"')) {
+                fieldStr = '"' + fieldStr.replace(/"/g, '""') + '"';
+            }
+            
+            return fieldStr;
+        }
+
+        function downloadCSV(data, filename) {
+            try {
+                console.log('📥 [DEBUG] Starting CSV download:', filename, 'Rows:', data.length);
+                
+                if (!data || data.length === 0) {
+                    alert('No data available to download');
+                    return;
+                }
+                
+                // Get column headers from first row
+                const columns = Object.keys(data[0]);
+                
+                // Create CSV content
+                let csvContent = '';
+                
+                // Add header row
+                csvContent += columns.map(col => escapeCSVField(col)).join(',') + '\n';
+                
+                // Add data rows
+                data.forEach(row => {
+                    const rowData = columns.map(col => {
+                        const value = row[col];
+                        return escapeCSVField(value);
+                    });
+                    csvContent += rowData.join(',') + '\n';
+                });
+                
+                // Create and trigger download
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement('a');
+                
+                if (link.download !== undefined) {
+                    const url = URL.createObjectURL(blob);
+                    link.setAttribute('href', url);
+                    link.setAttribute('download', filename);
+                    link.style.visibility = 'hidden';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    URL.revokeObjectURL(url);
+                    
+                    console.log('✅ [DEBUG] CSV download completed');
+                } else {
+                    alert('Download not supported in this browser');
+                }
+                
+            } catch (error) {
+                console.error('💥 [DEBUG] CSV download failed:', error);
+                alert('Failed to download CSV: ' + error.message);
+            }
+        }
+
+        function downloadCategoryCSV(categoryIndex) {
+            try {
+                const category = errorData.categories[categoryIndex];
+                const categoryName = category.name.replace(/[^a-zA-Z0-9]/g, '_');
+                const filename = `${categoryName}_errors.csv`;
+                
+                console.log('📂 [DEBUG] Downloading category CSV:', categoryName);
+                
+                const allRowsData = [];
+                
+                // Process each error group in the category
+                category.errors.forEach(errorGroup => {
+                    errorGroup.rows.forEach(rowError => {
+                        if (!rowError.file_level) {
+                            const rowData = errorData.rows_data[rowError.row_idx] || {};
+                            const enrichedRow = {
+                                'Error_Category': category.name,
+                                'Error_Reason': errorGroup.reason,
+                                'Error_Details': rowError.cell_data || '',
+                                'Row_Index': rowError.row_idx,
+                                ...rowData
+                            };
+                            allRowsData.push(enrichedRow);
+                        }
+                    });
+                });
+                
+                downloadCSV(allRowsData, filename);
+                
+            } catch (error) {
+                console.error('💥 [DEBUG] Category CSV download failed:', error);
+                alert('Failed to download category CSV: ' + error.message);
+            }
+        }
+
+        function downloadReasonGroupCSV(categoryIndex, reasonIndex) {
+            try {
+                const category = errorData.categories[categoryIndex];
+                const errorGroup = category.errors[reasonIndex];
+                const reasonName = errorGroup.reason.replace(/[^a-zA-Z0-9]/g, '_');
+                const filename = `${reasonName}_errors.csv`;
+                
+                console.log('📊 [DEBUG] Downloading reason group CSV:', reasonName);
+                
+                const reasonRowsData = [];
+                
+                errorGroup.rows.forEach(rowError => {
+                    if (!rowError.file_level) {
+                        const rowData = errorData.rows_data[rowError.row_idx] || {};
+                        const enrichedRow = {
+                            'Error_Category': category.name,
+                            'Error_Reason': errorGroup.reason,
+                            'Error_Details': rowError.cell_data || '',
+                            'Row_Index': rowError.row_idx,
+                            ...rowData
+                        };
+                        reasonRowsData.push(enrichedRow);
+                    }
+                });
+                
+                downloadCSV(reasonRowsData, filename);
+                
+            } catch (error) {
+                console.error('💥 [DEBUG] Reason group CSV download failed:', error);
+                alert('Failed to download reason group CSV: ' + error.message);
+            }
+        }
+
+        function downloadSequenceTableCSV(sequenceContainer) {
+            try {
+                const table = sequenceContainer.querySelector('.sequence-table');
+                if (!table) {
+                    alert('No table found to download');
+                    return;
+                }
+                
+                const headerText = sequenceContainer.querySelector('.sequence-table-header').textContent;
+                const filename = `${headerText.replace(/[^a-zA-Z0-9]/g, '_')}.csv`;
+                
+                console.log('🔄 [DEBUG] Downloading sequence table CSV:', filename);
+                
+                const tableData = [];
+                const headers = [];
+                
+                // Get headers
+                const headerRow = table.querySelector('thead tr');
+                if (headerRow) {
+                    headerRow.querySelectorAll('th').forEach(th => {
+                        headers.push(th.textContent.trim());
+                    });
+                }
+                
+                // Get data rows
+                const dataRows = table.querySelectorAll('tbody tr');
+                dataRows.forEach(row => {
+                    const rowData = {};
+                    row.querySelectorAll('td').forEach((td, index) => {
+                        const input = td.querySelector('input');
+                        const cellValue = input ? input.value : td.textContent.trim();
+                        rowData[headers[index] || `Column_${index + 1}`] = cellValue;
+                    });
+                    tableData.push(rowData);
+                });
+                
+                downloadCSV(tableData, filename);
+                
+            } catch (error) {
+                console.error('💥 [DEBUG] Sequence table CSV download failed:', error);
+                alert('Failed to download sequence table CSV: ' + error.message);
+            }
+        }
 
         // Global variables
         let currentFileId = null;
@@ -1094,25 +1334,11 @@
         }
 
         // Initialize
-        function formatAsYMD(date) {
-            const yyyy = date.getFullYear();
-            // month is zero-indexed, so add 1 and pad to two digits
-            const mm = String(date.getMonth() + 1).padStart(2, "0");
-            const dd = String(date.getDate()).padStart(2, "0");
-            return `${yyyy}-${mm}-${dd}`;
-        }
 
         document.addEventListener('DOMContentLoaded', function() {
             setupDragDrop();
             setupFileInput();
             setupParametersForm();
-            
-            // Set default dates
-            const startOfYear = new Date(2024, 0, 1);
-            const endOfYear = new Date(2024, 11, 31);
-            
-            document.getElementById("startDate").value = formatAsYMD(startOfYear);
-            document.getElementById("endDate").value   = formatAsYMD(endOfYear);
         });
 
         // File upload handling
@@ -1180,9 +1406,11 @@
                 e.preventDefault();
                 
                 // Collect parameters
+                const monitoringYear = document.getElementById('monitoringYear').value;
                 validationParams = {
-                    start_date: document.getElementById('startDate').value,
-                    end_date: document.getElementById('endDate').value,
+                    start_date: `${monitoringYear}-01-01`,
+                    end_date: `${monitoringYear}-12-31`,
+                    monitoring_year: monitoringYear,
                     date_format: document.getElementById('dateFormat').value,
                     flight_starts_with: document.getElementById('flightPrefix').value
                 };
@@ -1457,7 +1685,30 @@
             // Create header
             const header = document.createElement('div');
             header.className = 'sequence-table-header';
-            header.textContent = `Sequence Error: ${sequence.errorCode}`;
+            header.style.display = 'flex';
+            header.style.justifyContent = 'space-between';
+            header.style.alignItems = 'center';
+            
+            const headerText = document.createElement('span');
+            headerText.textContent = `Sequence Error: ${sequence.errorCode}`;
+            
+            const downloadBtn = document.createElement('button');
+            downloadBtn.className = 'download-csv-btn';
+            downloadBtn.title = 'Download Sequence Table as CSV';
+            downloadBtn.innerHTML = `
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7,10 12,15 17,10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+            `;
+            downloadBtn.onclick = (e) => {
+                e.stopPropagation();
+                downloadSequenceTableCSV(container);
+            };
+            
+            header.appendChild(headerText);
+            header.appendChild(downloadBtn);
             container.appendChild(header);
 
             // Create table
@@ -1721,10 +1972,39 @@
                     // Category header
                     const header = document.createElement('div');
                     header.className = 'category-header';
-                    header.innerHTML = `
-                        <div class="category-name">${category.name}</div>
-                        <div class="category-count">${category.errors.reduce((sum, err) => sum + err.rows.length, 0)} errors</div>
+                    
+                    const categoryName = document.createElement('div');
+                    categoryName.className = 'category-name';
+                    categoryName.textContent = category.name;
+                    
+                    const categoryInfo = document.createElement('div');
+                    categoryInfo.style.display = 'flex';
+                    categoryInfo.style.alignItems = 'center';
+                    
+                    const categoryCount = document.createElement('div');
+                    categoryCount.className = 'category-count';
+                    categoryCount.textContent = `${category.errors.reduce((sum, err) => sum + err.rows.length, 0)} errors`;
+                    
+                    const downloadBtn = document.createElement('button');
+                    downloadBtn.className = 'download-csv-btn';
+                    downloadBtn.title = 'Download Category as CSV';
+                    downloadBtn.innerHTML = `
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="7,10 12,15 17,10"/>
+                            <line x1="12" y1="15" x2="12" y2="3"/>
+                        </svg>
                     `;
+                    downloadBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        downloadCategoryCSV(catIndex);
+                    };
+                    
+                    categoryInfo.appendChild(categoryCount);
+                    categoryInfo.appendChild(downloadBtn);
+                    
+                    header.appendChild(categoryName);
+                    header.appendChild(categoryInfo);
                     header.onclick = () => toggleCategory(catIndex);
                     
                     // Category content
@@ -1785,10 +2065,40 @@
                             reasonDiv.className = 'reason-group';
                             const reasonHeader = document.createElement('div');
                             reasonHeader.className = 'reason-header';
-                            reasonHeader.innerHTML = `
-                                <div class="reason-name">${errorGroup.reason}</div>
-                                <div class="reason-count">${errorGroup.rows.length} rows</div>
+                            
+                            const reasonName = document.createElement('div');
+                            reasonName.className = 'reason-name';
+                            reasonName.textContent = errorGroup.reason;
+                            
+                            const reasonInfo = document.createElement('div');
+                            reasonInfo.style.display = 'flex';
+                            reasonInfo.style.alignItems = 'center';
+                            
+                            const reasonCount = document.createElement('div');
+                            reasonCount.className = 'reason-count';
+                            reasonCount.textContent = `${errorGroup.rows.length} rows`;
+                            
+                            const downloadBtn = document.createElement('button');
+                            downloadBtn.className = 'download-csv-btn';
+                            downloadBtn.title = 'Download Reason Group as CSV';
+                            downloadBtn.innerHTML = `
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                    <polyline points="7,10 12,15 17,10"/>
+                                    <line x1="12" y1="15" x2="12" y2="3"/>
+                                </svg>
                             `;
+                            downloadBtn.onclick = (e) => {
+                                e.stopPropagation();
+                                const reasonIndex = category.errors.indexOf(errorGroup);
+                                downloadReasonGroupCSV(catIndex, reasonIndex);
+                            };
+                            
+                            reasonInfo.appendChild(reasonCount);
+                            reasonInfo.appendChild(downloadBtn);
+                            
+                            reasonHeader.appendChild(reasonName);
+                            reasonHeader.appendChild(reasonInfo);
                             reasonHeader.onclick = () => toggleReason(reasonHeader.nextElementSibling);
                             const reasonContent = document.createElement('div');
                             reasonContent.className = 'reason-content';
