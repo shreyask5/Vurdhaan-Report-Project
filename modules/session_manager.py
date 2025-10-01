@@ -151,10 +151,10 @@ class SessionManager:
             'status': 'initializing',
             'message_count': 0,
             'server_info': {
-                'hostname': os.uname().nodename,
+                'hostname': os.environ.get('COMPUTERNAME', os.environ.get('HOSTNAME', 'unknown')),
                 'python_version': sys.version,
                 'working_directory': os.getcwd(),
-                'user': os.environ.get('USER', 'unknown')
+                'user': os.environ.get('USERNAME', os.environ.get('USER', 'unknown'))
             }
         }
         

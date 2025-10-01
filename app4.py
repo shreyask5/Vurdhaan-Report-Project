@@ -193,42 +193,48 @@ def detect_encoding(file_path):
 
 def reorder_csv_columns(df, column_mapping, required_columns):
     """
-    Reorder DataFrame columns based on mapping and rename to required columns
+    Reorder DataFrame columns based on mapping and rename to required columns.
+    Creates a new DataFrame with ONLY the mapped columns in the exact order specified.
+    All other columns from the original CSV are excluded.
 
     Args:
         df: Original DataFrame with uploaded columns
-        column_mapping: List of original column names in required order (15 items)
-        required_columns: List of target column names (15 items)
+        column_mapping: List of original column names in required order
+        required_columns: List of target column names (must match length of column_mapping)
 
     Returns:
-        DataFrame with reordered and renamed columns
+        DataFrame with ONLY the mapped columns, reordered and renamed
     """
     print(f"Reordering CSV columns...")
-    print(f"Original columns: {list(df.columns)}")
-    print(f"Column mapping: {column_mapping}")
-    print(f"Required columns: {required_columns}")
+    print(f"Original columns ({len(df.columns)}): {list(df.columns)}")
+    print(f"Column mapping ({len(column_mapping)}): {column_mapping}")
+    print(f"Required columns ({len(required_columns)}): {required_columns}")
 
     try:
-        # Validate mapping length
-        if len(column_mapping) != 15 or len(required_columns) != 15:
-            raise ValueError(f"Column mapping and required columns must have exactly 15 items. Got {len(column_mapping)} and {len(required_columns)}")
+        # Validate mapping length matches required columns length
+        if len(column_mapping) != len(required_columns):
+            raise ValueError(f"Column mapping and required columns must have the same length. Got {len(column_mapping)} and {len(required_columns)}")
 
         # Validate all mapped columns exist in DataFrame
         missing_columns = [col for col in column_mapping if col not in df.columns]
         if missing_columns:
             raise ValueError(f"Mapped columns not found in CSV: {missing_columns}")
 
-        # Create new DataFrame with only mapped columns in required order
-        reordered_df = pd.DataFrame()
+        # Create new DataFrame with ONLY the mapped columns in exact required order
+        # This automatically excludes any unmapped columns from the original CSV
+        reordered_df = pd.DataFrame(index=df.index)
 
         for original_col, required_col in zip(column_mapping, required_columns):
-            reordered_df[required_col] = df[original_col]
+            reordered_df[required_col] = df[original_col].values
 
-        print(f"Successfully reordered columns. New columns: {list(reordered_df.columns)}")
+        print(f"✓ Successfully reordered and renamed columns")
+        print(f"✓ New DataFrame has {len(reordered_df.columns)} columns: {list(reordered_df.columns)}")
+        print(f"✓ Preserved {len(reordered_df)} rows")
+
         return reordered_df
 
     except Exception as e:
-        print(f"Error reordering columns: {e}")
+        print(f"✗ Error reordering columns: {e}")
         raise
 
 def cleanup_old_uploads():
@@ -337,8 +343,9 @@ def upload_csv():
         end_date = request.form.get('end_date')
         date_format = request.form.get('date_format', 'DMY')
         flight_starts_with = request.form.get('flight_starts_with', '')
-        
-        print(f"Validation parameters - Start: {start_date}, End: {end_date}, Format: {date_format}, Flight prefix: {flight_starts_with}")
+        fuel_method = request.form.get('fuel_method', 'Block Off - Block On')  # Default to Block Off - Block On
+
+        print(f"Validation parameters - Start: {start_date}, End: {end_date}, Format: {date_format}, Flight prefix: {flight_starts_with}, Fuel method: {fuel_method}")
         
         # Convert date strings to datetime objects
         start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
@@ -381,15 +388,32 @@ def upload_csv():
                 column_mapping = json.loads(column_mapping_json)
                 print(f"Column mapping received: {column_mapping}")
 
-                # Define required columns in exact order
-                required_columns = [
-                    'Date', 'A/C Registration', 'Flight', 'A/C Type',
-                    'ATD (UTC) Block out', 'ATA (UTC) Block in',
-                    'Origin ICAO', 'Destination ICAO',
-                    'Uplift Volume', 'Uplift Density', 'Uplift weight',
-                    'Remaining Fuel From Prev. Flight', 'Block off Fuel',
-                    'Block on Fuel', 'Fuel Type'
-                ]
+                # Define required columns based on fuel method
+                if fuel_method == 'Block Off - Block On':
+                    required_columns = [
+                        'Date', 'A/C Registration', 'Flight No', 'A/C Type',
+                        'ATD (UTC) Block Off', 'ATA (UTC) Block On',
+                        'Origin ICAO', 'Destination ICAO',
+                        'Block Off Fuel', 'Block On Fuel', 'Fuel Consumption'
+                    ]
+                elif fuel_method == 'Method B':
+                    required_columns = [
+                        'Date', 'A/C Registration', 'Flight No', 'A/C Type',
+                        'ATD (UTC) Block Off', 'ATA (UTC) Block On',
+                        'Origin ICAO', 'Destination ICAO',
+                        'Uplift weight', 'Remaining Fuel From Prev. Flight',
+                        'Block On Fuel', 'Fuel Consumption'
+                    ]
+                else:
+                    # Fallback to all columns (backward compatibility)
+                    required_columns = [
+                        'Date', 'A/C Registration', 'Flight No', 'A/C Type',
+                        'ATD (UTC) Block Off', 'ATA (UTC) Block On',
+                        'Origin ICAO', 'Destination ICAO',
+                        'Uplift Volume', 'Uplift Density', 'Uplift weight',
+                        'Remaining Fuel From Prev. Flight', 'Block Off Fuel',
+                        'Block On Fuel', 'Fuel Consumption'
+                    ]
 
                 # Reorder and rename columns
                 result_df = reorder_csv_columns(result_df, column_mapping, required_columns)
@@ -424,7 +448,8 @@ def upload_csv():
             date_format=date_format,
             flight_starts_with=flight_starts_with,
             start_date=start_date,
-            end_date=end_date
+            end_date=end_date,
+            fuel_method=fuel_method
         )
         
         # Store metadata
@@ -435,6 +460,7 @@ def upload_csv():
             'end_date': end_date,
             'date_format': date_format,
             'flight_starts_with': flight_starts_with,
+            'fuel_method': fuel_method,
             'upload_time': datetime.now().isoformat(),
             'is_valid': is_valid,
             'processed_path': processed_path,
@@ -506,12 +532,12 @@ def get_errors(file_id):
                 try:
                     # Field mappings (same as in helper)
                     field_map = {
-                        "Date": "d", "A/C Registration": "r", "Flight": "f", "A/C Type": "t",
-                        "ATD (UTC) Block out": "o", "ATA (UTC) Block in": "i", 
+                        "Date": "d", "A/C Registration": "r", "Flight No": "f", "A/C Type": "t",
+                        "ATD (UTC) Block Off": "o", "ATA (UTC) Block On": "i",
                         "Origin ICAO": "or", "Destination ICAO": "de", "Uplift Volume": "uv",
-                        "Uplift Density": "ud", "Uplift weight": "uw", 
-                        "Remaining Fuel From Prev. Flight": "rf", "Block off Fuel": "bf",
-                        "Block on Fuel": "bo", "Fuel Type": "ft"
+                        "Uplift Density": "ud", "Uplift weight": "uw",
+                        "Remaining Fuel From Prev. Flight": "rf", "Block Off Fuel": "bf",
+                        "Block On Fuel": "bo", "Fuel Consumption": "fc"
                     }
                     reverse_field_map = {v: k for k, v in field_map.items()}
                     
@@ -669,7 +695,8 @@ def rerun_validation(file_id):
             date_format=metadata['date_format'],
             flight_starts_with=metadata['flight_starts_with'],
             start_date=metadata['start_date'],
-            end_date=metadata['end_date']
+            end_date=metadata['end_date'],
+            fuel_method=metadata.get('fuel_method', 'Block Off - Block On')  # Default to Block Off - Block On
         )
         
         # Update metadata
@@ -695,6 +722,76 @@ def rerun_validation(file_id):
         print(f"Re-validation failed: {e}")
         print(f"Traceback: {traceback.format_exc()}")
         return jsonify({'error': str(e)}), 500
+
+@app.route('/download/<file_id>/<csv_type>', methods=['GET'])
+def download_csv(file_id, csv_type):
+    """Download clean or errors CSV"""
+    print(f"Downloading {csv_type} CSV for file ID: {file_id}")
+    
+    try:
+        # Check if file exists
+        if file_id not in file_metadata:
+            print(f"File ID not found: {file_id}")
+            return jsonify({'error': 'File not found'}), 404
+        
+        metadata = file_metadata[file_id]
+        file_folder = metadata['folder']
+        
+        # Determine which CSV to download
+        if csv_type == 'clean':
+            csv_path = os.path.join(file_folder, 'clean_data.csv')
+            download_name = 'clean_data.csv'
+        elif csv_type == 'errors':
+            csv_path = os.path.join(file_folder, 'errors_data.csv')
+            download_name = 'errors_data.csv'
+        else:
+            return jsonify({'error': 'Invalid CSV type. Use "clean" or "errors"'}), 400
+        
+        # Check if file exists
+        if not os.path.exists(csv_path):
+            print(f"CSV file not found: {csv_path}")
+            
+            # Try to generate the CSV files if they don't exist
+            error_json_path = metadata.get('error_json_path')
+            original_path = metadata.get('original_path')
+            
+            if error_json_path and os.path.exists(error_json_path) and original_path and os.path.exists(original_path):
+                print(f"Attempting to generate CSV files from error JSON...")
+                
+                from helpers.clean import process_error_json_to_csvs
+                
+                # Load original data
+                encoding = detect_encoding(original_path)
+                original_df = pd.read_csv(original_path, encoding=encoding, encoding_errors='replace')
+                
+                # Generate CSVs
+                clean_csv, error_csv = process_error_json_to_csvs(
+                    error_json_path, original_df, file_folder
+                )
+                
+                print(f"Generated CSV files: clean={clean_csv}, error={error_csv}")
+                
+                # Update csv_path based on type
+                csv_path = clean_csv if csv_type == 'clean' else error_csv
+            else:
+                return jsonify({'error': f'{csv_type.capitalize()} CSV file not found'}), 404
+        
+        # Send file to client
+        print(f"Sending CSV file: {csv_path}")
+        return send_file(
+            csv_path,
+            as_attachment=True,
+            download_name=download_name,
+            mimetype='text/csv'
+        )
+        
+    except Exception as e:
+        error_details = {
+            'error': str(e),
+            'traceback': traceback.format_exc()
+        }
+        print(f"Error in download_csv: {error_details}")
+        return jsonify(error_details), 500
 
 @app.route('/report/<file_id>', methods=['POST'])
 def build_report_endpoint(file_id):

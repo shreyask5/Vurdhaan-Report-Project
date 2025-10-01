@@ -588,10 +588,10 @@ def mark_error(cell_data, reason, row_idx=None, category="Missing", column=None)
             
     return f"Error: {cell_data} : {reason}"
 
-def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", flight_starts_with="", start_date=None, end_date=None):
+def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", flight_starts_with="", start_date=None, end_date=None, fuel_method="Block Off - Block On"):
     """
     Validates and processes the CSV file, checking for all required columns and data quality.
-    
+
     Parameters:
     - file_path: Path to the original CSV file
     - result_df: DataFrame to validate
@@ -600,44 +600,56 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
     - flight_starts_with: Expected prefix for Flight numbers
     - start_date: Minimum allowed date
     - end_date: Maximum allowed date
-    
+    - fuel_method: Fuel calculation method ('Block Off - Block On' or 'Method B')
+
     Returns:
     - is_valid: Boolean indicating if the file is valid
     - output_path: Path to the processed file (empty string if validation failed)
     - result_df: DataFrame to validate
     - output_path_json: Path to the saved JSON file
     """
-    
+
     #Folder path file
     folder_path = os.path.dirname(file_path)
 
-    # Define all required columns
+    # Define all required columns (non-fuel columns that are always required)
     required_columns = [
-        'Origin ICAO', 
+        'Origin ICAO',
         'Destination ICAO',
-        'ATD (UTC) Block out',
-        'ATA (UTC) Block in',
-        'Uplift Volume', 
-        'Uplift Density', 
-        'Uplift weight', 
-        'Remaining Fuel From Prev. Flight', 
-        'Block off Fuel', 
-        'Block on Fuel',
-        'Date', 
+        'ATD (UTC) Block Off',
+        'ATA (UTC) Block On',
+        'Date',
         'A/C Registration',
-        'Flight', 
+        'Flight No',
         'A/C Type',
-        'Fuel Type'
+        'Fuel Consumption'
+        # 'Fuel Type'  # REMOVED: Fuel Type column has been removed from requirements
     ]
+
+    # Define fuel-specific required columns based on method
+    print("fuel_method: ", fuel_method)
+    if fuel_method == 'Block Off - Block On':
+        required_fuel_columns = ['Block Off Fuel', 'Block On Fuel']
+    elif fuel_method == 'Method B':
+        required_fuel_columns = ['Uplift weight', 'Remaining Fuel From Prev. Flight', 'Block On Fuel']
+    else:
+        # Fallback: require all fuel columns
+        required_fuel_columns = [
+            'Uplift Volume', 'Uplift Density', 'Uplift weight',
+            'Remaining Fuel From Prev. Flight', 'Block Off Fuel', 'Block On Fuel'
+        ]
+
+    # Combine required columns
+    all_required_columns = required_columns + required_fuel_columns
     
     # 1. CHECK FOR MISSING COLUMNS
     # Check if all required columns exist in the dataframe
-    missing_columns = [col for col in required_columns if col not in result_df.columns]
-    
+    missing_columns = [col for col in all_required_columns if col not in result_df.columns]
+
     # If any columns are missing, mark errors and return False
     if missing_columns:
         print(f"Error: The following required columns are missing: {missing_columns}")
-        
+
         # Log each missing column as a separate error
         for column in missing_columns:
             mark_error(
@@ -647,14 +659,14 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
                 "Column Missing",
                 column
             )
-        
+
         # Return False to indicate the file is incomplete, and empty string for file path
         output_file_json = generate_error_report(result_df, folder_path)
         return False, "",result_df, output_file_json
     
     # Sort the dataframe by Date, A/C Registration, and ATD
     result_df['Date'] = pd.to_datetime(result_df['Date'], dayfirst=True, errors='coerce')
-    result_df.sort_values(by=['A/C Registration', 'Date', 'ATD (UTC) Block out'], inplace=True)
+    result_df.sort_values(by=['A/C Registration', 'Date', 'ATD (UTC) Block Off'], inplace=True)
     
     # Reset index after sorting but keep original indices for error tracking
     result_df = result_df.reset_index(drop=False)
@@ -666,176 +678,160 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
     for idx, row in result_df.iterrows():
         # Use original row index for error tracking
         original_idx = row['index']
-        
-        for column in required_columns:
+
+        for column in all_required_columns:
             value = row[column]
             value_str = str(value).strip() if not pd.isna(value) else ""
-            
+
             # Check for missing data
             if pd.isna(value) or value_str == "":
                 mark_error("Missing data", f"{column} is missing", original_idx, "Missing", column)
     
-    # 3. CHECK FUEL TYPE VALUES
-    # Define allowed fuel types
-    allowed_fuel_types = ["Jet-A1", "Jet-A", "TS-1", "No. 3 Jet", "Jet-B", "AvGas"]
+    # 3. CHECK FUEL TYPE VALUES - REMOVED
+    # COMMENTED OUT: Fuel Type column has been removed from requirements
+    # # Define allowed fuel types
+    # allowed_fuel_types = ["Jet-A1", "Jet-A", "TS-1", "No. 3 Jet", "Jet-B", "AvGas"]
+    #
+    # print("Validating fuel types...")
+    # for idx, row in result_df.iterrows():
+    #     # Use original row index for error tracking
+    #     original_idx = row['index']
+    #
+    #     if 'Fuel Type' in result_df.columns:
+    #         fuel_type = row['Fuel Type']
+    #         if not pd.isna(fuel_type) and str(fuel_type).strip() != "":
+    #             if str(fuel_type) not in allowed_fuel_types:
+    #                 mark_error(
+    #                     str(fuel_type),
+    #                     f"Invalid fuel type. Must be one of: {', '.join(allowed_fuel_types)}",
+    #                     original_idx,
+    #                     "Fuel",
+    #                     "Fuel Type"
+    #                 )
     
-    print("Validating fuel types...")
+    # 4. FUEL CHECKING (Method-specific validation)
+    print(f"Validating fuel data using method: {fuel_method}...")
+
+    # Check each required fuel column for valid numeric values
     for idx, row in result_df.iterrows():
         # Use original row index for error tracking
         original_idx = row['index']
-        
-        if 'Fuel Type' in result_df.columns:
-            fuel_type = row['Fuel Type']
-            if not pd.isna(fuel_type) and str(fuel_type).strip() != "":
-                if str(fuel_type) not in allowed_fuel_types:
-                    mark_error(
-                        str(fuel_type),
-                        f"Invalid fuel type. Must be one of: {', '.join(allowed_fuel_types)}",
-                        original_idx,
-                        "Fuel",
-                        "Fuel Type"
-                    )
-    
-    # 4. FUEL CHECKING
-    print("Validating fuel data...")
-    fuel_columns = [
-        'Uplift Volume', 
-        'Uplift Density', 
-        'Uplift weight', 
-        'Remaining Fuel From Prev. Flight', 
-        'Block off Fuel', 
-        'Block on Fuel'
-    ]
-    
-    # Check each column for valid numeric values
-    for idx, row in result_df.iterrows():
-        # Use original row index for error tracking
-        original_idx = row['index']
-        
-        for column in fuel_columns:
+
+        for column in required_fuel_columns:
             if column in result_df.columns:
                 # Get the value
                 value = row[column]
-                
+
                 # We already checked for missing values in the centralized check
                 # Now check if value is numeric
                 try:
                     if not pd.isna(value):  # Only try to convert if not NaN
                         numeric_value = float(value)
-                        
+
                         # Additional validation: fuel values should be positive
                         if numeric_value < 0:
                             mark_error(value, f"{column} cannot be negative", original_idx, "Fuel", column)
                 except (ValueError, TypeError):
                     mark_error(value, f"{column} must be numeric", original_idx, "Fuel", column)
-    
-    # Check if Block off Fuel and Block on Fuel meet specific requirements
-    if "Block off Fuel" in result_df.columns and "Block on Fuel" in result_df.columns:
-        for idx, row in result_df.iterrows():
-            # Use original row index for error tracking
-            original_idx = row['index']
-            
-            try:
-                # Only process if both values are numeric and not missing
-                if (not pd.isna(row["Block off Fuel"]) and not pd.isna(row["Block on Fuel"]) and
-                    isinstance(row["Block off Fuel"], (int, float, str)) and 
-                    isinstance(row["Block on Fuel"], (int, float, str))):
-                    
-                    # Try to convert to floats for comparison
-                    block_off = float(row["Block off Fuel"])
-                    block_on = float(row["Block on Fuel"])
-                    
-                    # Block off fuel should be greater than block on fuel
-                    if block_off <= block_on:
-                        mark_error(f"Off: {block_off}, On: {block_on}", 
-                                "Block off fuel must be greater than block on fuel", 
-                                original_idx, "Fuel", ["Block off Fuel", "Block on Fuel"])
-            except (ValueError, TypeError):
-                # Skip this check if conversion fails - other checks will catch the numeric error
-                pass
-    
-    # Check if Uplift Volume * Uplift Density = Uplift weight
-    if all(col in result_df.columns for col in ['Uplift Volume', 'Uplift Density', 'Uplift weight']):
-        for idx, row in result_df.iterrows():
-            # Use original row index for error tracking
-            original_idx = row['index']
-            
-            try:
-                # Check if all three values are present and can be converted to floats
-                if (not pd.isna(row['Uplift Volume']) and 
-                    not pd.isna(row['Uplift Density']) and 
-                    not pd.isna(row['Uplift weight'])):
-                    
-                    uplift_volume = float(row['Uplift Volume'])
-                    uplift_density = float(row['Uplift Density'])
-                    uplift_weight = float(row['Uplift weight'])
-                    
-                    # Calculate expected weight
-                    expected_weight = uplift_volume * uplift_density
-                    
-                    # Allow for a small tolerance (0.5% difference) due to rounding
-                    tolerance = 0.005 * expected_weight
-                    
-                    if abs(expected_weight - uplift_weight) > tolerance:
-                        mark_error(
-                            f"Volume: {uplift_volume}, Density: {uplift_density}, Weight: {uplift_weight}", 
-                            f"Uplift Weight ({uplift_weight}) doesn't match Volume*Density ({expected_weight:.2f})",
-                            original_idx, "Fuel", ['Uplift Volume', 'Uplift Density', 'Uplift weight']
-                        )
-            except (ValueError, TypeError):
-                # Skip this check if conversion fails - other checks will catch the numeric error
-                pass
-    
-    # Check if fuel calculations are consistent
-    if all(col in result_df.columns for col in ['Remaining Fuel From Prev. Flight', 'Uplift weight', 'Block off Fuel']):
-        for idx, row in result_df.iterrows():
-            # Use original row index for error tracking
-            original_idx = row['index']
-            
-            try:
-                # Check if all three values are present and can be converted to floats
-                if (not pd.isna(row['Remaining Fuel From Prev. Flight']) and 
-                    not pd.isna(row['Uplift weight']) and 
-                    not pd.isna(row['Block off Fuel'])):
-                    
-                    prev_fuel = float(row['Remaining Fuel From Prev. Flight'])
-                    uplift = float(row['Uplift weight'])
-                    block_off = float(row['Block off Fuel'])
-                    
-                    # Calculate expected block off fuel
-                    expected_block_off = prev_fuel + uplift
-                    
-                    # Allow for a small tolerance (0.5% difference) due to rounding
-                    tolerance = 0.005 * expected_block_off
-                    
-                    if abs(expected_block_off - block_off) > tolerance:
-                        mark_error(
-                            f"Prev: {prev_fuel}, Uplift: {uplift}, Block Off: {block_off}", 
-                            f"Block off fuel ({block_off}) doesn't match Previous + Uplift ({expected_block_off:.2f})",
-                            original_idx, "Fuel", ['Remaining Fuel From Prev. Flight', 'Uplift weight', 'Block off Fuel']
-                        )
-            except (ValueError, TypeError):
-                # Skip this check if conversion fails - other checks will catch the numeric error
-                pass
-    
-    # Check for fuel consumption consistency
-    if all(col in result_df.columns for col in ['Block off Fuel', 'Block on Fuel']):
-        for idx, row in result_df.iterrows():
-            # Use original row index for error tracking
-            original_idx = row['index']
-            
-            try:
-                # Check if both values can be converted to floats
-                if not pd.isna(row['Block off Fuel']) and not pd.isna(row['Block on Fuel']):
-                    block_off = float(row['Block off Fuel'])
-                    block_on = float(row['Block on Fuel'])
-                    
-                    # Calculate fuel consumption
-                    fuel_consumption = block_off - block_on
 
+    # Also check Fuel Consumption column (common to all methods)
+    if 'Fuel Consumption' in result_df.columns:
+        for idx, row in result_df.iterrows():
+            original_idx = row['index']
+            value = row['Fuel Consumption']
+
+            try:
+                if not pd.isna(value):
+                    numeric_value = float(value)
+                    if numeric_value < 0:
+                        mark_error(value, "Fuel Consumption cannot be negative", original_idx, "Fuel", 'Fuel Consumption')
             except (ValueError, TypeError):
-                # Skip this check if conversion fails
-                pass
+                mark_error(value, "Fuel Consumption must be numeric", original_idx, "Fuel", 'Fuel Consumption')
+
+    # Method-specific validations
+    if fuel_method == 'Block Off - Block On':
+        # Block Off - Block On method validations
+        print("Performing Block Off - Block On method validations...")
+
+        # Check if Block Off Fuel > Block On Fuel
+        if all(col in result_df.columns for col in ['Block Off Fuel', 'Block On Fuel']):
+            for idx, row in result_df.iterrows():
+                original_idx = row['index']
+
+                try:
+                    if (not pd.isna(row["Block Off Fuel"]) and not pd.isna(row["Block On Fuel"])):
+                        block_off = float(row["Block Off Fuel"])
+                        block_on = float(row["Block On Fuel"])
+
+                        # Block off fuel should be greater than block on fuel
+                        if block_off <= block_on:
+                            mark_error(f"Off: {block_off}, On: {block_on}",
+                                    "Block Off fuel must be greater than Block On fuel",
+                                    original_idx, "Fuel", ["Block Off Fuel", "Block On Fuel"])
+                except (ValueError, TypeError):
+                    pass
+
+        # Check fuel consumption consistency: Fuel Consumption = Block Off - Block On
+        if all(col in result_df.columns for col in ['Block Off Fuel', 'Block On Fuel', 'Fuel Consumption']):
+            for idx, row in result_df.iterrows():
+                original_idx = row['index']
+
+                try:
+                    if (not pd.isna(row['Block Off Fuel']) and not pd.isna(row['Block On Fuel']) and
+                        not pd.isna(row['Fuel Consumption'])):
+                        block_off = float(row['Block Off Fuel'])
+                        block_on = float(row['Block On Fuel'])
+                        fuel_consumption = float(row['Fuel Consumption'])
+
+                        # Calculate expected fuel consumption
+                        expected_consumption = block_off - block_on
+
+                        # Allow for a small tolerance (0.5% difference) due to rounding
+                        tolerance = 0.005 * abs(expected_consumption) if expected_consumption != 0 else 0.01
+
+                        if abs(expected_consumption - fuel_consumption) > tolerance:
+                            mark_error(
+                                f"Block Off: {block_off}, Block On: {block_on}, Consumption: {fuel_consumption}",
+                                f"Fuel Consumption ({fuel_consumption}) doesn't match Block Off - Block On ({expected_consumption:.2f})",
+                                original_idx, "Fuel", ['Block Off Fuel', 'Block On Fuel', 'Fuel Consumption']
+                            )
+                except (ValueError, TypeError):
+                    pass
+
+    elif fuel_method == 'Method B':
+        # Method B validations
+        print("Performing Method B validations...")
+
+        # Check fuel consumption consistency: Fuel Consumption = (Remaining + Uplift) - Block On
+        if all(col in result_df.columns for col in ['Remaining Fuel From Prev. Flight', 'Uplift weight', 'Block On Fuel', 'Fuel Consumption']):
+            for idx, row in result_df.iterrows():
+                original_idx = row['index']
+
+                try:
+                    if (not pd.isna(row['Remaining Fuel From Prev. Flight']) and
+                        not pd.isna(row['Uplift weight']) and
+                        not pd.isna(row['Block On Fuel']) and
+                        not pd.isna(row['Fuel Consumption'])):
+
+                        prev_fuel = float(row['Remaining Fuel From Prev. Flight'])
+                        uplift = float(row['Uplift weight'])
+                        block_on = float(row['Block On Fuel'])
+                        fuel_consumption = float(row['Fuel Consumption'])
+
+                        # Calculate expected fuel consumption using Method B
+                        expected_consumption = (prev_fuel + uplift) - block_on
+
+                        # Allow for a small tolerance (0.5% difference) due to rounding
+                        tolerance = 0.005 * abs(expected_consumption) if expected_consumption != 0 else 0.01
+
+                        if abs(expected_consumption - fuel_consumption) > tolerance:
+                            mark_error(
+                                f"Prev: {prev_fuel}, Uplift: {uplift}, Block On: {block_on}, Consumption: {fuel_consumption}",
+                                f"Fuel Consumption ({fuel_consumption}) doesn't match (Prev + Uplift) - Block On ({expected_consumption:.2f})",
+                                original_idx, "Fuel", ['Remaining Fuel From Prev. Flight', 'Uplift weight', 'Block On Fuel', 'Fuel Consumption']
+                            )
+                except (ValueError, TypeError):
+                    pass
     
     # 5. DATE VALIDATION
     print("Validating dates...")
@@ -959,7 +955,7 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
     
     # 8. TIME FORMAT VALIDATION
     print("Validating time formats...")
-    time_columns = ['ATD (UTC) Block out', 'ATA (UTC) Block in']
+    time_columns = ['ATD (UTC) Block Off', 'ATA (UTC) Block On']
     
     # Function to validate and convert time format
     def validate_and_convert_time(time_str):
@@ -1260,12 +1256,12 @@ def generate_error_report(result_df, output_path, auto_generate_csvs=True):
     
     # Field mappings to reduce key repetition (for compression)
     field_map = {
-        "Date": "d", "A/C Registration": "r", "Flight": "f", "A/C Type": "t",
-        "ATD (UTC) Block out": "o", "ATA (UTC) Block in": "i", 
+        "Date": "d", "A/C Registration": "r", "Flight No": "f", "A/C Type": "t",
+        "ATD (UTC) Block Off": "o", "ATA (UTC) Block On": "i",
         "Origin ICAO": "or", "Destination ICAO": "de", "Uplift Volume": "uv",
-        "Uplift Density": "ud", "Uplift weight": "uw", 
-        "Remaining Fuel From Prev. Flight": "rf", "Block off Fuel": "bf",
-        "Block on Fuel": "bo", "Fuel Type": "ft"
+        "Uplift Density": "ud", "Uplift weight": "uw",
+        "Remaining Fuel From Prev. Flight": "rf", "Block Off Fuel": "bf",
+        "Block On Fuel": "bo", "Fuel Consumption": "fc"
     }
     
     # Reverse mapping for client-side decompression

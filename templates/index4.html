@@ -333,6 +333,83 @@
             font-size: 16px;
         }
 
+        /* Action Buttons Container */
+        .action-buttons-container {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            margin: 30px 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #f8f9ff 0%, #ffffff 100%);
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+        }
+
+        .button-row {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .button-row::before {
+            content: '';
+            width: 100%;
+            height: 0;
+            order: -1;
+        }
+
+        .primary-actions {
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 16px;
+        }
+
+        .download-actions {
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 16px;
+        }
+
+        .secondary-actions {
+            padding-bottom: 0;
+        }
+
+        .btn-highlight {
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn-highlight::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.3) 0%, transparent 70%);
+            animation: shimmer 3s infinite;
+        }
+
+        @keyframes shimmer {
+            0% {
+                transform: translate(-100%, -100%);
+            }
+            100% {
+                transform: translate(100%, 100%);
+            }
+        }
+
+        .btn-large {
+            padding: 16px 40px;
+            font-size: 18px;
+            font-weight: 700;
+            min-width: 280px;
+        }
+
+        .btn-large .btn-icon {
+            font-size: 20px;
+        }
+
         /* Loading Indicator */
         .loading {
             display: none;
@@ -1053,6 +1130,36 @@
             <p class="file-info" id="fileInfo"></p>
         </div>
 
+        <!-- Fuel Method Selection Section -->
+        <div id="fuelMethodSection" class="card mapping-section">
+            <h2>Fuel Calculation Method</h2>
+
+            <div class="mapping-info">
+                <strong>ℹ️ Info:</strong> Please select the fuel calculation method used in your data. This determines which fuel-related columns are required.
+            </div>
+
+            <div class="mapping-message">
+                <h2>Select Fuel Calculation Method:</h3>
+            </div>
+
+            <div class="column-selector-grid">
+                <button type="button" class="column-btn" id="fuelMethodBlockOff" onclick="selectFuelMethod('Block Off - Block On')">
+                    <div style="font-weight: 700; margin-bottom: 8px;">Block Off - Block On</div>
+                    <div style="font-size: 12px; opacity: 0.8;">Uses Block Off Fuel and Block On Fuel columns</div>
+                </button>
+                <button type="button" class="column-btn" id="fuelMethodB" onclick="selectFuelMethod('Method B')">
+                    <div style="font-weight: 700; margin-bottom: 8px;">Method B</div>
+                    <div style="font-size: 12px; opacity: 0.8;">Uses Remaining Fuel, Uplift Weight, and Block On Fuel columns</div>
+                </button>
+            </div>
+
+            <div class="mapping-navigation">
+                <button type="button" class="btn btn-primary btn-next" id="fuelMethodNextBtn" onclick="completeFuelMethodSelection()" disabled>
+                    Next →
+                </button>
+            </div>
+        </div>
+
         <!-- Mapping Section -->
         <div id="mappingSection" class="card mapping-section">
             <h2>Column Mapping</h2>
@@ -1146,13 +1253,36 @@
                 <div class="summary-grid" id="errorStats"></div>
             </div>
             
-            <div class="button-group">
-                <button class="btn btn-success" onclick="saveCorrections()">Save Corrections</button>
-                <button class="btn btn-danger" onclick="ignoreErrors()">Ignore Remaining Errors</button>
-                <button class="btn btn-primary" onclick="openChatSession()" id="chatButton">
-                    <span class="btn-icon">💬</span> Analyze Data with AI Chat
-                </button>
-                <button class="btn btn-secondary" onclick="resetUpload()">Start Over</button>
+            <div class="action-buttons-container">
+                <!-- Primary Actions -->
+                <div class="button-row primary-actions">
+                    <button class="btn btn-success" onclick="saveCorrections()">
+                        <span class="btn-icon">💾</span> Save Corrections
+                    </button>
+                    <button class="btn btn-danger" onclick="ignoreErrors()">
+                        <span class="btn-icon">⚠️</span> Ignore Remaining Errors
+                    </button>
+                </div>
+                
+                <!-- Download Actions -->
+                <div class="button-row download-actions">
+                    <button class="btn btn-primary" onclick="downloadCleanCSV()">
+                        <span class="btn-icon">📥</span> Download Clean Data CSV
+                    </button>
+                    <button class="btn btn-primary" onclick="downloadErrorsCSV()">
+                        <span class="btn-icon">📥</span> Download Errors CSV
+                    </button>
+                </div>
+                
+                <!-- Analysis & Reset Actions -->
+                <div class="button-row secondary-actions">
+                    <button class="btn btn-primary btn-highlight" onclick="openChatSession()" id="chatButton">
+                        <span class="btn-icon">💬</span> Analyze Data with AI Chat
+                    </button>
+                    <button class="btn btn-secondary" onclick="resetUpload()">
+                        <span class="btn-icon">🔄</span> Start Over
+                    </button>
+                </div>
             </div>
 
             <div id="errorCategoriesContainer"></div>
@@ -1163,9 +1293,20 @@
             <div class="success-icon">✓</div>
             <h2>Validation Complete!</h2>
             <p>Your CSV file has been successfully validated.</p>
-            <div class="button-group">
-                <button class="btn btn-primary" onclick="generateReport()">Generate CORSIA Report</button>
-                <button class="btn btn-secondary" onclick="revalidate()">Re-Validate & Process Again</button>
+            <div class="action-buttons-container">
+                <div class="button-row">
+                    <button class="btn btn-primary btn-large" onclick="generateReport()">
+                        <span class="btn-icon">📊</span> Generate CORSIA Report
+                    </button>
+                </div>
+                <div class="button-row">
+                    <button class="btn btn-success" onclick="downloadCleanCSV()">
+                        <span class="btn-icon">📥</span> Download Clean Data CSV
+                    </button>
+                    <button class="btn btn-secondary" onclick="revalidate()">
+                        <span class="btn-icon">🔄</span> Re-Validate & Process Again
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -1211,17 +1352,13 @@
             markLastInSequence();
         });
 
-        // Observe changes to the error section
-        const errorSection = document.getElementById('errorSection');
-        if (errorSection) {
-            observer.observe(errorSection, { childList: true, subtree: true });
+        // Initialize observer when DOM is ready
+        function initErrorSectionObserver() {
+            const errorSectionElement = document.getElementById('errorSection');
+            if (errorSectionElement) {
+                observer.observe(errorSectionElement, { childList: true, subtree: true });
+            }
         }
-
-        // Also apply on initial load
-        document.addEventListener('DOMContentLoaded', () => {
-            applyErrorBoxStyling();
-            markLastInSequence();
-        });
 
         // CSV Download Helper Functions
         function escapeCSVField(field) {
@@ -1417,40 +1554,65 @@
         let currentMappingIndex = 0;
         let selectedColumnForCurrentStep = null;
         let currentFile = null;
+        let selectedFuelMethod = null;
 
-        // DOM elements
-        const uploadSection = document.getElementById('uploadSection');
-        const parametersSection = document.getElementById('parametersSection');
-        const loadingSection = document.getElementById('loadingSection');
-        const successSection = document.getElementById('successSection');
-        const alertMessage = document.getElementById('alertMessage');
-        const fileInput = document.getElementById('fileInput');
-        const fileInfo = document.getElementById('fileInfo');
-        const mappingSection = document.getElementById('mappingSection');
+        // DOM elements - will be initialized when DOM is ready
+        let uploadSection;
+        let parametersSection;
+        let loadingSection;
+        let successSection;
+        let alertMessage;
+        let fileInput;
+        let fileInfo;
+        let fuelMethodSection;
+        let mappingSection;
+        let errorSection;
 
-        // Add fixed column order
-        const columnOrder = [
-            "Date",
-            "A/C Registration",
-            "Flight",
-            "A/C Type",
-            "ATD (UTC) Block out",
-            "ATA (UTC) Block in",
-            "Origin ICAO",
-            "Destination ICAO",
-            "Uplift Volume",
-            "Uplift Density",
-            "Uplift weight",
-            "Remaining Fuel From Prev. Flight",
-            "Block off Fuel",
-            "Block on Fuel",
-            "Fuel Type"
-        ];
+        // Define column orders for different fuel methods
+        const fuelMethodColumns = {
+            "Block Off - Block On": [
+                "Date",
+                "A/C Registration",
+                "Flight No",
+                "A/C Type",
+                "ATD (UTC) Block Off",
+                "ATA (UTC) Block On",
+                "Origin ICAO",
+                "Destination ICAO",
+                "Block Off Fuel",
+                "Block On Fuel",
+                "Fuel Consumption"
+            ],
+            "Method B": [
+                "Date",
+                "A/C Registration",
+                "Flight No",
+                "A/C Type",
+                "ATD (UTC) Block Off",
+                "ATA (UTC) Block On",
+                "Origin ICAO",
+                "Destination ICAO",
+                "Uplift weight",
+                "Remaining Fuel From Prev. Flight",
+                "Block On Fuel",
+                "Fuel Consumption"
+            ]
+        };
+
+        // Get current column order based on selected fuel method
+        function getColumnOrder() {
+            return fuelMethodColumns[selectedFuelMethod] || [];
+        }
 
         // NEW: Function to parse error sequence from cell_data
         function parseErrorSequence(cellData) {
             if (!cellData) return null;
-            
+
+            // Ensure cellData is a string
+            if (typeof cellData !== 'string') {
+                return null;
+            }
+
             // Match pattern like "TCCOH : LTAF → LTAI"
             const match = cellData.match(/(\w+)\s*:\s*(\w+)\s*→\s*(\w+)/);
             if (match) {
@@ -1540,6 +1702,56 @@
         }
 
         // ============================================================================
+        // FUEL METHOD SELECTION FUNCTIONS
+        // ============================================================================
+
+        /**
+         * Select fuel calculation method
+         */
+        function selectFuelMethod(method) {
+            selectedFuelMethod = method;
+
+            // Update button states
+            document.getElementById('fuelMethodBlockOff').classList.remove('selected');
+            document.getElementById('fuelMethodB').classList.remove('selected');
+
+            if (method === 'Block Off - Block On') {
+                document.getElementById('fuelMethodBlockOff').classList.add('selected');
+            } else if (method === 'Method B') {
+                document.getElementById('fuelMethodB').classList.add('selected');
+            }
+
+            // Enable next button
+            document.getElementById('fuelMethodNextBtn').disabled = false;
+
+            console.log('Selected fuel method:', selectedFuelMethod);
+        }
+
+        /**
+         * Complete fuel method selection and proceed to column mapping
+         */
+        function completeFuelMethodSelection() {
+            if (!selectedFuelMethod) {
+                showAlert('Please select a fuel calculation method.', 'error');
+                return;
+            }
+
+            console.log('Fuel method selected:', selectedFuelMethod);
+
+            // Hide fuel method section and show mapping section
+            fuelMethodSection.style.display = 'none';
+            showMappingSection();
+        }
+
+        /**
+         * Show fuel method selection section
+         */
+        function showFuelMethodSection() {
+            uploadSection.style.display = 'none';
+            fuelMethodSection.style.display = 'block';
+        }
+
+        // ============================================================================
         // COLUMN MAPPING FUNCTIONS
         // ============================================================================
 
@@ -1575,20 +1787,22 @@
                 // Read columns from the uploaded file
                 uploadedColumns = await readCSVColumns(currentFile);
 
+                const columnOrder = getColumnOrder();
+                const requiredColumnCount = columnOrder.length;
+
                 // Validate minimum columns
-                if (uploadedColumns.length < 15) {
-                    showAlert(`CSV file must have at least 15 columns. Found ${uploadedColumns.length} columns.`, 'error');
+                if (uploadedColumns.length < requiredColumnCount) {
+                    showAlert(`CSV file must have at least ${requiredColumnCount} columns. Found ${uploadedColumns.length} columns.`, 'error');
                     resetUpload();
                     return;
                 }
 
                 // Initialize mapping state
-                columnMapping = new Array(15).fill(null);
+                columnMapping = new Array(requiredColumnCount).fill(null);
                 currentMappingIndex = 0;
                 selectedColumnForCurrentStep = null;
 
                 // Show mapping section
-                uploadSection.style.display = 'none';
                 mappingSection.style.display = 'block';
 
                 // Render first step
@@ -1606,14 +1820,16 @@
          */
         function renderMappingStep(index) {
             currentMappingIndex = index;
+            const columnOrder = getColumnOrder();
             const requiredColumn = columnOrder[index];
+            const totalColumns = columnOrder.length;
 
             // Update UI
             document.getElementById('currentRequiredColumn').textContent = requiredColumn;
-            document.getElementById('mappingCounter').textContent = `${index} of 15`;
+            document.getElementById('mappingCounter').textContent = `${index} of ${totalColumns}`;
 
             // Update progress bar
-            const progress = (index / 15) * 100;
+            const progress = (index / totalColumns) * 100;
             document.getElementById('mappingProgressFill').style.width = progress + '%';
 
             // Render column selector buttons
@@ -1668,6 +1884,8 @@
             const prevBtn = document.getElementById('mappingPrevBtn');
             const nextBtn = document.getElementById('mappingNextBtn');
             const completeBtn = document.getElementById('mappingCompleteBtn');
+            const columnOrder = getColumnOrder();
+            const totalColumns = columnOrder.length;
 
             // Previous button
             if (currentMappingIndex > 0) {
@@ -1677,7 +1895,7 @@
             }
 
             // Next/Complete button
-            if (currentMappingIndex < 14) {
+            if (currentMappingIndex < totalColumns - 1) {
                 // Not on last step
                 nextBtn.style.display = 'inline-block';
                 completeBtn.style.display = 'none';
@@ -1694,7 +1912,9 @@
          * Go to next mapping step
          */
         function nextMappingStep() {
-            if (currentMappingIndex < 14 && columnMapping[currentMappingIndex]) {
+            const columnOrder = getColumnOrder();
+            const totalColumns = columnOrder.length;
+            if (currentMappingIndex < totalColumns - 1 && columnMapping[currentMappingIndex]) {
                 renderMappingStep(currentMappingIndex + 1);
             }
         }
@@ -1712,6 +1932,9 @@
          * Complete mapping and proceed to parameters
          */
         function completeMappingSection() {
+            const columnOrder = getColumnOrder();
+            const totalColumns = columnOrder.length;
+
             // Validate all columns are mapped
             const unmappedIndices = [];
             columnMapping.forEach((col, idx) => {
@@ -1719,31 +1942,58 @@
             });
 
             if (unmappedIndices.length > 0) {
-                showAlert('Please map all 15 columns before proceeding.', 'error');
+                showAlert(`Please map all ${totalColumns} columns before proceeding.`, 'error');
                 return;
             }
 
             console.log('Column mapping completed:', columnMapping);
+            console.log('Fuel method:', selectedFuelMethod);
 
             // Hide mapping section and show parameters section
             mappingSection.style.display = 'none';
             parametersSection.style.display = 'block';
         }
 
-        // Initialize
+        // Initialize DOM elements and event listeners
 
         document.addEventListener('DOMContentLoaded', function() {
+            // Initialize DOM element references
+            uploadSection = document.getElementById('uploadSection');
+            parametersSection = document.getElementById('parametersSection');
+            loadingSection = document.getElementById('loadingSection');
+            successSection = document.getElementById('successSection');
+            alertMessage = document.getElementById('alertMessage');
+            fileInput = document.getElementById('fileInput');
+            fileInfo = document.getElementById('fileInfo');
+            fuelMethodSection = document.getElementById('fuelMethodSection');
+            mappingSection = document.getElementById('mappingSection');
+            errorSection = document.getElementById('errorSection');
+            
+            // Setup event handlers
             setupDragDrop();
             setupFileInput();
             setupParametersForm();
+            
+            // Initialize error section observer
+            initErrorSectionObserver();
+            
+            // Apply initial styling
+            applyErrorBoxStyling();
+            markLastInSequence();
         });
 
         // File upload handling
         function setupDragDrop() {
+            if (!uploadSection) {
+                console.error('Upload section not found - drag and drop cannot be initialized');
+                return;
+            }
+            
             const dropZone = uploadSection;
             
+            // Prevent default drag behaviors on the entire document
             ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-                dropZone.addEventListener(eventName, preventDefaults, false);
+                document.body.addEventListener(eventName, preventDefaults, false);
             });
             
             function preventDefaults(e) {
@@ -1751,21 +2001,44 @@
                 e.stopPropagation();
             }
             
+            // Highlight drop zone when item is dragged over it
             ['dragenter', 'dragover'].forEach(eventName => {
-                dropZone.addEventListener(eventName, () => dropZone.classList.add('dragover'), false);
+                dropZone.addEventListener(eventName, highlight, false);
             });
             
             ['dragleave', 'drop'].forEach(eventName => {
-                dropZone.addEventListener(eventName, () => dropZone.classList.remove('dragover'), false);
+                dropZone.addEventListener(eventName, unhighlight, false);
             });
             
+            function highlight(e) {
+                preventDefaults(e);
+                dropZone.classList.add('dragover');
+            }
+            
+            function unhighlight(e) {
+                preventDefaults(e);
+                dropZone.classList.remove('dragover');
+            }
+            
+            // Handle dropped files
             dropZone.addEventListener('drop', handleDrop, false);
+            
+            console.log('Drag and drop initialized successfully');
         }
 
         function handleDrop(e) {
-            const files = e.dataTransfer.files;
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            
+            console.log('File dropped:', files.length, 'files');
+            
             if (files.length > 0) {
                 handleFile(files[0]);
+            } else {
+                showAlert('No file was dropped', 'error');
             }
         }
 
@@ -1788,8 +2061,8 @@
 
             fileInfo.textContent = `Selected: ${file.name} (${formatFileSize(file.size)})`;
 
-            // Show mapping section instead of parameters
-            showMappingSection();
+            // Show fuel method selection section
+            showFuelMethodSection();
         }
 
         function formatFileSize(bytes) {
@@ -1823,8 +2096,12 @@
 
         // File upload to server
         async function uploadFile() {
-            const file = fileInput.files[0];
-            if (!file) return;
+            // Use currentFile (supports both drag-drop and file input)
+            const file = currentFile || fileInput.files[0];
+            if (!file) {
+                showAlert('No file selected. Please select a file first.', 'error');
+                return;
+            }
 
             showLoading('Uploading file...');
 
@@ -1837,9 +2114,16 @@
             });
 
             // Add column mapping as JSON string
-            if (columnMapping && columnMapping.length === 15) {
+            const columnOrder = getColumnOrder();
+            if (columnMapping && columnMapping.length === columnOrder.length) {
                 formData.append('column_mapping', JSON.stringify(columnMapping));
                 console.log('Sending column mapping:', columnMapping);
+            }
+
+            // Add fuel method
+            if (selectedFuelMethod) {
+                formData.append('fuel_method', selectedFuelMethod);
+                console.log('Sending fuel method:', selectedFuelMethod);
             }
 
             try {
@@ -2125,6 +2409,7 @@
             // Create header row
             const thead = document.createElement('thead');
             const headerRow = document.createElement('tr');
+            const columnOrder = getColumnOrder();
             columnOrder.forEach(column => {
                 const th = document.createElement('th');
                 th.textContent = column;
@@ -2240,6 +2525,7 @@
                         const thead = document.createElement('thead');
                         const headerRow = document.createElement('tr');
                         const editableColumns = rowError.columns.flat();
+                        const columnOrder = getColumnOrder();
                         columnOrder.forEach(column => {
                             const th = document.createElement('th');
                             th.textContent = column;
@@ -2713,6 +2999,70 @@
                     chatButton.disabled = false;
                     chatButton.innerHTML = '<span class="btn-icon">💬</span> Analyze Data with AI Chat';
                 }
+            }
+        }
+
+        // Download clean CSV
+        async function downloadCleanCSV() {
+            if (!currentFileId) {
+                showAlert('No file loaded', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/download/${currentFileId}/clean`);
+                
+                if (!response.ok) {
+                    throw new Error('Failed to download clean CSV');
+                }
+                
+                // Download the file
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'clean_data.csv';
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                a.remove();
+                
+                showAlert('Clean CSV downloaded successfully!', 'success');
+                
+            } catch (error) {
+                showAlert('Failed to download clean CSV: ' + error.message, 'error');
+            }
+        }
+
+        // Download errors CSV
+        async function downloadErrorsCSV() {
+            if (!currentFileId) {
+                showAlert('No file loaded', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/download/${currentFileId}/errors`);
+                
+                if (!response.ok) {
+                    throw new Error('Failed to download errors CSV');
+                }
+                
+                // Download the file
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'errors_data.csv';
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                a.remove();
+                
+                showAlert('Errors CSV downloaded successfully!', 'success');
+                
+            } catch (error) {
+                showAlert('Failed to download errors CSV: ' + error.message, 'error');
             }
         }
 
