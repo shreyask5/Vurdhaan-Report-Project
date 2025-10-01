@@ -191,17 +191,57 @@ def detect_encoding(file_path):
         print(f"Error detecting encoding for {file_path}: {e}")
         return 'utf-8'
 
+def reorder_csv_columns(df, column_mapping, required_columns):
+    """
+    Reorder DataFrame columns based on mapping and rename to required columns
+
+    Args:
+        df: Original DataFrame with uploaded columns
+        column_mapping: List of original column names in required order (15 items)
+        required_columns: List of target column names (15 items)
+
+    Returns:
+        DataFrame with reordered and renamed columns
+    """
+    print(f"Reordering CSV columns...")
+    print(f"Original columns: {list(df.columns)}")
+    print(f"Column mapping: {column_mapping}")
+    print(f"Required columns: {required_columns}")
+
+    try:
+        # Validate mapping length
+        if len(column_mapping) != 15 or len(required_columns) != 15:
+            raise ValueError(f"Column mapping and required columns must have exactly 15 items. Got {len(column_mapping)} and {len(required_columns)}")
+
+        # Validate all mapped columns exist in DataFrame
+        missing_columns = [col for col in column_mapping if col not in df.columns]
+        if missing_columns:
+            raise ValueError(f"Mapped columns not found in CSV: {missing_columns}")
+
+        # Create new DataFrame with only mapped columns in required order
+        reordered_df = pd.DataFrame()
+
+        for original_col, required_col in zip(column_mapping, required_columns):
+            reordered_df[required_col] = df[original_col]
+
+        print(f"Successfully reordered columns. New columns: {list(reordered_df.columns)}")
+        return reordered_df
+
+    except Exception as e:
+        print(f"Error reordering columns: {e}")
+        raise
+
 def cleanup_old_uploads():
     """Remove uploads older than 24 hours"""
     import time
     current_time = time.time()
-    
+
     print(f"Starting cleanup of old uploads...")
-    
+
     for file_id in list(file_metadata.keys()):
         folder = file_metadata[file_id]['folder']
         metadata_path = os.path.join(folder, 'metadata.json')
-        
+
         if os.path.exists(metadata_path):
             # Check file age
             file_age = current_time - os.path.getmtime(metadata_path)
@@ -210,7 +250,7 @@ def cleanup_old_uploads():
                 # Remove folder and metadata
                 shutil.rmtree(folder, ignore_errors=True)
                 del file_metadata[file_id]
-    
+
     print(f"Cleanup completed. Remaining uploads: {len(file_metadata)}")
 
 # ============================================================================
@@ -318,18 +358,63 @@ def upload_csv():
         
         # Detect encoding
         encoding = detect_encoding(original_path)
-        
+
         # Load CSV
         print(f"Loading CSV with encoding: {encoding}")
         result_df = pd.read_csv(original_path, encoding=encoding, encoding_errors='replace')
+
+        # Trim whitespace from column names to avoid mapping issues
+        result_df.columns = result_df.columns.str.strip()
         print(f"Loaded CSV with {len(result_df)} rows and {len(result_df.columns)} columns")
-        
+        print(f"Columns after trimming: {list(result_df.columns)}")
+
+        # Save the trimmed CSV back to file (overwrites original with cleaned headers)
+        trimmed_path = os.path.join(file_folder, 'trimmed.csv')
+        result_df.to_csv(trimmed_path, index=False, encoding='utf-8')
+        print(f"Saved CSV with trimmed headers to: {trimmed_path}")
+        original_path = trimmed_path
+
+        # Handle column mapping if provided
+        column_mapping_json = request.form.get('column_mapping')
+        if column_mapping_json:
+            try:
+                column_mapping = json.loads(column_mapping_json)
+                print(f"Column mapping received: {column_mapping}")
+
+                # Define required columns in exact order
+                required_columns = [
+                    'Date', 'A/C Registration', 'Flight', 'A/C Type',
+                    'ATD (UTC) Block out', 'ATA (UTC) Block in',
+                    'Origin ICAO', 'Destination ICAO',
+                    'Uplift Volume', 'Uplift Density', 'Uplift weight',
+                    'Remaining Fuel From Prev. Flight', 'Block off Fuel',
+                    'Block on Fuel', 'Fuel Type'
+                ]
+
+                # Reorder and rename columns
+                result_df = reorder_csv_columns(result_df, column_mapping, required_columns)
+
+                # Save reordered CSV
+                reordered_path = os.path.join(file_folder, 'reordered.csv')
+                result_df.to_csv(reordered_path, index=False, encoding='utf-8')
+                print(f"Saved reordered CSV to: {reordered_path}")
+
+                # Update original_path to use reordered file
+                original_path = reordered_path
+
+            except json.JSONDecodeError as e:
+                print(f"Error parsing column mapping JSON: {e}")
+                return jsonify({'error': f'Invalid column mapping format: {str(e)}'}), 400
+            except Exception as e:
+                print(f"Error processing column mapping: {e}")
+                return jsonify({'error': f'Column mapping failed: {str(e)}'}), 400
+
         # Load reference data
         ref_csv_path = os.path.join(os.getcwd(), 'airports.csv')
         ref_encoding = detect_encoding(ref_csv_path)
         ref_df = pd.read_csv(ref_csv_path, encoding=ref_encoding, encoding_errors='replace')
         print(f"Loaded reference data with {len(ref_df)} rows")
-        
+
         # Run validation
         print("Starting validation process...")
         is_valid, processed_path, validated_df, error_json_path = validate_and_process_file(
@@ -354,7 +439,8 @@ def upload_csv():
             'is_valid': is_valid,
             'processed_path': processed_path,
             'error_json_path': error_json_path,
-            'filename': file.filename
+            'filename': file.filename,
+            'column_mapping': column_mapping if column_mapping_json else None
         }
         
         # Save metadata to file

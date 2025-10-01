@@ -871,6 +871,164 @@
             background-color: rgba(255, 255, 255, 0.3);
             border-color: rgba(255, 255, 255, 0.5);
         }
+
+        /* Mapping Section */
+        .mapping-section {
+            display: none;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .mapping-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .mapping-progress {
+            background: linear-gradient(135deg, #e0e7ff 0%, #f0f4ff 100%);
+            border: 2px solid var(--primary-color);
+            border-radius: 12px;
+            padding: 16px 24px;
+            margin-bottom: 24px;
+            text-align: center;
+        }
+
+        .mapping-progress-text {
+            font-size: 14px;
+            color: var(--text-light);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .mapping-progress-bar {
+            width: 100%;
+            height: 10px;
+            background-color: rgba(99, 102, 241, 0.1);
+            border-radius: 999px;
+            overflow: hidden;
+            margin-bottom: 8px;
+        }
+
+        .mapping-progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary-color) 0%, var(--primary-light) 100%);
+            width: 0%;
+            transition: width 0.3s ease;
+            border-radius: 999px;
+        }
+
+        .mapping-counter {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--primary-color);
+        }
+
+        .mapping-message {
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
+            color: white;
+            padding: 24px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+            text-align: center;
+            box-shadow: var(--shadow-lg);
+        }
+
+        .mapping-message h3 {
+            margin: 0 0 8px 0;
+            font-size: 16px;
+            opacity: 0.9;
+            font-weight: 500;
+        }
+
+        .mapping-message .column-name {
+            font-size: 28px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            margin: 0;
+        }
+
+        .column-selector-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 12px;
+            margin-bottom: 30px;
+        }
+
+        .column-btn {
+            background: linear-gradient(135deg, #ffffff 0%, #f9fafb 100%);
+            border: 2px solid var(--border-color);
+            border-radius: 10px;
+            padding: 16px 20px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            color: var(--text-color);
+            text-align: center;
+            box-shadow: var(--shadow-sm);
+            word-wrap: break-word;
+        }
+
+        .column-btn:hover:not(.disabled) {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow);
+            border-color: var(--primary-color);
+            background: linear-gradient(135deg, #f0f4ff 0%, #e0e7ff 100%);
+        }
+
+        .column-btn.selected {
+            background: linear-gradient(135deg, var(--success-color) 0%, #059669 100%);
+            color: white;
+            border-color: var(--success-color);
+            box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
+        }
+
+        .column-btn.disabled {
+            background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
+            color: var(--text-light);
+            border-color: #d1d5db;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        .column-btn.disabled:hover {
+            transform: none;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .mapping-navigation {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .mapping-navigation .btn {
+            flex: 1;
+            max-width: 200px;
+        }
+
+        .mapping-navigation .btn-prev {
+            margin-right: auto;
+        }
+
+        .mapping-navigation .btn-next {
+            margin-left: auto;
+        }
+
+        .mapping-info {
+            background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+            border: 1px solid #93c5fd;
+            border-radius: 10px;
+            padding: 16px 20px;
+            margin-bottom: 20px;
+            color: #1e40af;
+            font-size: 14px;
+        }
+
+        .mapping-info strong {
+            font-weight: 600;
+        }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 </head>
@@ -893,6 +1051,46 @@
                 Choose CSV File
             </button>
             <p class="file-info" id="fileInfo"></p>
+        </div>
+
+        <!-- Mapping Section -->
+        <div id="mappingSection" class="card mapping-section">
+            <h2>Column Mapping</h2>
+
+            <div class="mapping-info">
+                <strong>ℹ️ Info:</strong> Please map your CSV columns to the required fields. Select the column from your uploaded file that corresponds to each required field.
+            </div>
+
+            <div class="mapping-progress">
+                <div class="mapping-progress-text">Mapping Progress</div>
+                <div class="mapping-progress-bar">
+                    <div class="mapping-progress-fill" id="mappingProgressFill"></div>
+                </div>
+                <div class="mapping-counter">
+                    <span id="mappingCounter">0 of 15</span> columns mapped
+                </div>
+            </div>
+
+            <div class="mapping-message">
+                <h3>Select the column for:</h3>
+                <p class="column-name" id="currentRequiredColumn">Date</p>
+            </div>
+
+            <div class="column-selector-grid" id="columnSelectorGrid">
+                <!-- Column buttons will be dynamically generated here -->
+            </div>
+
+            <div class="mapping-navigation">
+                <button type="button" class="btn btn-secondary btn-prev" id="mappingPrevBtn" onclick="previousMappingStep()" style="display: none;">
+                    ← Previous
+                </button>
+                <button type="button" class="btn btn-primary btn-next" id="mappingNextBtn" onclick="nextMappingStep()" disabled>
+                    Next →
+                </button>
+                <button type="button" class="btn btn-success" id="mappingCompleteBtn" onclick="completeMappingSection()" style="display: none;">
+                    Complete Mapping
+                </button>
+            </div>
         </div>
 
         <!-- Parameters Section -->
@@ -920,7 +1118,7 @@
                     </div>
                     <div class="form-group">
                         <label for="flightPrefix">Flight Starts With</label>
-                        <input type="text" id="flightPrefix" name="flight_starts_with" 
+                        <input type="text" id="flightPrefix" name="flight_starts_with"
                                placeholder="e.g., AI, LH, FHY" required>
                     </div>
                 </div>
@@ -1213,6 +1411,13 @@
         let validationParams = {};
         let sequenceErrors = new Map(); // NEW: Store sequence errors for highlighting
 
+        // Mapping-related variables
+        let uploadedColumns = [];
+        let columnMapping = [];
+        let currentMappingIndex = 0;
+        let selectedColumnForCurrentStep = null;
+        let currentFile = null;
+
         // DOM elements
         const uploadSection = document.getElementById('uploadSection');
         const parametersSection = document.getElementById('parametersSection');
@@ -1221,6 +1426,7 @@
         const alertMessage = document.getElementById('alertMessage');
         const fileInput = document.getElementById('fileInput');
         const fileInfo = document.getElementById('fileInfo');
+        const mappingSection = document.getElementById('mappingSection');
 
         // Add fixed column order
         const columnOrder = [
@@ -1333,6 +1539,197 @@
             }
         }
 
+        // ============================================================================
+        // COLUMN MAPPING FUNCTIONS
+        // ============================================================================
+
+        /**
+         * Read CSV columns from uploaded file
+         */
+        async function readCSVColumns(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    try {
+                        const text = e.target.result;
+                        const firstLine = text.split('\n')[0].trim();
+                        // Remove quotes and trim whitespace to match backend processing
+                        const columns = firstLine.split(',').map(col => col.replace(/^["']|["']$/g, '').trim());
+                        console.log('Detected CSV columns:', columns);
+                        console.log('Column count:', columns.length);
+                        resolve(columns);
+                    } catch (error) {
+                        reject(error);
+                    }
+                };
+                reader.onerror = reject;
+                reader.readAsText(file);
+            });
+        }
+
+        /**
+         * Show mapping section and initialize
+         */
+        async function showMappingSection() {
+            try {
+                // Read columns from the uploaded file
+                uploadedColumns = await readCSVColumns(currentFile);
+
+                // Validate minimum columns
+                if (uploadedColumns.length < 15) {
+                    showAlert(`CSV file must have at least 15 columns. Found ${uploadedColumns.length} columns.`, 'error');
+                    resetUpload();
+                    return;
+                }
+
+                // Initialize mapping state
+                columnMapping = new Array(15).fill(null);
+                currentMappingIndex = 0;
+                selectedColumnForCurrentStep = null;
+
+                // Show mapping section
+                uploadSection.style.display = 'none';
+                mappingSection.style.display = 'block';
+
+                // Render first step
+                renderMappingStep(0);
+
+            } catch (error) {
+                console.error('Error reading CSV columns:', error);
+                showAlert('Failed to read CSV columns: ' + error.message, 'error');
+                resetUpload();
+            }
+        }
+
+        /**
+         * Render the current mapping step
+         */
+        function renderMappingStep(index) {
+            currentMappingIndex = index;
+            const requiredColumn = columnOrder[index];
+
+            // Update UI
+            document.getElementById('currentRequiredColumn').textContent = requiredColumn;
+            document.getElementById('mappingCounter').textContent = `${index} of 15`;
+
+            // Update progress bar
+            const progress = (index / 15) * 100;
+            document.getElementById('mappingProgressFill').style.width = progress + '%';
+
+            // Render column selector buttons
+            const grid = document.getElementById('columnSelectorGrid');
+            grid.innerHTML = '';
+
+            uploadedColumns.forEach(column => {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'column-btn';
+                button.textContent = column;
+                button.dataset.column = column;
+
+                // Check if this column was already selected for current step
+                if (columnMapping[index] === column) {
+                    button.classList.add('selected');
+                    selectedColumnForCurrentStep = column;
+                }
+
+                // Check if this column was already mapped to a previous step
+                const alreadyMapped = columnMapping.slice(0, index).includes(column);
+                if (alreadyMapped) {
+                    button.classList.add('disabled');
+                    button.disabled = true;
+                } else {
+                    button.addEventListener('click', () => selectColumn(column));
+                }
+
+                grid.appendChild(button);
+            });
+
+            // Update navigation buttons
+            updateNavigationButtons();
+        }
+
+        /**
+         * Handle column selection
+         */
+        function selectColumn(columnName) {
+            // Update mapping
+            columnMapping[currentMappingIndex] = columnName;
+            selectedColumnForCurrentStep = columnName;
+
+            // Update UI
+            renderMappingStep(currentMappingIndex);
+        }
+
+        /**
+         * Update navigation button states
+         */
+        function updateNavigationButtons() {
+            const prevBtn = document.getElementById('mappingPrevBtn');
+            const nextBtn = document.getElementById('mappingNextBtn');
+            const completeBtn = document.getElementById('mappingCompleteBtn');
+
+            // Previous button
+            if (currentMappingIndex > 0) {
+                prevBtn.style.display = 'inline-block';
+            } else {
+                prevBtn.style.display = 'none';
+            }
+
+            // Next/Complete button
+            if (currentMappingIndex < 14) {
+                // Not on last step
+                nextBtn.style.display = 'inline-block';
+                completeBtn.style.display = 'none';
+                nextBtn.disabled = !columnMapping[currentMappingIndex];
+            } else {
+                // On last step
+                nextBtn.style.display = 'none';
+                completeBtn.style.display = 'inline-block';
+                completeBtn.disabled = !columnMapping[currentMappingIndex];
+            }
+        }
+
+        /**
+         * Go to next mapping step
+         */
+        function nextMappingStep() {
+            if (currentMappingIndex < 14 && columnMapping[currentMappingIndex]) {
+                renderMappingStep(currentMappingIndex + 1);
+            }
+        }
+
+        /**
+         * Go to previous mapping step
+         */
+        function previousMappingStep() {
+            if (currentMappingIndex > 0) {
+                renderMappingStep(currentMappingIndex - 1);
+            }
+        }
+
+        /**
+         * Complete mapping and proceed to parameters
+         */
+        function completeMappingSection() {
+            // Validate all columns are mapped
+            const unmappedIndices = [];
+            columnMapping.forEach((col, idx) => {
+                if (!col) unmappedIndices.push(idx);
+            });
+
+            if (unmappedIndices.length > 0) {
+                showAlert('Please map all 15 columns before proceeding.', 'error');
+                return;
+            }
+
+            console.log('Column mapping completed:', columnMapping);
+
+            // Hide mapping section and show parameters section
+            mappingSection.style.display = 'none';
+            parametersSection.style.display = 'block';
+        }
+
         // Initialize
 
         document.addEventListener('DOMContentLoaded', function() {
@@ -1385,10 +1782,14 @@
                 showAlert('Please select a CSV file', 'error');
                 return;
             }
-            
+
+            // Store file for later use
+            currentFile = file;
+
             fileInfo.textContent = `Selected: ${file.name} (${formatFileSize(file.size)})`;
-            parametersSection.style.display = 'block';
-            uploadSection.style.display = 'none';
+
+            // Show mapping section instead of parameters
+            showMappingSection();
         }
 
         function formatFileSize(bytes) {
@@ -1424,33 +1825,39 @@
         async function uploadFile() {
             const file = fileInput.files[0];
             if (!file) return;
-            
+
             showLoading('Uploading file...');
-            
+
             const formData = new FormData();
             formData.append('file', file);
-            
+
             // Add validation parameters
             Object.keys(validationParams).forEach(key => {
                 formData.append(key, validationParams[key]);
             });
-            
+
+            // Add column mapping as JSON string
+            if (columnMapping && columnMapping.length === 15) {
+                formData.append('column_mapping', JSON.stringify(columnMapping));
+                console.log('Sending column mapping:', columnMapping);
+            }
+
             try {
                 const response = await fetch('/upload', {
                     method: 'POST',
                     body: formData
                 });
-                
+
                 if (!response.ok) {
                     throw new Error('Upload failed');
                 }
-                
+
                 const data = await response.json();
                 currentFileId = data.file_id;
-                
+
                 // Start fetching errors
                 await fetchErrors();
-                
+
             } catch (error) {
                 showAlert('Failed to upload file: ' + error.message, 'error');
                 hideLoading();
@@ -2413,19 +2820,27 @@
             sequenceErrors.clear(); // NEW: Clear sequence errors
             fileInput.value = '';
             fileInfo.textContent = '';
-            
+
+            // Reset mapping variables
+            uploadedColumns = [];
+            columnMapping = [];
+            currentMappingIndex = 0;
+            selectedColumnForCurrentStep = null;
+            currentFile = null;
+
             // NEW: Remove final sequence summary if it exists
             const finalSummary = document.getElementById('finalSequenceSummary');
             if (finalSummary) {
                 finalSummary.remove();
             }
-            
+
             hideAllSections();
             uploadSection.style.display = 'block';
         }
 
         function hideAllSections() {
             uploadSection.style.display = 'none';
+            mappingSection.style.display = 'none';
             parametersSection.style.display = 'none';
             loadingSection.style.display = 'none';
             errorSection.style.display = 'none';
