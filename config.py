@@ -32,7 +32,7 @@ class Config:
     
     # Server settings
     HOST = os.getenv('HOST', '0.0.0.0')  # Listen on all interfaces
-    PORT = int(os.getenv('PORT', '5000'))
+    PORT = int(os.getenv('PORT', '5002'))
     
     # Logging settings
     LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
