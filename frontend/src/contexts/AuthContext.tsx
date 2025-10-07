@@ -1,7 +1,14 @@
-// FRONTEND ONLY: Mock authentication context for demonstration purposes
-// Replace with real authentication (e.g., Supabase, Auth0) in production
-
+// Firebase Authentication Context
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import {
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged,
+  User as FirebaseUser,
+} from 'firebase/auth';
+import { auth } from '@/services/firebase';
+import { authApi } from '@/services/api';
 
 type UserRole = 'user' | 'admin' | null;
 
@@ -10,16 +17,18 @@ interface AuthUser {
   email: string;
   name: string;
   role: UserRole;
+  emailVerified: boolean;
 }
 
 interface AuthContextType {
   user: AuthUser | null;
   isLoading: boolean;
-  login: (email: string, password: string, role?: UserRole) => Promise<void>;
+  login: (email: string, password: string) => Promise<void>;
   signup: (name: string, email: string, password: string) => Promise<void>;
   logout: () => void;
   isAuthenticated: boolean;
   isAdmin: boolean;
+  firebaseUser: FirebaseUser | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -34,55 +43,94 @@ export const useAuth = () => {
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Load mock session from localStorage on mount
+  // Listen to Firebase auth state changes
   useEffect(() => {
-    const storedUser = localStorage.getItem('mockUser');
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
-    }
-    setIsLoading(false);
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        // User is signed in
+        try {
+          // Verify with backend and get user data
+          const { user: backendUser } = await authApi.verify();
+
+          setFirebaseUser(firebaseUser);
+          setUser({
+            id: firebaseUser.uid,
+            email: firebaseUser.email || '',
+            name: firebaseUser.displayName || backendUser.name || firebaseUser.email?.split('@')[0] || 'User',
+            role: 'user',
+            emailVerified: firebaseUser.emailVerified,
+          });
+        } catch (error) {
+          console.error('Failed to verify with backend:', error);
+          // Still set user from Firebase data
+          setFirebaseUser(firebaseUser);
+          setUser({
+            id: firebaseUser.uid,
+            email: firebaseUser.email || '',
+            name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
+            role: 'user',
+            emailVerified: firebaseUser.emailVerified,
+          });
+        }
+      } else {
+        // User is signed out
+        setFirebaseUser(null);
+        setUser(null);
+      }
+      setIsLoading(false);
+    });
+
+    // Cleanup subscription on unmount
+    return () => unsubscribe();
   }, []);
 
-  const login = async (email: string, password: string, role: UserRole = 'user') => {
-    // FRONTEND ONLY: Simulate API call delay
-    await new Promise(resolve => setTimeout(resolve, 800));
-    
-    // Mock user creation
-    const mockUser: AuthUser = {
-      id: Math.random().toString(36).substr(2, 9),
-      email,
-      name: email.split('@')[0],
-      role,
-    };
-    
-    setUser(mockUser);
-    localStorage.setItem('mockUser', JSON.stringify(mockUser));
+  const login = async (email: string, password: string) => {
+    try {
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      // User state will be updated by onAuthStateChanged listener
+      console.log('Login successful:', userCredential.user.email);
+    } catch (error: any) {
+      console.error('Login error:', error);
+      throw new Error(error.message || 'Failed to login');
+    }
   };
 
   const signup = async (name: string, email: string, password: string) => {
-    // FRONTEND ONLY: Simulate API call delay
-    await new Promise(resolve => setTimeout(resolve, 800));
-    
-    const mockUser: AuthUser = {
-      id: Math.random().toString(36).substr(2, 9),
-      email,
-      name,
-      role: 'user',
-    };
-    
-    setUser(mockUser);
-    localStorage.setItem('mockUser', JSON.stringify(mockUser));
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      // Update display name
+      // Note: updateProfile is async but we don't await it to avoid delays
+      import('firebase/auth').then(({ updateProfile }) => {
+        updateProfile(userCredential.user, { displayName: name });
+      });
+
+      // Verify with backend to create user record
+      await authApi.verify();
+
+      console.log('Signup successful:', userCredential.user.email);
+    } catch (error: any) {
+      console.error('Signup error:', error);
+      throw new Error(error.message || 'Failed to create account');
+    }
   };
 
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem('mockUser');
+  const logout = async () => {
+    try {
+      await signOut(auth);
+      setUser(null);
+      setFirebaseUser(null);
+    } catch (error) {
+      console.error('Logout error:', error);
+      throw error;
+    }
   };
 
   const value = {
     user,
+    firebaseUser,
     isLoading,
     login,
     signup,
