@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Secure Flask API Backend for Vurdhaan Report Project (app5.py)
 Implements Firebase authentication, RBAC, and secure API endpoints
@@ -68,7 +69,7 @@ sessions = SessionManager()
 
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
 
-print("=€ Secure API Backend (app5.py) - Ready")
+print("[*] Secure API Backend (app5.py) - Ready")
 
 # ============================================================================
 # SECURITY HEADERS
@@ -91,7 +92,8 @@ def not_found(e):
 
 @app.errorhandler(500)
 def internal_error(e):
-    print(f"L Error: {e}\n{traceback.format_exc()}")
+    print("ERROR:", str(e))
+    print(traceback.format_exc())
     return jsonify({'error': 'Internal error'}), 500
 
 @app.errorhandler(429)
@@ -280,7 +282,7 @@ def upload_route(project_id):
     except PermissionError:
         return jsonify({'error': 'Unauthorized'}), 403
     except Exception as e:
-        print(f"L Upload failed: {e}")
+        print("ERROR: Upload failed:", str(e))
         return jsonify({'error': str(e)}), 500
 
 # ============================================================================
@@ -322,7 +324,7 @@ def chat_init(project_id):
 
         return jsonify({'success': True, 'session_id': session_id, 'database_info': load_result}), 200
     except Exception as e:
-        print(f"L Chat init failed: {e}")
+        print("ERROR: Chat init failed:", str(e))
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/projects/<project_id>/chat/query', methods=['POST'])
@@ -362,7 +364,7 @@ def chat_query_route(project_id):
         else:
             return jsonify({'status': 'error', 'response': result['answer']}), 200
     except Exception as e:
-        print(f"L Query failed: {e}")
+        print("ERROR: Query failed:", str(e))
         return jsonify({'status': 'error', 'error': str(e)}), 500
 
 # ============================================================================
@@ -388,9 +390,9 @@ def report_route(project_id):
         output = os.path.join(path, 'template_filled.xlsx')
         build_report(csv, prefix)
 
-        return send_file(output, as_attachment=True, download_name=f'report_{project_id}.xlsx')
+        return send_file(output, as_attachment=True, download_name='report_{}.xlsx'.format(project_id))
     except Exception as e:
-        print(f"L Report failed: {e}")
+        print("ERROR: Report failed:", str(e))
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/projects/<project_id>/download/<csv_type>', methods=['GET'])
@@ -405,17 +407,17 @@ def download_route(project_id, csv_type):
         return jsonify({'error': 'Not found'}), 404
 
     path = storage.get_project_path(project_id)
-    csv_path = os.path.join(path, f'{csv_type}_data.csv')
+    csv_path = os.path.join(path, '{}_data.csv'.format(csv_type))
 
     if not os.path.exists(csv_path):
         return jsonify({'error': 'File not found'}), 404
 
-    return send_file(csv_path, as_attachment=True, download_name=f'{csv_type}_data.csv')
+    return send_file(csv_path, as_attachment=True, download_name='{}_data.csv'.format(csv_type))
 
 # ============================================================================
 # STARTUP
 # ============================================================================
 
 if __name__ == '__main__':
-    print("=€ Starting app5.py on port", Config.PORT)
+    print("[*] Starting app5.py on port", Config.PORT)
     app.run(host=Config.HOST, port=Config.PORT, debug=(Config.FLASK_ENV == 'development'))
