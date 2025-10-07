@@ -131,6 +131,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.log('Google login successful:', userCredential.user.email);
     } catch (error: any) {
       console.error('Google login error:', error);
+
+      // Provide helpful error messages
+      if (error.code === 'auth/operation-not-allowed') {
+        throw new Error('Google sign-in is not enabled. Please enable it in Firebase Console under Authentication > Sign-in method.');
+      } else if (error.code === 'auth/popup-blocked') {
+        throw new Error('Popup was blocked by browser. Please allow popups for this site.');
+      } else if (error.code === 'auth/popup-closed-by-user') {
+        throw new Error('Sign-in cancelled.');
+      }
+
       throw new Error(error.message || 'Failed to login with Google');
     }
   };
