@@ -5,6 +5,8 @@ import {
   createUserWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
+  signInWithPopup,
+  GoogleAuthProvider,
   User as FirebaseUser,
 } from 'firebase/auth';
 import { auth } from '@/services/firebase';
@@ -25,6 +27,7 @@ interface AuthContextType {
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
   signup: (name: string, email: string, password: string) => Promise<void>;
+  loginWithGoogle: () => Promise<void>;
   logout: () => void;
   isAuthenticated: boolean;
   isAdmin: boolean;
@@ -117,6 +120,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const loginWithGoogle = async () => {
+    try {
+      const provider = new GoogleAuthProvider();
+      const userCredential = await signInWithPopup(auth, provider);
+
+      // Verify with backend to create/update user record
+      await authApi.verify();
+
+      console.log('Google login successful:', userCredential.user.email);
+    } catch (error: any) {
+      console.error('Google login error:', error);
+      throw new Error(error.message || 'Failed to login with Google');
+    }
+  };
+
   const logout = async () => {
     try {
       await signOut(auth);
@@ -134,6 +152,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     isLoading,
     login,
     signup,
+    loginWithGoogle,
     logout,
     isAuthenticated: !!user,
     isAdmin: user?.role === 'admin',

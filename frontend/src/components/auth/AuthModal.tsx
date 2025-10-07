@@ -21,7 +21,7 @@ interface AuthModalProps {
 export function AuthModal({ open, onOpenChange, defaultTab = 'login' }: AuthModalProps) {
   const [tab, setTab] = useState<'login' | 'signup'>(defaultTab);
   const navigate = useNavigate();
-  const { login, signup } = useAuth();
+  const { login, signup, loginWithGoogle } = useAuth();
   
   // Login state
   const [loginEmail, setLoginEmail] = useState('');
@@ -57,12 +57,12 @@ export function AuthModal({ open, onOpenChange, defaultTab = 'login' }: AuthModa
     setIsLoginLoading(true);
     
     try {
-      await login(loginEmail, loginPassword, 'user');
+      await login(loginEmail, loginPassword);
       toast.success('Login successful!');
       onOpenChange(false);
       navigate('/dashboard');
-    } catch (error) {
-      toast.error('Invalid credentials. Please try again.');
+    } catch (error: any) {
+      toast.error(error.message || 'Invalid credentials. Please try again.');
     } finally {
       setIsLoginLoading(false);
     }
@@ -98,17 +98,22 @@ export function AuthModal({ open, onOpenChange, defaultTab = 'login' }: AuthModa
       toast.success('Account created successfully!');
       onOpenChange(false);
       navigate('/dashboard');
-    } catch (error) {
-      toast.error('Failed to create account. Please try again.');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to create account. Please try again.');
     } finally {
       setIsSignupLoading(false);
     }
   };
 
-  const handleGoogleAuth = () => {
-    toast.info('Demo Only', {
-      description: 'Google OAuth would be implemented here in production.',
-    });
+  const handleGoogleAuth = async () => {
+    try {
+      await loginWithGoogle();
+      toast.success('Login successful!');
+      onOpenChange(false);
+      navigate('/dashboard');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to login with Google');
+    }
   };
 
   const PasswordRequirement = ({ met, text }: { met: boolean; text: string }) => (
