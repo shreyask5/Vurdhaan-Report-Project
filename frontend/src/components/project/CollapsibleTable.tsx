@@ -96,7 +96,7 @@ export function CollapsibleTable({
                   <TableRow key={idx}>
                     {columns.map((col) => (
                       <TableCell key={col} className="text-sm">
-                        {formatCell Value(row[col])}
+                        {formatCellValue(row[col])}
                       </TableCell>
                     ))}
                   </TableRow>

@@ -101,14 +101,25 @@ class FirestoreService:
         Returns:
             List of project data
         """
-        query = self.db.collection(self.projects_collection).where('owner_uid', '==', owner_uid)
+        # Use filter() method instead of where() to avoid deprecation warning
+        query = self.db.collection(self.projects_collection).where(
+            filter=firestore.FieldFilter('owner_uid', '==', owner_uid)
+        )
 
         if status:
-            query = query.where('status', '==', status)
+            query = query.where(filter=firestore.FieldFilter('status', '==', status))
 
-        query = query.order_by('created_at', direction=firestore.Query.DESCENDING).limit(limit)
-
+        # Note: Ordering requires a composite index.
+        # For now, we'll sort in Python after fetching
+        # To enable ordering in Firestore, create the composite index in Firebase Console
         projects = [doc.to_dict() for doc in query.stream()]
+
+        # Sort by created_at in Python (descending - newest first)
+        projects.sort(key=lambda x: x.get('created_at', datetime.min.replace(tzinfo=timezone.utc)), reverse=True)
+
+        # Apply limit after sorting
+        projects = projects[:limit]
+
         print(f"📋 Retrieved {len(projects)} projects for user: {owner_uid}")
         return projects
 
