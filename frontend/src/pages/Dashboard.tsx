@@ -61,13 +61,11 @@ export default function Dashboard() {
   };
 
   const handleUploadCSV = (projectId: string) => {
-    // Navigate to upload page or open upload dialog
-    toast.info('Upload CSV functionality coming soon');
+    navigate(`/projects/${projectId}/upload`);
   };
 
   const handleOpenChat = (projectId: string) => {
-    // Navigate to chat page
-    window.location.href = `/chat?project_id=${projectId}`;
+    navigate(`/projects/${projectId}/chat`);
   };
 
   const handleDownload = async (projectId: string, type: 'clean' | 'errors') => {

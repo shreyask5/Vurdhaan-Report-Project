@@ -8,6 +8,8 @@ import Index from "./pages/Index";
 import AdminLogin from "./pages/AdminLogin";
 import Dashboard from "./pages/Dashboard";
 import Admin from "./pages/Admin";
+import ProjectUpload from "./pages/ProjectUpload";
+import ProjectChat from "./pages/ProjectChat";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -24,6 +26,8 @@ const App = () => (
             <Route path="/admin/login" element={<AdminLogin />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/admin" element={<Admin />} />
+            <Route path="/projects/:projectId/upload" element={<ProjectUpload />} />
+            <Route path="/projects/:projectId/chat" element={<ProjectChat />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
