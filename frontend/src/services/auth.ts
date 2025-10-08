@@ -1,7 +1,7 @@
 // Auth Service - Firebase Token Management
 // Provides authentication token for API requests
 
-import { auth } from '../lib/firebase';
+import { auth } from './firebase';
 
 /**
  * Get Firebase authentication token for API requests
