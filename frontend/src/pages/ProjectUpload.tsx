@@ -25,7 +25,7 @@ const ProjectUpload: React.FC = () => {
   } = useValidation();
 
   const handleValidationSubmit = async (params: ValidationParams) => {
-    if (!selectedFuelMethod) return;
+    if (!selectedFuelMethod || !id) return;
 
     const fullParams = {
       ...params,
@@ -34,7 +34,7 @@ const ProjectUpload: React.FC = () => {
     };
 
     try {
-      await uploadFile(fullParams);
+      await uploadFile(id, fullParams);
       // Navigate to validation page after upload
       navigate(`/projects/${id}/validation`);
     } catch (error) {

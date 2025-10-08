@@ -9,8 +9,8 @@ import {
   GoogleAuthProvider,
   User as FirebaseUser,
 } from 'firebase/auth';
-import { auth } from '@/services/firebase';
-import { authApi } from '@/services/api';
+import { auth } from '../services/firebase';
+import { authApi } from '../services/api';
 
 type UserRole = 'user' | 'admin' | null;
 

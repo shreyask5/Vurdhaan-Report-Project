@@ -23,7 +23,7 @@ interface ValidationContextType {
   setFile: (file: File) => Promise<void>;
   setFuelMethod: (method: FuelMethod) => void;
   setColumnMapping: (mapping: ColumnMapping) => void;
-  uploadFile: (params: ValidationFormData) => Promise<void>;
+  uploadFile: (projectId: string, params: ValidationFormData) => Promise<void>;
   fetchErrors: () => Promise<void>;
   saveCorrections: () => Promise<void>;
   ignoreErrors: () => Promise<void>;
@@ -63,12 +63,12 @@ export const ValidationProvider: React.FC<{ children: ReactNode }> = ({ children
     setCurrentStep('parameters');
   };
 
-  const uploadFile = async (params: ValidationFormData) => {
+  const uploadFile = async (projectId: string, params: ValidationFormData) => {
     if (!selectedFile) throw new Error('No file selected');
 
     setIsLoading(true);
     try {
-      const response = await validationService.uploadFile(selectedFile, params);
+      const response = await validationService.uploadFile(projectId, selectedFile, params);
       setFileId(response.file_id);
 
       if (response.errors) {
