@@ -22,16 +22,28 @@ async function getAuthToken(): Promise<string> {
 
 export const validationService = {
   /**
-   * Upload CSV file for a project
+   * Upload and validate CSV file for a project with all parameters
    */
   async uploadFile(
     projectId: string,
     file: File,
+    params: {
+      start_date: string;
+      end_date: string;
+      date_format?: string;
+      flight_starts_with?: string;
+      fuel_method?: string;
+    },
     onProgress?: (progress: number) => void
-  ): Promise<{ success: boolean; file_id: string; columns: string[] }> {
+  ): Promise<{ success: boolean; is_valid: boolean; filename: string }> {
     const token = await getAuthToken();
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('start_date', params.start_date);
+    formData.append('end_date', params.end_date);
+    formData.append('date_format', params.date_format || 'DMY');
+    formData.append('flight_starts_with', params.flight_starts_with || '');
+    formData.append('fuel_method', params.fuel_method || 'Block Off - Block On');
 
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
@@ -64,6 +76,28 @@ export const validationService = {
       xhr.open('POST', `${API_BASE_URL}/projects/${projectId}/upload`);
       xhr.setRequestHeader('Authorization', `Bearer ${token}`);
       xhr.send(formData);
+    });
+  },
+
+  /**
+   * Get CSV columns by reading the file locally (client-side)
+   */
+  async getCSVColumns(file: File): Promise<string[]> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+
+      reader.onload = (e) => {
+        const text = e.target?.result as string;
+        const firstLine = text.split('\n')[0];
+        const columns = firstLine.split(',').map(col => col.trim().replace(/^"|"$/g, ''));
+        resolve(columns);
+      };
+
+      reader.onerror = () => {
+        reject(new Error('Failed to read file'));
+      };
+
+      reader.readAsText(file);
     });
   },
 

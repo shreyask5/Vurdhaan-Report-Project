@@ -1,31 +1,36 @@
 /**
  * ProjectUpload Page
- * Simplified: Select file → Configure params → Upload & Validate
+ * Handles CSV upload, column mapping, and validation workflow
  */
 
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
-import { ArrowLeft, CheckCircle, FileUp, Settings, AlertCircle } from 'lucide-react';
+import { ArrowLeft, CheckCircle, FileUp, Map, Settings, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { toast } from 'sonner';
 import { FileUploadSection } from '@/components/project/FileUploadSection';
+import { ColumnMappingWizard } from '@/components/project/ColumnMappingWizard';
 import { ValidationForm, type ValidationFormData } from '@/components/project/ValidationForm';
+import { ErrorDisplay } from '@/components/project/ErrorDisplay';
 import { validationService } from '@/services/validation';
 import { projectsApi } from '@/services/api';
+import type { ColumnMapping, ValidationResult } from '@/types/validation';
 
-type Step = 'select' | 'configure' | 'results';
+type Step = 'upload' | 'mapping' | 'configure' | 'results';
 
 export default function ProjectUpload() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
 
-  const [currentStep, setCurrentStep] = useState<Step>('select');
+  const [currentStep, setCurrentStep] = useState<Step>('upload');
   const [projectName, setProjectName] = useState('');
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
-  const [isValid, setIsValid] = useState<boolean | null>(null);
+  const [isValidating, setIsValidating] = useState(false);
+  const [csvColumns, setCsvColumns] = useState<string[]>([]);
+  const [columnMapping, setColumnMapping] = useState<ColumnMapping>({});
+  const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
 
   useEffect(() => {
     if (projectId) {
@@ -43,63 +48,116 @@ export default function ProjectUpload() {
     }
   };
 
-  const handleFileSelect = async (file: File) => {
-    setSelectedFile(file);
-    setCurrentStep('configure');
-    toast.success('File selected. Configure validation parameters.');
-  };
-
-  const handleValidate = async (formData: ValidationFormData) => {
-    if (!projectId || !selectedFile) return;
+  const handleFileUpload = async (file: File) => {
+    if (!projectId) return;
 
     setIsUploading(true);
     setUploadProgress(0);
 
     try {
-      const year = parseInt(formData.monitoring_year);
       const result = await validationService.uploadFile(
         projectId,
-        selectedFile,
-        {
-          start_date: `${year}-01-01`,
-          end_date: `${year}-12-31`,
-          date_format: formData.date_format,
-          flight_starts_with: formData.flight_starts_with,
-          fuel_method: formData.fuel_method,
-        },
+        file,
         (progress) => setUploadProgress(progress)
       );
 
-      setIsValid(result.is_valid);
-      setCurrentStep('results');
-      toast.success(result.is_valid ? 'Validation successful!' : 'Validation completed with errors');
+      setCsvColumns(result.columns);
+      const suggestedMapping = validationService.getSuggestedMapping(result.columns);
+      setColumnMapping(suggestedMapping);
+
+      toast.success('File uploaded successfully');
+      setCurrentStep('mapping');
     } catch (error: any) {
-      toast.error(error.message || 'Validation failed');
+      toast.error(error.message || 'Upload failed');
     } finally {
       setIsUploading(false);
     }
   };
 
-  const handleDownload = async (type: 'clean' | 'errors') => {
+  const handleMappingComplete = (mapping: ColumnMapping) => {
+    setColumnMapping(mapping);
+    setCurrentStep('configure');
+    toast.success('Column mapping completed');
+  };
+
+  const handleValidate = async (formData: ValidationFormData) => {
     if (!projectId) return;
+
+    setIsValidating(true);
+
     try {
-      const blob = await validationService.downloadCSV(projectId, type);
+      const result = await validationService.validateFile(projectId, {
+        ...formData,
+        column_mapping: columnMapping,
+      });
+
+      setValidationResult(result);
+      setCurrentStep('results');
+
+      if (result.is_valid) {
+        toast.success('Validation completed successfully!');
+      } else {
+        toast.warning('Validation completed with errors');
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Validation failed');
+    } finally {
+      setIsValidating(false);
+    }
+  };
+
+  const handleDownloadClean = async () => {
+    if (!projectId) return;
+
+    try {
+      const blob = await validationService.downloadCSV(projectId, 'clean');
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${type}_data.csv`;
+      a.download = 'clean_data.csv';
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      toast.success(`Downloaded ${type} data`);
+      toast.success('Downloaded clean data');
     } catch (error: any) {
       toast.error('Download failed');
     }
   };
 
+  const handleDownloadErrors = async () => {
+    if (!projectId) return;
+
+    try {
+      const blob = await validationService.downloadCSV(projectId, 'errors');
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'errors_data.csv';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success('Downloaded error data');
+    } catch (error: any) {
+      toast.error('Download failed');
+    }
+  };
+
+  const handleSaveCorrections = async (corrections: { [rowIdx: number]: any }) => {
+    if (!projectId) return;
+
+    try {
+      await validationService.saveCorrections(projectId, corrections);
+      toast.success('Corrections saved successfully');
+    } catch (error: any) {
+      toast.error('Failed to save corrections');
+    }
+  };
+
   const handleGenerateReport = async () => {
     if (!projectId) return;
+
     try {
       const blob = await validationService.generateReport(projectId);
       const url = URL.createObjectURL(blob);
@@ -110,14 +168,15 @@ export default function ProjectUpload() {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      toast.success('Report generated');
+      toast.success('CORSIA report generated');
     } catch (error: any) {
       toast.error('Report generation failed');
     }
   };
 
   const steps = [
-    { key: 'select', label: 'Select File', icon: FileUp },
+    { key: 'upload', label: 'Upload File', icon: FileUp },
+    { key: 'mapping', label: 'Map Columns', icon: Map },
     { key: 'configure', label: 'Configure', icon: Settings },
     { key: 'results', label: 'Results', icon: CheckCircle },
   ];
@@ -127,6 +186,7 @@ export default function ProjectUpload() {
 
   return (
     <div className="min-h-screen bg-gradient-hero">
+      {/* Header */}
       <header className="bg-card border-b border-border">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex h-16 items-center justify-between">
@@ -134,12 +194,12 @@ export default function ProjectUpload() {
               <Button variant="ghost" size="sm" asChild>
                 <Link to="/dashboard">
                   <ArrowLeft className="h-4 w-4 mr-2" />
-                  Back
+                  Back to Dashboard
                 </Link>
               </Button>
               <div className="h-8 w-px bg-border" />
               <div>
-                <h1 className="text-lg font-semibold">{projectName}</h1>
+                <h1 className="text-lg font-semibold">{projectName || 'Project'}</h1>
                 <p className="text-xs text-muted-foreground">CSV Upload & Validation</p>
               </div>
             </div>
@@ -147,10 +207,13 @@ export default function ProjectUpload() {
         </div>
       </header>
 
+      {/* Progress Steps */}
       <div className="bg-card border-b border-border">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <Progress value={progressPercentage} className="h-2 mb-4" />
-          <div className="grid grid-cols-3 gap-4">
+          <div className="mb-4">
+            <Progress value={progressPercentage} className="h-2" />
+          </div>
+          <div className="grid grid-cols-4 gap-4">
             {steps.map((step, idx) => {
               const Icon = step.icon;
               const isActive = step.key === currentStep;
@@ -182,67 +245,61 @@ export default function ProjectUpload() {
         </div>
       </div>
 
+      {/* Main Content */}
       <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="max-w-4xl mx-auto">
-          {currentStep === 'select' && (
-            <FileUploadSection onFileUpload={handleFileSelect} />
+          {currentStep === 'upload' && (
+            <FileUploadSection
+              onFileUpload={handleFileUpload}
+              isUploading={isUploading}
+              uploadProgress={uploadProgress}
+            />
           )}
 
-          {currentStep === 'configure' && selectedFile && (
-            <div className="space-y-4">
-              <div className="bg-card rounded-lg border p-4 flex items-center gap-3">
-                <FileUp className="h-5 w-5 text-primary" />
-                <div>
-                  <p className="text-sm font-medium">Selected: {selectedFile.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {(selectedFile.size / 1024).toFixed(2)} KB
-                  </p>
-                </div>
-              </div>
-
-              {isUploading && (
-                <div className="bg-card rounded-lg border p-4 space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span>Uploading...</span>
-                    <span>{Math.round(uploadProgress)}%</span>
-                  </div>
-                  <Progress value={uploadProgress} className="h-2" />
-                </div>
-              )}
-
-              <ValidationForm onValidate={handleValidate} isValidating={isUploading} />
-            </div>
+          {currentStep === 'mapping' && (
+            <ColumnMappingWizard
+              csvColumns={csvColumns}
+              suggestedMapping={columnMapping}
+              onMappingComplete={handleMappingComplete}
+            />
           )}
 
-          {currentStep === 'results' && isValid !== null && (
+          {currentStep === 'configure' && (
+            <ValidationForm onValidate={handleValidate} isValidating={isValidating} />
+          )}
+
+          {currentStep === 'results' && validationResult && (
             <div className="space-y-6">
-              {isValid ? (
+              {validationResult.is_valid ? (
                 <div className="bg-success/10 border border-success/20 rounded-lg p-6 text-center">
                   <CheckCircle className="h-12 w-12 text-success mx-auto mb-4" />
-                  <h2 className="text-2xl font-bold text-success mb-2">Success!</h2>
-                  <p className="text-muted-foreground mb-6">Validation completed with no errors</p>
-                  <div className="flex gap-4 justify-center">
-                    <Button onClick={() => handleDownload('clean')}>Download Clean Data</Button>
+                  <h2 className="text-2xl font-bold text-success mb-2">Validation Successful!</h2>
+                  <p className="text-muted-foreground">
+                    Your flight data has been validated successfully with no errors.
+                  </p>
+                  <div className="flex gap-4 justify-center mt-6">
+                    <Button onClick={handleDownloadClean}>Download Clean Data</Button>
                     <Button onClick={handleGenerateReport} variant="outline">
-                      Generate Report
+                      Generate CORSIA Report
                     </Button>
                   </div>
                 </div>
               ) : (
-                <div className="bg-warning/10 border border-warning/20 rounded-lg p-6 text-center">
-                  <AlertCircle className="h-12 w-12 text-warning mx-auto mb-4" />
-                  <h2 className="text-2xl font-bold mb-2">Validation Complete</h2>
-                  <p className="text-muted-foreground mb-6">Some errors found in your data</p>
-                  <div className="flex gap-4 justify-center">
-                    <Button onClick={() => handleDownload('clean')}>Download Clean</Button>
-                    <Button onClick={() => handleDownload('errors')} variant="outline">
-                      Download Errors
-                    </Button>
-                    <Button onClick={handleGenerateReport} variant="outline">
-                      Generate Report
+                <>
+                  {validationResult.error_data && (
+                    <ErrorDisplay
+                      errorData={validationResult.error_data}
+                      onSaveCorrections={handleSaveCorrections}
+                      onDownloadClean={handleDownloadClean}
+                      onDownloadErrors={handleDownloadErrors}
+                    />
+                  )}
+                  <div className="flex gap-4">
+                    <Button onClick={handleGenerateReport} className="flex-1">
+                      Generate CORSIA Report
                     </Button>
                   </div>
-                </div>
+                </>
               )}
             </div>
           )}
