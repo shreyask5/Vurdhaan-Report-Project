@@ -8,7 +8,7 @@ import { ValidationForm } from '../components/project/ValidationForm';
 import { ValidationParams } from '../types/validation';
 
 const ProjectUpload: React.FC = () => {
-  const { id } = useParams<{ id: string }>();
+  const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
   const {
     currentStep,
@@ -25,7 +25,7 @@ const ProjectUpload: React.FC = () => {
   } = useValidation();
 
   const handleValidationSubmit = async (params: ValidationParams) => {
-    if (!selectedFuelMethod || !id) return;
+    if (!selectedFuelMethod || !projectId) return;
 
     const fullParams = {
       ...params,
@@ -34,9 +34,9 @@ const ProjectUpload: React.FC = () => {
     };
 
     try {
-      await uploadFile(id, fullParams);
+      await uploadFile(projectId, fullParams);
       // Navigate to validation page after upload
-      navigate(`/projects/${id}/validation`);
+      navigate(`/projects/${projectId}/validation`);
     } catch (error) {
       console.error('Upload failed:', error);
       alert('Upload failed. Please try again.');
