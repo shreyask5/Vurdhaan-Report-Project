@@ -97,6 +97,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.log('Login successful:', userCredential.user.email);
     } catch (error: any) {
       console.error('Login error:', error);
+
+      // Provide user-friendly error messages based on Firebase error codes
+      if (error.code === 'auth/user-not-found') {
+        throw new Error('No account found with this email. Did you mean to sign up?');
+      } else if (error.code === 'auth/wrong-password') {
+        throw new Error('Incorrect password. Please try again.');
+      } else if (error.code === 'auth/invalid-email') {
+        throw new Error('Invalid email address format.');
+      } else if (error.code === 'auth/user-disabled') {
+        throw new Error('This account has been disabled. Please contact support.');
+      } else if (error.code === 'auth/invalid-credential') {
+        throw new Error('Invalid email or password. Please check your credentials.');
+      } else if (error.code === 'auth/too-many-requests') {
+        throw new Error('Too many failed login attempts. Please try again later.');
+      }
+
       throw new Error(error.message || 'Failed to login');
     }
   };
@@ -116,6 +132,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.log('Signup successful:', userCredential.user.email);
     } catch (error: any) {
       console.error('Signup error:', error);
+
+      // Provide user-friendly error messages for signup
+      if (error.code === 'auth/email-already-in-use') {
+        throw new Error('An account with this email already exists. Did you mean to login?');
+      } else if (error.code === 'auth/invalid-email') {
+        throw new Error('Invalid email address format.');
+      } else if (error.code === 'auth/weak-password') {
+        throw new Error('Password is too weak. Please use a stronger password.');
+      } else if (error.code === 'auth/operation-not-allowed') {
+        throw new Error('Email/password accounts are not enabled. Please contact support.');
+      }
+
       throw new Error(error.message || 'Failed to create account');
     }
   };
