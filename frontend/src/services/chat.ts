@@ -1,81 +1,43 @@
-// Chat Service
-// Handles all chat-related API calls
-// Based on chat.js
+// Chat Service - Updated for app5.py API
+// Base URL: https://tools.vurdhaan.com/api
+// Requires Firebase authentication
 
 import {
   ChatSession,
   ChatQueryResponse,
-  ChatInitializeRequest,
-  ChatInitializeResponse,
-  UploadFilesResponse,
   LogEntry
 } from '../types/chat';
+import { getAuthToken } from './auth';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://tools.vurdhaan.com/api';
+
+/**
+ * Get authorization headers with Firebase token
+ */
+async function getAuthHeaders(): Promise<HeadersInit> {
+  const token = await getAuthToken();
+  return {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  };
+}
 
 export const chatService = {
   /**
-   * Upload files for chat session
-   * POST /upload_files
-   * From chat.js:133-143
+   * Initialize chat session for project
+   * POST /api/projects/{project_id}/chat/initialize
+   * From app5.py:292-328
    */
-  async uploadFiles(cleanFile: File, errorFile: File): Promise<UploadFilesResponse> {
-    const formData = new FormData();
-    formData.append('clean_data', cleanFile);
-    formData.append('error_data', errorFile);
-
-    const response = await fetch(`${API_BASE_URL}/upload_files`, {
+  async initializeSession(projectId: string): Promise<{ session_id: string; database_info: any }> {
+    const headers = await getAuthHeaders();
+    const response = await fetch(`${API_BASE_URL}/projects/${projectId}/chat/initialize`, {
       method: 'POST',
-      body: formData
+      headers
     });
 
     if (!response.ok) {
-      throw new Error('Failed to upload files');
-    }
-
-    return response.json();
-  },
-
-  /**
-   * Initialize chat session
-   * POST /chat/initialize
-   * From chat.js:145-173
-   */
-  async initializeSession(
-    sessionId: string,
-    cleanFlightsPath: string,
-    errorFlightsPath: string
-  ): Promise<ChatInitializeResponse> {
-    const response = await fetch(`${API_BASE_URL}/chat/initialize`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        session_id: sessionId,
-        clean_flights_path: cleanFlightsPath,
-        error_flights_path: errorFlightsPath
-      })
-    });
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: 'Initialization failed' }));
-      throw new Error(error.message || 'Failed to initialize chat session');
-    }
-
-    return response.json();
-  },
-
-  /**
-   * Get session status
-   * GET /chat/{session_id}/status
-   * From chat.js:56-67
-   */
-  async getSessionStatus(sessionId: string): Promise<ChatSession> {
-    const response = await fetch(`${API_BASE_URL}/chat/${sessionId}/status`);
-
-    if (!response.ok) {
-      throw new Error(`Session not found or expired (Status: ${response.status})`);
+      const error = await response.json().catch(() => ({ error: 'Chat initialization failed' }));
+      throw new Error(error.error || 'Failed to initialize chat session');
     }
 
     return response.json();
@@ -83,84 +45,66 @@ export const chatService = {
 
   /**
    * Send query to chat
-   * POST /chat/{session_id}/query
-   * From chat.js:197-227
+   * POST /api/projects/{project_id}/chat/query
+   * From app5.py:330-368
    */
-  async sendQuery(sessionId: string, query: string): Promise<ChatQueryResponse> {
-    const response = await fetch(`${API_BASE_URL}/chat/${sessionId}/query`, {
+  async sendQuery(projectId: string, query: string, sessionId?: string): Promise<ChatQueryResponse> {
+    const headers = await getAuthHeaders();
+    const response = await fetch(`${API_BASE_URL}/projects/${projectId}/chat/query`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ query })
+      headers,
+      body: JSON.stringify({
+        query,
+        session_id: sessionId
+      })
     });
 
     if (!response.ok) {
-      throw new Error('Failed to process query');
+      const error = await response.json().catch(() => ({ error: 'Query failed' }));
+      throw new Error(error.error || 'Failed to process query');
     }
 
     return response.json();
   },
 
   /**
-   * Send debug log to server
-   * POST /api/log
-   * From chat.js:641-650
+   * Get project details (includes session info if available)
+   * GET /api/projects/{project_id}
+   * From app5.py:184-204
    */
-  async logDebug(message: string, data?: any, sessionId?: string): Promise<void> {
-    const logEntry: LogEntry = {
-      timestamp: new Date().toISOString(),
-      level: 'debug',
-      message,
-      data,
-      session_id: sessionId
-    };
+  async getProjectSession(projectId: string): Promise<any> {
+    const token = await getAuthToken();
+    const response = await fetch(`${API_BASE_URL}/projects/${projectId}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
 
-    try {
-      await fetch(`${API_BASE_URL}/api/log`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(logEntry)
-      });
-    } catch (error) {
-      // Silently fail - don't want logging to break the app
-      console.warn('Failed to send log to server:', error);
+    if (!response.ok) {
+      throw new Error('Failed to fetch project');
     }
+
+    return response.json();
   },
 
   /**
-   * Send error log to server
-   * POST /api/log
-   * From chat.js:641-650
+   * Send debug log to server (optional - app5.py doesn't have this endpoint)
+   */
+  async logDebug(message: string, data?: any, sessionId?: string): Promise<void> {
+    // Log to console only as app5.py doesn't have logging endpoint
+    console.log('[DEBUG]', message, data);
+  },
+
+  /**
+   * Send error log to server (optional - app5.py doesn't have this endpoint)
    */
   async logError(message: string, data?: any, sessionId?: string): Promise<void> {
-    const logEntry: LogEntry = {
-      timestamp: new Date().toISOString(),
-      level: 'error',
-      message,
-      data,
-      session_id: sessionId
-    };
-
-    try {
-      await fetch(`${API_BASE_URL}/api/log`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(logEntry)
-      });
-    } catch (error) {
-      // Silently fail - don't want logging to break the app
-      console.warn('Failed to send log to server:', error);
-    }
+    // Log to console only as app5.py doesn't have logging endpoint
+    console.error('[ERROR]', message, data);
   },
 
   /**
    * Generate a unique session ID
-   * From chat.js:130-131
    */
   generateSessionId(): string {
     return `session_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;

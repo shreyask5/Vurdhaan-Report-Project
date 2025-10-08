@@ -1,134 +1,62 @@
-// Validation Service
-// Handles all CSV validation API calls
-// Based on index4.html endpoints
+// Validation Service - Updated for app5.py API
+// Base URL: https://tools.vurdhaan.com/api
+// Requires Firebase authentication
 
 import {
   ValidationFormData,
   ErrorData,
   Correction,
-  UploadResponse,
-  CompressedErrorResponse
+  UploadResponse
 } from '../types/validation';
-import { decompressLZStringErrorReport, isCompressedResponse } from '../utils/compression';
+import { getAuthToken } from './auth';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://tools.vurdhaan.com/api';
+
+/**
+ * Get authorization headers with Firebase token
+ */
+async function getAuthHeaders(): Promise<HeadersInit> {
+  const token = await getAuthToken();
+  return {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  };
+}
 
 export const validationService = {
   /**
    * Upload CSV file with validation parameters
-   * POST /upload
-   * From index4.html:2098-2165
+   * POST /api/projects/{project_id}/upload
+   * From app5.py:237-286
    */
   async uploadFile(
+    projectId: string,
     file: File,
     params: ValidationFormData
   ): Promise<UploadResponse> {
+    const token = await getAuthToken();
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('monitoring_year', params.monitoring_year);
+
+    // Extract dates from monitoring year
+    const year = params.monitoring_year;
+    formData.append('start_date', `${year}-01-01`);
+    formData.append('end_date', `${year}-12-31`);
     formData.append('date_format', params.date_format);
     formData.append('flight_starts_with', params.flight_starts_with);
-    formData.append('column_mapping', JSON.stringify(params.column_mapping));
     formData.append('fuel_method', params.fuel_method);
 
-    const response = await fetch(`${API_BASE_URL}/upload`, {
+    const response = await fetch(`${API_BASE_URL}/projects/${projectId}/upload`, {
       method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`
+      },
       body: formData
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: 'Upload failed' }));
-      throw new Error(error.message || 'Failed to upload file');
-    }
-
-    return response.json();
-  },
-
-  /**
-   * Fetch errors for a file
-   * GET /errors/{file_id}
-   * From index4.html:2167-2224
-   * Handles both compressed and uncompressed responses
-   */
-  async fetchErrors(fileId: string): Promise<ErrorData> {
-    const response = await fetch(`${API_BASE_URL}/errors/${fileId}`);
-
-    if (!response.ok) {
-      throw new Error('Failed to fetch errors');
-    }
-
-    const data = await response.json();
-
-    // Check if response is compressed
-    if (isCompressedResponse(data)) {
-      console.log('📦 Compressed response detected, decompressing...');
-      return await decompressLZStringErrorReport((data as CompressedErrorResponse).compressed_data);
-    }
-
-    return data as ErrorData;
-  },
-
-  /**
-   * Save corrections for errors
-   * PUT /upload/{file_id}
-   * From index4.html:2841-2871
-   */
-  async saveCorrections(
-    fileId: string,
-    corrections: Correction[]
-  ): Promise<UploadResponse> {
-    const response = await fetch(`${API_BASE_URL}/upload/${fileId}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ corrections })
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to save corrections');
-    }
-
-    return response.json();
-  },
-
-  /**
-   * Ignore errors and proceed
-   * PUT /upload/{file_id}
-   * From index4.html:2873-2897
-   */
-  async ignoreErrors(fileId: string): Promise<UploadResponse> {
-    const response = await fetch(`${API_BASE_URL}/upload/${fileId}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ ignore_errors: true })
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to ignore errors');
-    }
-
-    return response.json();
-  },
-
-  /**
-   * Revalidate the file
-   * PUT /upload/{file_id}
-   * From index4.html:3086-3124
-   */
-  async revalidate(fileId: string): Promise<UploadResponse> {
-    const response = await fetch(`${API_BASE_URL}/upload/${fileId}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ revalidate: true })
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to revalidate');
+      const error = await response.json().catch(() => ({ error: 'Upload failed' }));
+      throw new Error(error.error || 'Failed to upload file');
     }
 
     return response.json();
@@ -136,11 +64,16 @@ export const validationService = {
 
   /**
    * Download clean CSV
-   * GET /download/{file_id}/clean
-   * From index4.html:3006-3025
+   * GET /api/projects/{project_id}/download/clean
+   * From app5.py:398-415
    */
-  async downloadClean(fileId: string): Promise<void> {
-    const response = await fetch(`${API_BASE_URL}/download/${fileId}/clean`);
+  async downloadClean(projectId: string): Promise<void> {
+    const token = await getAuthToken();
+    const response = await fetch(`${API_BASE_URL}/projects/${projectId}/download/clean`, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
 
     if (!response.ok) {
       throw new Error('Failed to download clean CSV');
@@ -150,7 +83,7 @@ export const validationService = {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `clean_flights_${fileId}.csv`;
+    link.download = `clean_data_${projectId}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -159,11 +92,16 @@ export const validationService = {
 
   /**
    * Download errors CSV
-   * GET /download/{file_id}/errors
-   * From index4.html:3027-3046
+   * GET /api/projects/{project_id}/download/errors
+   * From app5.py:398-415
    */
-  async downloadErrors(fileId: string): Promise<void> {
-    const response = await fetch(`${API_BASE_URL}/download/${fileId}/errors`);
+  async downloadErrors(projectId: string): Promise<void> {
+    const token = await getAuthToken();
+    const response = await fetch(`${API_BASE_URL}/projects/${projectId}/download/errors`, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
 
     if (!response.ok) {
       throw new Error('Failed to download errors CSV');
@@ -173,7 +111,7 @@ export const validationService = {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `error_flights_${fileId}.csv`;
+    link.download = `errors_data_${projectId}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -182,12 +120,15 @@ export const validationService = {
 
   /**
    * Generate CORSIA report
-   * POST /report/{file_id}
-   * From index4.html:3048-3084
+   * POST /api/projects/{project_id}/report
+   * From app5.py:374-396
    */
-  async generateReport(fileId: string): Promise<void> {
-    const response = await fetch(`${API_BASE_URL}/report/${fileId}`, {
-      method: 'POST'
+  async generateReport(projectId: string, flightPrefix: string = ''): Promise<void> {
+    const headers = await getAuthHeaders();
+    const response = await fetch(`${API_BASE_URL}/projects/${projectId}/report`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ flight_starts_with: flightPrefix })
     });
 
     if (!response.ok) {
@@ -198,7 +139,7 @@ export const validationService = {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'template_filled.xlsx';
+    link.download = `report_${projectId}.xlsx`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -206,17 +147,40 @@ export const validationService = {
   },
 
   /**
-   * Open chat session from validated file
-   * POST /open-chat/{file_id}
-   * From index4.html:2899-3003
+   * Initialize chat session for project
+   * POST /api/projects/{project_id}/chat/initialize
+   * From app5.py:292-328
    */
-  async openChatSession(fileId: string): Promise<{ chat_url: string; session_id: string }> {
-    const response = await fetch(`${API_BASE_URL}/open-chat/${fileId}`, {
-      method: 'POST'
+  async initializeChatSession(projectId: string): Promise<{ session_id: string; database_info: any }> {
+    const headers = await getAuthHeaders();
+    const response = await fetch(`${API_BASE_URL}/projects/${projectId}/chat/initialize`, {
+      method: 'POST',
+      headers
     });
 
     if (!response.ok) {
-      throw new Error('Failed to create chat session');
+      const error = await response.json().catch(() => ({ error: 'Chat initialization failed' }));
+      throw new Error(error.error || 'Failed to initialize chat session');
+    }
+
+    return response.json();
+  },
+
+  /**
+   * Get project details
+   * GET /api/projects/{project_id}
+   * From app5.py:184-204
+   */
+  async getProject(projectId: string): Promise<any> {
+    const token = await getAuthToken();
+    const response = await fetch(`${API_BASE_URL}/projects/${projectId}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch project');
     }
 
     return response.json();
