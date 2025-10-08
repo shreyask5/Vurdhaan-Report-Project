@@ -20,12 +20,27 @@ export default {
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
         primary: {
-          DEFAULT: "hsl(var(--primary))",
+          DEFAULT: "#6366f1",
+          dark: "#4f46e5",
+          light: "#818cf8",
           foreground: "hsl(var(--primary-foreground))",
         },
         secondary: {
-          DEFAULT: "hsl(var(--secondary))",
+          DEFAULT: "#3b82f6",
+          dark: "#2563eb",
           foreground: "hsl(var(--secondary-foreground))",
+        },
+        success: {
+          DEFAULT: "#10b981",
+          light: "#34d399",
+        },
+        error: {
+          DEFAULT: "#ef4444",
+          light: "#fca5a5",
+        },
+        warning: {
+          DEFAULT: "#f59e0b",
+          light: "#fbbf24",
         },
         destructive: {
           DEFAULT: "hsl(var(--destructive))",
@@ -109,6 +124,14 @@ export default {
       },
       boxShadow: {
         "glow": "var(--shadow-glow)",
+        card: "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)",
+        xl: "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)",
+      },
+      backgroundImage: {
+        "gradient-primary": "var(--gradient-primary)",
+        "gradient-hero": "var(--gradient-hero)",
+        "gradient-card": "var(--gradient-card)",
+        "gradient-radial": "radial-gradient(circle at 20% 50%, rgba(99, 102, 241, 0.05) 0%, transparent 50%)",
       },
     },
   },

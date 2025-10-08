@@ -1,253 +1,156 @@
-/**
- * ProjectUpload Page
- * Simplified: Select file → Configure params → Upload & Validate
- */
+import React from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { useValidation } from '../contexts/ValidationContext';
+import { FileUploadSection } from '../components/project/FileUploadSection';
+import { FuelMethodSelector } from '../components/project/FuelMethodSelector';
+import { ColumnMappingWizard } from '../components/project/ColumnMappingWizard';
+import { ValidationForm } from '../components/project/ValidationForm';
+import { ValidationParams } from '../types/validation';
 
-import { useState, useEffect } from 'react';
-import { useNavigate, useParams, Link } from 'react-router-dom';
-import { ArrowLeft, CheckCircle, FileUp, Settings, AlertCircle } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Progress } from '@/components/ui/progress';
-import { toast } from 'sonner';
-import { FileUploadSection } from '@/components/project/FileUploadSection';
-import { ValidationForm, type ValidationFormData } from '@/components/project/ValidationForm';
-import { validationService } from '@/services/validation';
-import { projectsApi } from '@/services/api';
-
-type Step = 'select' | 'configure' | 'results';
-
-export default function ProjectUpload() {
-  const { projectId } = useParams<{ projectId: string }>();
+export const ProjectUpload: React.FC = () => {
+  const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const {
+    currentStep,
+    selectedFile,
+    selectedFuelMethod,
+    uploadedColumns,
+    columnMapping,
+    isLoading,
+    setFile,
+    setFuelMethod,
+    setColumnMapping,
+    uploadFile,
+    goToStep
+  } = useValidation();
 
-  const [currentStep, setCurrentStep] = useState<Step>('select');
-  const [projectName, setProjectName] = useState('');
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [isUploading, setIsUploading] = useState(false);
-  const [isValid, setIsValid] = useState<boolean | null>(null);
+  const handleValidationSubmit = async (params: ValidationParams) => {
+    if (!selectedFuelMethod) return;
 
-  useEffect(() => {
-    if (projectId) {
-      loadProject();
-    }
-  }, [projectId]);
-
-  const loadProject = async () => {
-    try {
-      const project = await projectsApi.get(projectId!);
-      setProjectName(project.name);
-    } catch (error: any) {
-      toast.error('Failed to load project');
-      navigate('/dashboard');
-    }
-  };
-
-  const handleFileSelect = async (file: File) => {
-    setSelectedFile(file);
-    setCurrentStep('configure');
-    toast.success('File selected. Configure validation parameters.');
-  };
-
-  const handleValidate = async (formData: ValidationFormData) => {
-    if (!projectId || !selectedFile) return;
-
-    setIsUploading(true);
-    setUploadProgress(0);
+    const fullParams = {
+      ...params,
+      column_mapping: columnMapping,
+      fuel_method: selectedFuelMethod
+    };
 
     try {
-      const year = parseInt(formData.monitoring_year);
-      const result = await validationService.uploadFile(
-        projectId,
-        selectedFile,
-        {
-          start_date: `${year}-01-01`,
-          end_date: `${year}-12-31`,
-          date_format: formData.date_format,
-          flight_starts_with: formData.flight_starts_with,
-          fuel_method: formData.fuel_method,
-        },
-        (progress) => setUploadProgress(progress)
-      );
-
-      setIsValid(result.is_valid);
-      setCurrentStep('results');
-      toast.success(result.is_valid ? 'Validation successful!' : 'Validation completed with errors');
-    } catch (error: any) {
-      toast.error(error.message || 'Validation failed');
-    } finally {
-      setIsUploading(false);
+      await uploadFile(fullParams);
+      // Navigate to validation page after upload
+      navigate(`/projects/${id}/validation`);
+    } catch (error) {
+      console.error('Upload failed:', error);
+      alert('Upload failed. Please try again.');
     }
   };
-
-  const handleDownload = async (type: 'clean' | 'errors') => {
-    if (!projectId) return;
-    try {
-      const blob = await validationService.downloadCSV(projectId, type);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${type}_data.csv`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      toast.success(`Downloaded ${type} data`);
-    } catch (error: any) {
-      toast.error('Download failed');
-    }
-  };
-
-  const handleGenerateReport = async () => {
-    if (!projectId) return;
-    try {
-      const blob = await validationService.generateReport(projectId);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `corsia_report_${projectId}.xlsx`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      toast.success('Report generated');
-    } catch (error: any) {
-      toast.error('Report generation failed');
-    }
-  };
-
-  const steps = [
-    { key: 'select', label: 'Select File', icon: FileUp },
-    { key: 'configure', label: 'Configure', icon: Settings },
-    { key: 'results', label: 'Results', icon: CheckCircle },
-  ];
-
-  const currentStepIndex = steps.findIndex((s) => s.key === currentStep);
-  const progressPercentage = ((currentStepIndex + 1) / steps.length) * 100;
 
   return (
-    <div className="min-h-screen bg-gradient-hero">
-      <header className="bg-card border-b border-border">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex h-16 items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Button variant="ghost" size="sm" asChild>
-                <Link to="/dashboard">
-                  <ArrowLeft className="h-4 w-4 mr-2" />
-                  Back
-                </Link>
-              </Button>
-              <div className="h-8 w-px bg-border" />
-              <div>
-                <h1 className="text-lg font-semibold">{projectName}</h1>
-                <p className="text-xs text-muted-foreground">CSV Upload & Validation</p>
-              </div>
-            </div>
-          </div>
+    <div className="min-h-screen bg-gradient-radial">
+      <div className="container mx-auto px-4 py-8 max-w-5xl">
+        {/* Header */}
+        <div className="mb-8">
+          <button
+            onClick={() => navigate('/dashboard')}
+            className="text-primary hover:text-primary-dark mb-4 flex items-center gap-2"
+          >
+            ← Back to Dashboard
+          </button>
+          <h1 className="text-3xl font-bold text-gray-800">CSV Upload & Validation</h1>
+          <p className="text-gray-600 mt-2">
+            Upload your flight data CSV file and validate it against CORSIA requirements
+          </p>
         </div>
-      </header>
 
-      <div className="bg-card border-b border-border">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <Progress value={progressPercentage} className="h-2 mb-4" />
-          <div className="grid grid-cols-3 gap-4">
-            {steps.map((step, idx) => {
-              const Icon = step.icon;
-              const isActive = step.key === currentStep;
-              const isCompleted = idx < currentStepIndex;
+        {/* Progress Indicator */}
+        <div className="mb-8 bg-white rounded-xl p-6 shadow-card">
+          <div className="flex items-center justify-between">
+            {['Upload', 'Fuel Method', 'Column Mapping', 'Parameters'].map((step, index) => {
+              const stepKeys = ['upload', 'fuel_method', 'mapping', 'parameters'];
+              const currentIndex = stepKeys.indexOf(currentStep);
+              const isActive = index === currentIndex;
+              const isCompleted = index < currentIndex;
 
               return (
-                <div
-                  key={step.key}
-                  className={`flex items-center gap-2 ${
-                    isActive ? 'text-primary' : isCompleted ? 'text-success' : 'text-muted-foreground'
-                  }`}
-                >
-                  <div
-                    className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                      isActive
-                        ? 'bg-primary text-primary-foreground'
-                        : isCompleted
-                        ? 'bg-success text-success-foreground'
-                        : 'bg-muted'
-                    }`}
-                  >
-                    {isCompleted ? <CheckCircle className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
+                <React.Fragment key={step}>
+                  <div className="flex items-center gap-2">
+                    <div
+                      className={`w-8 h-8 rounded-full flex items-center justify-center font-semibold text-sm transition-all ${
+                        isActive
+                          ? 'bg-primary text-white'
+                          : isCompleted
+                          ? 'bg-success text-white'
+                          : 'bg-gray-200 text-gray-500'
+                      }`}
+                    >
+                      {isCompleted ? '✓' : index + 1}
+                    </div>
+                    <span
+                      className={`text-sm font-medium ${
+                        isActive ? 'text-primary' : isCompleted ? 'text-success' : 'text-gray-500'
+                      }`}
+                    >
+                      {step}
+                    </span>
                   </div>
-                  <span className="text-sm font-medium hidden sm:inline">{step.label}</span>
-                </div>
+                  {index < 3 && (
+                    <div
+                      className={`flex-1 h-1 mx-4 rounded ${
+                        isCompleted ? 'bg-success' : 'bg-gray-200'
+                      }`}
+                    />
+                  )}
+                </React.Fragment>
               );
             })}
           </div>
         </div>
-      </div>
 
-      <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="max-w-4xl mx-auto">
-          {currentStep === 'select' && (
-            <FileUploadSection onFileUpload={handleFileSelect} />
-          )}
-
-          {currentStep === 'configure' && selectedFile && (
-            <div className="space-y-4">
-              <div className="bg-card rounded-lg border p-4 flex items-center gap-3">
-                <FileUp className="h-5 w-5 text-primary" />
-                <div>
-                  <p className="text-sm font-medium">Selected: {selectedFile.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {(selectedFile.size / 1024).toFixed(2)} KB
-                  </p>
-                </div>
-              </div>
-
-              {isUploading && (
-                <div className="bg-card rounded-lg border p-4 space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span>Uploading...</span>
-                    <span>{Math.round(uploadProgress)}%</span>
-                  </div>
-                  <Progress value={uploadProgress} className="h-2" />
-                </div>
-              )}
-
-              <ValidationForm onValidate={handleValidate} isValidating={isUploading} />
+        {/* Step Content */}
+        <div className="step-content">
+          {currentStep === 'upload' && (
+            <div className="bg-white rounded-2xl p-8 shadow-card">
+              <h2 className="text-2xl font-semibold mb-6 text-gray-700">Upload CSV File</h2>
+              <FileUploadSection onFileSelect={setFile} />
             </div>
           )}
 
-          {currentStep === 'results' && isValid !== null && (
-            <div className="space-y-6">
-              {isValid ? (
-                <div className="bg-success/10 border border-success/20 rounded-lg p-6 text-center">
-                  <CheckCircle className="h-12 w-12 text-success mx-auto mb-4" />
-                  <h2 className="text-2xl font-bold text-success mb-2">Success!</h2>
-                  <p className="text-muted-foreground mb-6">Validation completed with no errors</p>
-                  <div className="flex gap-4 justify-center">
-                    <Button onClick={() => handleDownload('clean')}>Download Clean Data</Button>
-                    <Button onClick={handleGenerateReport} variant="outline">
-                      Generate Report
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <div className="bg-warning/10 border border-warning/20 rounded-lg p-6 text-center">
-                  <AlertCircle className="h-12 w-12 text-warning mx-auto mb-4" />
-                  <h2 className="text-2xl font-bold mb-2">Validation Complete</h2>
-                  <p className="text-muted-foreground mb-6">Some errors found in your data</p>
-                  <div className="flex gap-4 justify-center">
-                    <Button onClick={() => handleDownload('clean')}>Download Clean</Button>
-                    <Button onClick={() => handleDownload('errors')} variant="outline">
-                      Download Errors
-                    </Button>
-                    <Button onClick={handleGenerateReport} variant="outline">
-                      Generate Report
-                    </Button>
-                  </div>
-                </div>
-              )}
+          {currentStep === 'fuel_method' && selectedFile && (
+            <div className="bg-white rounded-2xl p-8 shadow-card">
+              <h2 className="text-2xl font-semibold mb-6 text-gray-700">Select Fuel Calculation Method</h2>
+              <FuelMethodSelector
+                onSelect={setFuelMethod}
+                selectedMethod={selectedFuelMethod}
+              />
             </div>
+          )}
+
+          {currentStep === 'mapping' && selectedFuelMethod && (
+            <ColumnMappingWizard
+              uploadedColumns={uploadedColumns}
+              fuelMethod={selectedFuelMethod}
+              onComplete={setColumnMapping}
+              onBack={() => goToStep('fuel_method')}
+            />
+          )}
+
+          {currentStep === 'parameters' && (
+            <ValidationForm
+              onSubmit={handleValidationSubmit}
+              onBack={() => goToStep('mapping')}
+            />
           )}
         </div>
-      </main>
+
+        {/* Loading Overlay */}
+        {isLoading && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-xl p-8 shadow-xl text-center">
+              <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-primary mx-auto mb-4"></div>
+              <p className="text-lg font-semibold text-gray-700">Processing your file...</p>
+              <p className="text-sm text-gray-500 mt-2">This may take a moment</p>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
-}
+};

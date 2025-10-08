@@ -1,206 +1,196 @@
-/**
- * FileUploadSection Component
- * Drag-and-drop CSV file upload with progress tracking
- */
+// File Upload Component with drag & drop
+// Based on index4.html:1986-2096
 
-import { useState, useCallback } from 'react';
-import { Upload, FileText, X, AlertCircle } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Progress } from '@/components/ui/progress';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import React, { useState, useRef } from 'react';
+import { isCSVFile, formatFileSize } from '../../utils/csv';
 
 interface FileUploadSectionProps {
-  onFileUpload: (file: File) => Promise<void>;
-  isUploading?: boolean;
-  uploadProgress?: number;
-  acceptedFileTypes?: string;
+  onFileSelect: (file: File) => void;
+  accept?: string;
+  maxSize?: number; // in bytes
+  label?: string;
 }
 
-export function FileUploadSection({
-  onFileUpload,
-  isUploading = false,
-  uploadProgress = 0,
-  acceptedFileTypes = '.csv',
-}: FileUploadSectionProps) {
+export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
+  onFileSelect,
+  accept = '.csv',
+  maxSize = 50 * 1024 * 1024, // 50MB default
+  label = 'Upload CSV File'
+}) => {
+  const [isDragging, setIsDragging] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [isDragOver, setIsDragOver] = useState(false);
-  const [error, setError] = useState<string>('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const validateFile = (file: File): boolean => {
-    setError('');
-
-    // Check file type
-    if (!file.name.toLowerCase().endsWith('.csv')) {
-      setError('Please upload a CSV file');
-      return false;
-    }
-
-    // Check file size (10MB max)
-    if (file.size > 10 * 1024 * 1024) {
-      setError('File size must be less than 10MB');
-      return false;
-    }
-
-    return true;
+  // From index4.html:1995-2011
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
   };
 
-  const handleFileSelect = useCallback(
-    (file: File) => {
-      if (validateFile(file)) {
-        setSelectedFile(file);
-        setError('');
-      }
-    },
-    []
-  );
-
-  const handleDrop = useCallback(
-    (e: React.DragEvent<HTMLDivElement>) => {
-      e.preventDefault();
-      setIsDragOver(false);
-
-      const files = Array.from(e.dataTransfer.files);
-      if (files.length > 0) {
-        handleFileSelect(files[0]);
-      }
-    },
-    [handleFileSelect]
-  );
-
-  const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+  const handleDragLeave = (e: React.DragEvent) => {
     e.preventDefault();
-    setIsDragOver(true);
-  }, []);
+    e.stopPropagation();
+    setIsDragging(false);
+  };
 
-  const handleDragLeave = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+  // From index4.html:2013-2032
+  const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
-    setIsDragOver(false);
-  }, []);
+    e.stopPropagation();
+    setIsDragging(false);
 
-  const handleFileInputChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const files = e.target.files;
-      if (files && files.length > 0) {
-        handleFileSelect(files[0]);
-      }
-    },
-    [handleFileSelect]
-  );
-
-  const handleUpload = async () => {
-    if (!selectedFile) return;
-
-    try {
-      setError('');
-      await onFileUpload(selectedFile);
-    } catch (err: any) {
-      setError(err.message || 'Upload failed');
+    const files = e.dataTransfer.files;
+    if (files && files.length > 0) {
+      handleFileSelection(files[0]);
     }
   };
 
-  const handleRemoveFile = () => {
-    setSelectedFile(null);
-    setError('');
+  // From index4.html:2033-2064
+  const handleFileSelection = (file: File) => {
+    console.log('📁 File selected:', file.name, formatFileSize(file.size));
+
+    // Validate file type
+    if (!isCSVFile(file)) {
+      alert('Please select a CSV file');
+      return;
+    }
+
+    // Validate file size
+    if (file.size > maxSize) {
+      alert(`File size exceeds maximum allowed size of ${formatFileSize(maxSize)}`);
+      return;
+    }
+
+    // Validate file is not empty
+    if (file.size === 0) {
+      alert('Selected file is empty');
+      return;
+    }
+
+    setSelectedFile(file);
+    onFileSelect(file);
+  };
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      handleFileSelection(files[0]);
+    }
+  };
+
+  const handleButtonClick = () => {
+    fileInputRef.current?.click();
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Upload CSV File</CardTitle>
-        <CardDescription>
-          Upload your flight data CSV file to begin validation and analysis
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {error && (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-
-        {/* Drag and Drop Zone */}
-        <div
-          onDrop={handleDrop}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          className={`
-            relative border-2 border-dashed rounded-lg p-8 text-center transition-colors
-            ${isDragOver ? 'border-primary bg-primary/5' : 'border-border'}
-            ${isUploading ? 'pointer-events-none opacity-50' : 'cursor-pointer hover:border-primary hover:bg-accent'}
-          `}
-        >
-          <input
-            type="file"
-            accept={acceptedFileTypes}
-            onChange={handleFileInputChange}
-            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-            disabled={isUploading}
-          />
-
-          {!selectedFile ? (
-            <div className="space-y-4">
-              <div className="mx-auto w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-                <Upload className="h-6 w-6 text-primary" />
-              </div>
-              <div>
-                <p className="text-sm font-medium">
-                  Drag and drop your CSV file here, or click to browse
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Maximum file size: 10MB
-                </p>
-              </div>
-            </div>
-          ) : (
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 rounded bg-primary/10 flex items-center justify-center">
-                  <FileText className="h-5 w-5 text-primary" />
-                </div>
-                <div className="text-left">
-                  <p className="text-sm font-medium">{selectedFile.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {(selectedFile.size / 1024).toFixed(2)} KB
-                  </p>
-                </div>
-              </div>
-              {!isUploading && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleRemoveFile();
-                  }}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              )}
-            </div>
-          )}
+    <div className="file-upload-section">
+      {/* Drag & Drop Zone - From index4.html:142-201 */}
+      <div
+        className={`dropzone ${isDragging ? 'dragover' : ''}`}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        onClick={handleButtonClick}
+      >
+        <div className="dropzone-content">
+          <svg
+            className="upload-icon"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            width="48"
+            height="48"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+            />
+          </svg>
+          <p className="dropzone-text">
+            {selectedFile ? (
+              <>
+                <strong>{selectedFile.name}</strong>
+                <br />
+                <span className="text-sm text-gray-500">
+                  {formatFileSize(selectedFile.size)}
+                </span>
+              </>
+            ) : (
+              <>
+                Drag and drop your CSV file here or click to browse
+                <br />
+                <span className="text-sm text-gray-500">
+                  Maximum file size: {formatFileSize(maxSize)}
+                </span>
+              </>
+            )}
+          </p>
         </div>
+      </div>
 
-        {/* Upload Progress */}
-        {isUploading && (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">Uploading...</span>
-              <span className="font-medium">{Math.round(uploadProgress)}%</span>
-            </div>
-            <Progress value={uploadProgress} className="h-2" />
-          </div>
-        )}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept={accept}
+        onChange={handleFileInputChange}
+        className="hidden"
+      />
 
-        {/* Upload Button */}
-        {selectedFile && !isUploading && (
-          <Button onClick={handleUpload} className="w-full" size="lg">
-            <Upload className="mr-2 h-4 w-4" />
-            Upload and Continue
-          </Button>
-        )}
-      </CardContent>
-    </Card>
+      <style jsx>{`
+        .file-upload-section {
+          margin-bottom: 2rem;
+        }
+
+        .dropzone {
+          border: 3px dashed #cbd5e1;
+          border-radius: 1rem;
+          padding: 3rem 2rem;
+          text-align: center;
+          background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+          transition: all 0.3s ease;
+          cursor: pointer;
+          min-height: 200px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .dropzone:hover {
+          border-color: #6366f1;
+          background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%);
+          transform: translateY(-2px);
+        }
+
+        .dropzone.dragover {
+          border-color: #4f46e5;
+          background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%);
+          transform: scale(1.02);
+        }
+
+        .dropzone-content {
+          pointer-events: none;
+        }
+
+        .upload-icon {
+          margin: 0 auto 1rem;
+          color: #6366f1;
+        }
+
+        .dropzone-text {
+          font-size: 1rem;
+          color: #475569;
+          margin: 0;
+          line-height: 1.6;
+        }
+
+        .dropzone.dragover .dropzone-text {
+          color: #4f46e5;
+          font-weight: 600;
+        }
+      `}</style>
+    </div>
   );
-}
+};

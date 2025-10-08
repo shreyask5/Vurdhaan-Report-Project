@@ -1,218 +1,352 @@
-/**
- * ColumnMappingWizard Component
- * Interactive wizard for mapping CSV columns to required fields
- */
+// Column Mapping Wizard Component
+// Based on index4.html:1784-1955, 1821-1866
 
-import { useState, useEffect } from 'react';
-import { Check, AlertCircle, ArrowRight } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import type { ColumnMapping } from '@/types/validation';
+import React, { useState, useEffect } from 'react';
+import { FuelMethod, ColumnMapping, FUEL_METHOD_COLUMNS } from '../../types/validation';
 
 interface ColumnMappingWizardProps {
-  csvColumns: string[];
-  suggestedMapping?: ColumnMapping;
-  onMappingComplete: (mapping: ColumnMapping) => void;
-  onSkip?: () => void;
+  uploadedColumns: string[];
+  fuelMethod: FuelMethod;
+  onComplete: (mapping: ColumnMapping) => void;
+  onBack?: () => void;
 }
 
-const REQUIRED_COLUMNS = [
-  {
-    key: 'Flight Number',
-    label: 'Flight Number',
-    description: 'Unique flight identifier',
-    required: true,
-  },
-  {
-    key: 'Departure Airport ICAO',
-    label: 'Departure Airport (ICAO)',
-    description: 'Origin airport ICAO code (e.g., KJFK)',
-    required: true,
-  },
-  {
-    key: 'Arrival Airport ICAO',
-    label: 'Arrival Airport (ICAO)',
-    description: 'Destination airport ICAO code',
-    required: true,
-  },
-  {
-    key: 'Departure Date',
-    label: 'Departure Date',
-    description: 'Flight departure date',
-    required: true,
-  },
-  {
-    key: 'Fuel Uplift',
-    label: 'Fuel Uplift',
-    description: 'Fuel loaded before flight',
-    required: true,
-  },
-  {
-    key: 'Block-Off',
-    label: 'Block-Off Time',
-    description: 'When aircraft starts moving',
-    required: false,
-  },
-  {
-    key: 'Block-On',
-    label: 'Block-On Time',
-    description: 'When aircraft stops at destination',
-    required: false,
-  },
-];
+export const ColumnMappingWizard: React.FC<ColumnMappingWizardProps> = ({
+  uploadedColumns,
+  fuelMethod,
+  onComplete,
+  onBack
+}) => {
+  const [currentStep, setCurrentStep] = useState(0);
+  const [mapping, setMapping] = useState<ColumnMapping>({});
 
-export function ColumnMappingWizard({
-  csvColumns,
-  suggestedMapping = {},
-  onMappingComplete,
-  onSkip,
-}: ColumnMappingWizardProps) {
-  const [mapping, setMapping] = useState<ColumnMapping>(suggestedMapping);
-  const [errors, setErrors] = useState<string[]>([]);
+  const requiredColumns = FUEL_METHOD_COLUMNS[fuelMethod];
+  const totalSteps = requiredColumns.length;
+  const currentRequiredColumn = requiredColumns[currentStep];
+  const progress = ((currentStep + 1) / totalSteps) * 100;
 
-  useEffect(() => {
-    setMapping(suggestedMapping);
-  }, [suggestedMapping]);
+  // Get already mapped columns
+  const mappedColumns = Object.values(mapping);
 
-  const handleColumnSelect = (requiredColumn: string, csvColumn: string) => {
-    setMapping((prev) => ({
-      ...prev,
-      [requiredColumn]: csvColumn,
-    }));
-    setErrors([]);
-  };
+  const handleColumnSelect = (csvColumn: string) => {
+    const newMapping = { ...mapping, [currentRequiredColumn]: csvColumn };
+    setMapping(newMapping);
 
-  const validateMapping = (): boolean => {
-    const newErrors: string[] = [];
-
-    // Check that all required columns are mapped
-    REQUIRED_COLUMNS.forEach((col) => {
-      if (col.required && !mapping[col.key]) {
-        newErrors.push(`${col.label} is required`);
-      }
-    });
-
-    // Check for duplicate mappings
-    const usedColumns = new Set<string>();
-    Object.values(mapping).forEach((csvCol) => {
-      if (csvCol && usedColumns.has(csvCol)) {
-        newErrors.push(`Column "${csvCol}" is mapped multiple times`);
-      }
-      usedColumns.add(csvCol);
-    });
-
-    setErrors(newErrors);
-    return newErrors.length === 0;
-  };
-
-  const handleContinue = () => {
-    if (validateMapping()) {
-      onMappingComplete(mapping);
+    // Auto-advance to next step
+    if (currentStep < totalSteps - 1) {
+      setTimeout(() => setCurrentStep(currentStep + 1), 200);
     }
   };
 
-  const isMapped = (requiredColumn: string): boolean => {
-    return !!mapping[requiredColumn];
+  const handleNext = () => {
+    if (currentStep < totalSteps - 1) {
+      setCurrentStep(currentStep + 1);
+    }
   };
 
-  const completionPercentage = Math.round(
-    (Object.keys(mapping).filter((k) => mapping[k]).length / REQUIRED_COLUMNS.filter(c => c.required).length) * 100
-  );
+  const handlePrevious = () => {
+    if (currentStep > 0) {
+      setCurrentStep(currentStep - 1);
+    }
+  };
+
+  const handleComplete = () => {
+    if (Object.keys(mapping).length === totalSteps) {
+      onComplete(mapping);
+    }
+  };
+
+  const canComplete = Object.keys(mapping).length === totalSteps;
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle>Map CSV Columns</CardTitle>
-            <CardDescription>
-              Match your CSV columns to the required flight data fields
-            </CardDescription>
-          </div>
-          <div className="text-sm font-medium">
-            <span className="text-2xl font-bold text-primary">{completionPercentage}%</span>
-            <span className="text-muted-foreground ml-1">complete</span>
+    <div className="column-mapping-wizard">
+      {/* Header */}
+      <div className="wizard-header">
+        <h3 className="text-xl font-semibold text-gray-700">
+          Map Your CSV Columns
+        </h3>
+        <p className="text-sm text-gray-600 mt-2">
+          Match each required field to a column in your CSV file
+        </p>
+      </div>
+
+      {/* Progress Bar - From index4.html:964-1002 */}
+      <div className="progress-section">
+        <div className="progress-info">
+          <span className="text-sm font-semibold text-gray-700">
+            Step {currentStep + 1} of {totalSteps}
+          </span>
+          <span className="text-xs text-gray-500">
+            {Math.round(progress)}% Complete
+          </span>
+        </div>
+        <div className="progress-bar">
+          <div
+            className="progress-fill"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+      </div>
+
+      {/* Current Step */}
+      <div className="mapping-step">
+        <div className="required-column-display">
+          <label className="text-sm font-medium text-gray-600">
+            Required Field:
+          </label>
+          <div className="required-column-name">
+            {currentRequiredColumn}
           </div>
         </div>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        {errors.length > 0 && (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
-              <ul className="list-disc list-inside space-y-1">
-                {errors.map((error, idx) => (
-                  <li key={idx}>{error}</li>
-                ))}
-              </ul>
-            </AlertDescription>
-          </Alert>
-        )}
 
-        <div className="space-y-4">
-          {REQUIRED_COLUMNS.map((column) => (
-            <div key={column.key} className="space-y-2">
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <Label htmlFor={column.key} className="text-sm font-medium">
-                    {column.label}
-                    {column.required && <span className="text-destructive ml-1">*</span>}
-                  </Label>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {column.description}
-                  </p>
-                </div>
-                {isMapped(column.key) && (
-                  <Check className="h-4 w-4 text-success mt-1" />
-                )}
-              </div>
+        {/* Column Selector Grid - From index4.html:1821-1866 */}
+        <div className="column-selector">
+          <label className="text-sm font-medium text-gray-600 mb-3 block">
+            Select matching column from your CSV:
+          </label>
+          <div className="column-grid">
+            {uploadedColumns.map((column) => {
+              const isSelected = mapping[currentRequiredColumn] === column;
+              const isAlreadyMapped = mappedColumns.includes(column) && !isSelected;
 
-              <Select
-                value={mapping[column.key] || ''}
-                onValueChange={(value) => handleColumnSelect(column.key, value)}
-              >
-                <SelectTrigger id={column.key}>
-                  <SelectValue placeholder="Select a column from your CSV" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">-- Not mapped --</SelectItem>
-                  {csvColumns.map((csvCol) => (
-                    <SelectItem key={csvCol} value={csvCol}>
-                      {csvCol}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          ))}
+              return (
+                <button
+                  key={column}
+                  onClick={() => !isAlreadyMapped && handleColumnSelect(column)}
+                  disabled={isAlreadyMapped}
+                  className={`column-btn ${isSelected ? 'selected' : ''} ${
+                    isAlreadyMapped ? 'disabled' : ''
+                  }`}
+                  type="button"
+                >
+                  {column}
+                  {isSelected && <span className="checkmark">✓</span>}
+                  {isAlreadyMapped && <span className="mapped-indicator">Mapped</span>}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
-        <div className="flex items-center justify-between pt-4 border-t">
-          {onSkip && (
-            <Button variant="ghost" onClick={onSkip}>
-              Skip for Now
-            </Button>
-          )}
-          <Button
-            onClick={handleContinue}
-            className="ml-auto"
-            disabled={completionPercentage < 100}
-            size="lg"
+        {/* Navigation Buttons - From index4.html:1881-1908 */}
+        <div className="wizard-navigation">
+          <button
+            onClick={onBack || handlePrevious}
+            disabled={currentStep === 0 && !onBack}
+            className="btn-secondary"
+            type="button"
           >
-            Continue
-            <ArrowRight className="ml-2 h-4 w-4" />
-          </Button>
+            ← {currentStep === 0 ? 'Back' : 'Previous'}
+          </button>
+
+          {currentStep < totalSteps - 1 ? (
+            <button
+              onClick={handleNext}
+              disabled={!mapping[currentRequiredColumn]}
+              className="btn-primary"
+              type="button"
+            >
+              Next →
+            </button>
+          ) : (
+            <button
+              onClick={handleComplete}
+              disabled={!canComplete}
+              className="btn-success"
+              type="button"
+            >
+              Complete Mapping
+            </button>
+          )}
         </div>
-      </CardContent>
-    </Card>
+      </div>
+
+      <style jsx>{`
+        .column-mapping-wizard {
+          background: white;
+          border: 1px solid #e2e8f0;
+          border-radius: 1rem;
+          padding: 2rem;
+          margin-bottom: 2rem;
+        }
+
+        .wizard-header {
+          margin-bottom: 2rem;
+        }
+
+        .progress-section {
+          margin-bottom: 2rem;
+        }
+
+        .progress-info {
+          display: flex;
+          justify-content: space-between;
+          margin-bottom: 0.5rem;
+        }
+
+        .progress-bar {
+          height: 8px;
+          background: #e2e8f0;
+          border-radius: 9999px;
+          overflow: hidden;
+        }
+
+        .progress-fill {
+          height: 100%;
+          background: linear-gradient(90deg, #6366f1 0%, #4f46e5 100%);
+          transition: width 0.3s ease;
+          border-radius: 9999px;
+        }
+
+        .mapping-step {
+          margin-bottom: 1.5rem;
+        }
+
+        .required-column-display {
+          background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%);
+          border: 2px solid #c7d2fe;
+          border-radius: 0.75rem;
+          padding: 1.5rem;
+          margin-bottom: 2rem;
+          text-align: center;
+        }
+
+        .required-column-name {
+          font-size: 1.5rem;
+          font-weight: 700;
+          color: #4f46e5;
+          margin-top: 0.5rem;
+        }
+
+        .column-selector {
+          margin-bottom: 2rem;
+        }
+
+        .column-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+          gap: 0.75rem;
+        }
+
+        .column-btn {
+          background: white;
+          border: 2px solid #cbd5e1;
+          border-radius: 0.5rem;
+          padding: 0.75rem 1rem;
+          font-size: 0.875rem;
+          font-weight: 500;
+          color: #475569;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          position: relative;
+          text-align: left;
+        }
+
+        .column-btn:hover:not(.disabled) {
+          border-color: #6366f1;
+          background: #f8fafc;
+          transform: translateY(-2px);
+          box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .column-btn.selected {
+          border-color: #4f46e5;
+          background: linear-gradient(135deg, #eef2ff 0%, white 100%);
+          color: #4f46e5;
+          font-weight: 600;
+        }
+
+        .column-btn.disabled {
+          background: #f1f5f9;
+          border-color: #e2e8f0;
+          color: #94a3b8;
+          cursor: not-allowed;
+          opacity: 0.6;
+        }
+
+        .checkmark {
+          position: absolute;
+          top: 0.5rem;
+          right: 0.5rem;
+          color: #10b981;
+          font-weight: bold;
+        }
+
+        .mapped-indicator {
+          position: absolute;
+          top: 0.5rem;
+          right: 0.5rem;
+          font-size: 0.625rem;
+          color: #64748b;
+          background: #e2e8f0;
+          padding: 0.125rem 0.375rem;
+          border-radius: 0.25rem;
+        }
+
+        .wizard-navigation {
+          display: flex;
+          gap: 1rem;
+          justify-content: space-between;
+        }
+
+        .btn-primary,
+        .btn-secondary,
+        .btn-success {
+          padding: 0.75rem 1.5rem;
+          border-radius: 0.5rem;
+          font-weight: 600;
+          font-size: 0.875rem;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          border: none;
+          flex: 1;
+        }
+
+        .btn-primary {
+          background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+          color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+          box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.3);
+          transform: translateY(-2px);
+        }
+
+        .btn-primary:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+
+        .btn-secondary {
+          background: linear-gradient(135deg, #94a3b8 0%, #64748b 100%);
+          color: white;
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+          box-shadow: 0 10px 15px -3px rgba(100, 116, 139, 0.3);
+          transform: translateY(-2px);
+        }
+
+        .btn-secondary:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+
+        .btn-success {
+          background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+          color: white;
+        }
+
+        .btn-success:hover:not(:disabled) {
+          box-shadow: 0 10px 15px -3px rgba(16, 185, 129, 0.3);
+          transform: translateY(-2px);
+        }
+
+        .btn-success:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+      `}</style>
+    </div>
   );
-}
+};

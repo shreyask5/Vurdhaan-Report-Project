@@ -1,194 +1,222 @@
-/**
- * ValidationForm Component
- * Form for setting validation parameters (date range, fuel method, etc.)
- */
+// Validation Parameters Form Component
+// Based on index4.html:1204-1237
 
-import { useState } from 'react';
-import { Calendar, Fuel, Filter, ArrowRight } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import type { FuelMethod, DateFormat } from '@/types/validation';
+import React, { useState } from 'react';
+import { ValidationParams, DateFormat } from '../../types/validation';
 
 interface ValidationFormProps {
-  onValidate: (params: ValidationFormData) => void;
-  isValidating?: boolean;
+  onSubmit: (params: ValidationParams) => void;
+  onBack?: () => void;
 }
 
-export interface ValidationFormData {
-  monitoring_year: string;
-  date_format: DateFormat;
-  flight_starts_with: string;
-  fuel_method: FuelMethod;
-}
-
-export function ValidationForm({ onValidate, isValidating = false }: ValidationFormProps) {
+export const ValidationForm: React.FC<ValidationFormProps> = ({
+  onSubmit,
+  onBack
+}) => {
   const currentYear = new Date().getFullYear();
+  const years = Array.from({ length: 6 }, (_, i) => (currentYear - 5 + i).toString());
 
-  const [formData, setFormData] = useState<ValidationFormData>({
+  const [params, setParams] = useState<ValidationParams>({
     monitoring_year: currentYear.toString(),
     date_format: 'DMY',
-    flight_starts_with: '',
-    fuel_method: 'Block Off - Block On',
+    flight_starts_with: ''
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onValidate(formData);
+    onSubmit(params);
   };
 
-  const updateField = <K extends keyof ValidationFormData>(
-    field: K,
-    value: ValidationFormData[K]
-  ) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+  const handleChange = (field: keyof ValidationParams, value: string) => {
+    setParams(prev => ({ ...prev, [field]: value }));
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Validation Parameters</CardTitle>
-        <CardDescription>
+    <div className="validation-form-container">
+      <div className="form-header">
+        <h3 className="text-xl font-semibold text-gray-700">
+          Validation Parameters
+        </h3>
+        <p className="text-sm text-gray-600 mt-2">
           Configure validation settings for your flight data
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Monitoring Year */}
-          <div className="space-y-2">
-            <Label htmlFor="monitoring-year" className="flex items-center gap-2">
-              <Calendar className="h-4 w-4" />
-              Monitoring Year
-            </Label>
-            <Select
-              value={formData.monitoring_year}
-              onValueChange={(value) => updateField('monitoring_year', value)}
-            >
-              <SelectTrigger id="monitoring-year">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {Array.from({ length: 10 }, (_, i) => currentYear - 5 + i).map((year) => (
-                  <SelectItem key={year} value={year.toString()}>
-                    {year}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">
-              The year for which you're reporting flight data
-            </p>
-          </div>
+        </p>
+      </div>
 
-          {/* Date Format */}
-          <div className="space-y-2">
-            <Label className="flex items-center gap-2">
-              <Calendar className="h-4 w-4" />
-              Date Format
-            </Label>
-            <RadioGroup
-              value={formData.date_format}
-              onValueChange={(value: DateFormat) => updateField('date_format', value)}
-              className="flex gap-4"
-            >
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="DMY" id="dmy" />
-                <Label htmlFor="dmy" className="font-normal cursor-pointer">
-                  DD/MM/YYYY
-                </Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="MDY" id="mdy" />
-                <Label htmlFor="mdy" className="font-normal cursor-pointer">
-                  MM/DD/YYYY
-                </Label>
-              </div>
-            </RadioGroup>
-            <p className="text-xs text-muted-foreground">
-              Date format used in your CSV file
-            </p>
-          </div>
-
-          {/* Fuel Calculation Method */}
-          <div className="space-y-2">
-            <Label className="flex items-center gap-2">
-              <Fuel className="h-4 w-4" />
-              Fuel Calculation Method
-            </Label>
-            <RadioGroup
-              value={formData.fuel_method}
-              onValueChange={(value: FuelMethod) => updateField('fuel_method', value)}
-              className="space-y-2"
-            >
-              <div className="flex items-start space-x-2 p-3 rounded-lg border border-border hover:bg-accent transition-colors">
-                <RadioGroupItem value="Block Off - Block On" id="block-method" className="mt-1" />
-                <div className="flex-1">
-                  <Label htmlFor="block-method" className="font-medium cursor-pointer">
-                    Block Off - Block On
-                  </Label>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Calculate fuel burn using block-off and block-on times
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-start space-x-2 p-3 rounded-lg border border-border hover:bg-accent transition-colors">
-                <RadioGroupItem value="Method B" id="method-b" className="mt-1" />
-                <div className="flex-1">
-                  <Label htmlFor="method-b" className="font-medium cursor-pointer">
-                    Method B
-                  </Label>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Alternative fuel calculation method
-                  </p>
-                </div>
-              </div>
-            </RadioGroup>
-          </div>
-
-          {/* Flight Prefix Filter */}
-          <div className="space-y-2">
-            <Label htmlFor="flight-prefix" className="flex items-center gap-2">
-              <Filter className="h-4 w-4" />
-              Flight Number Prefix (Optional)
-            </Label>
-            <Input
-              id="flight-prefix"
-              placeholder="e.g., AA, UA, DL"
-              value={formData.flight_starts_with}
-              onChange={(e) => updateField('flight_starts_with', e.target.value)}
-            />
-            <p className="text-xs text-muted-foreground">
-              Filter flights by prefix. Leave empty to process all flights.
-            </p>
-          </div>
-
-          {/* Submit Button */}
-          <Button
-            type="submit"
-            className="w-full"
-            size="lg"
-            disabled={isValidating}
+      <form onSubmit={handleSubmit} className="validation-form">
+        {/* Monitoring Year */}
+        <div className="form-group">
+          <label htmlFor="monitoring_year" className="form-label">
+            Monitoring Year *
+          </label>
+          <select
+            id="monitoring_year"
+            value={params.monitoring_year}
+            onChange={(e) => handleChange('monitoring_year', e.target.value)}
+            className="form-select"
+            required
           >
-            {isValidating ? (
-              <>Validating...</>
-            ) : (
-              <>
-                Validate Flight Data
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </>
-            )}
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
+            {years.map(year => (
+              <option key={year} value={year}>
+                {year}
+              </option>
+            ))}
+          </select>
+          <p className="form-help">
+            Select the year for which you're monitoring flight data
+          </p>
+        </div>
+
+        {/* Date Format */}
+        <div className="form-group">
+          <label htmlFor="date_format" className="form-label">
+            Date Format *
+          </label>
+          <select
+            id="date_format"
+            value={params.date_format}
+            onChange={(e) => handleChange('date_format', e.target.value as DateFormat)}
+            className="form-select"
+            required
+          >
+            <option value="DMY">DD/MM/YYYY</option>
+            <option value="MDY">MM/DD/YYYY</option>
+          </select>
+          <p className="form-help">
+            Choose the date format used in your CSV file
+          </p>
+        </div>
+
+        {/* Flight Starts With */}
+        <div className="form-group">
+          <label htmlFor="flight_starts_with" className="form-label">
+            Flight Number Prefix
+          </label>
+          <input
+            id="flight_starts_with"
+            type="text"
+            value={params.flight_starts_with}
+            onChange={(e) => handleChange('flight_starts_with', e.target.value)}
+            className="form-input"
+            placeholder="e.g., AI, BA, UA"
+          />
+          <p className="form-help">
+            Optional: Enter the prefix that all flight numbers should start with
+          </p>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="form-actions">
+          {onBack && (
+            <button
+              type="button"
+              onClick={onBack}
+              className="btn-secondary"
+            >
+              ← Back
+            </button>
+          )}
+          <button
+            type="submit"
+            className="btn-primary"
+          >
+            Submit & Validate
+          </button>
+        </div>
+      </form>
+
+      <style jsx>{`
+        .validation-form-container {
+          background: white;
+          border: 1px solid #e2e8f0;
+          border-radius: 1rem;
+          padding: 2rem;
+          margin-bottom: 2rem;
+        }
+
+        .form-header {
+          margin-bottom: 2rem;
+        }
+
+        .validation-form {
+          display: flex;
+          flex-direction: column;
+          gap: 1.5rem;
+        }
+
+        .form-group {
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+        }
+
+        .form-label {
+          font-size: 0.875rem;
+          font-weight: 600;
+          color: #374151;
+        }
+
+        .form-select,
+        .form-input {
+          padding: 0.75rem 1rem;
+          border: 2px solid #cbd5e1;
+          border-radius: 0.5rem;
+          font-size: 0.875rem;
+          color: #1e293b;
+          background: white;
+          transition: all 0.2s ease;
+        }
+
+        .form-select:focus,
+        .form-input:focus {
+          outline: none;
+          border-color: #6366f1;
+          box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+        }
+
+        .form-help {
+          font-size: 0.75rem;
+          color: #64748b;
+          margin: 0;
+        }
+
+        .form-actions {
+          display: flex;
+          gap: 1rem;
+          margin-top: 1rem;
+        }
+
+        .btn-primary,
+        .btn-secondary {
+          padding: 0.875rem 1.75rem;
+          border-radius: 0.5rem;
+          font-weight: 600;
+          font-size: 0.875rem;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          border: none;
+          flex: 1;
+        }
+
+        .btn-primary {
+          background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+          color: white;
+        }
+
+        .btn-primary:hover {
+          box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.3);
+          transform: translateY(-2px);
+        }
+
+        .btn-secondary {
+          background: linear-gradient(135deg, #94a3b8 0%, #64748b 100%);
+          color: white;
+        }
+
+        .btn-secondary:hover {
+          box-shadow: 0 10px 15px -3px rgba(100, 116, 139, 0.3);
+          transform: translateY(-2px);
+        }
+      `}</style>
+    </div>
   );
-}
+};

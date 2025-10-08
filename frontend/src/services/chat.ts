@@ -1,170 +1,168 @@
-/**
- * Chat Service - Handles AI chat sessions and queries
- */
+// Chat Service
+// Handles all chat-related API calls
+// Based on chat.js
 
-import { auth } from './firebase';
-import type { ChatSession, ChatQueryResponse, ChatMessage } from '@/types/validation';
+import {
+  ChatSession,
+  ChatQueryResponse,
+  ChatInitializeRequest,
+  ChatInitializeResponse,
+  UploadFilesResponse,
+  LogEntry
+} from '../types/chat';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5002/api';
-
-async function getAuthToken(): Promise<string> {
-  const user = auth.currentUser;
-  if (!user) {
-    throw new Error('Not authenticated');
-  }
-  return await user.getIdToken();
-}
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 export const chatService = {
   /**
-   * Initialize a new chat session for a project
+   * Upload files for chat session
+   * POST /upload_files
+   * From chat.js:133-143
    */
-  async initializeSession(projectId: string): Promise<ChatSession> {
-    const token = await getAuthToken();
+  async uploadFiles(cleanFile: File, errorFile: File): Promise<UploadFilesResponse> {
+    const formData = new FormData();
+    formData.append('clean_data', cleanFile);
+    formData.append('error_data', errorFile);
 
-    const response = await fetch(`${API_BASE_URL}/projects/${projectId}/chat/initialize`, {
+    const response = await fetch(`${API_BASE_URL}/upload_files`, {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
+      body: formData
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Failed to initialize chat' }));
-      throw new Error(error.error || 'Failed to initialize chat session');
+      throw new Error('Failed to upload files');
     }
 
     return response.json();
   },
 
   /**
-   * Send a query to the chat session
+   * Initialize chat session
+   * POST /chat/initialize
+   * From chat.js:145-173
    */
-  async sendQuery(
-    projectId: string,
-    query: string,
-    sessionId?: string
-  ): Promise<ChatQueryResponse> {
-    const token = await getAuthToken();
-
-    const response = await fetch(`${API_BASE_URL}/projects/${projectId}/chat/query`, {
+  async initializeSession(
+    sessionId: string,
+    cleanFlightsPath: string,
+    errorFlightsPath: string
+  ): Promise<ChatInitializeResponse> {
+    const response = await fetch(`${API_BASE_URL}/chat/initialize`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        query,
         session_id: sessionId,
-      }),
+        clean_flights_path: cleanFlightsPath,
+        error_flights_path: errorFlightsPath
+      })
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Query failed' }));
-      throw new Error(error.error || 'Failed to send query');
+      const error = await response.json().catch(() => ({ message: 'Initialization failed' }));
+      throw new Error(error.message || 'Failed to initialize chat session');
     }
 
     return response.json();
   },
 
   /**
-   * Get chat history for a session (if implemented in backend)
+   * Get session status
+   * GET /chat/{session_id}/status
+   * From chat.js:56-67
    */
-  async getChatHistory(
-    projectId: string,
-    sessionId: string
-  ): Promise<{ messages: ChatMessage[] }> {
-    const token = await getAuthToken();
-
-    const response = await fetch(
-      `${API_BASE_URL}/projects/${projectId}/chat/history?session_id=${sessionId}`,
-      {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      }
-    );
+  async getSessionStatus(sessionId: string): Promise<ChatSession> {
+    const response = await fetch(`${API_BASE_URL}/chat/${sessionId}/status`);
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Failed to fetch history' }));
-      throw new Error(error.error || 'Failed to fetch chat history');
+      throw new Error(`Session not found or expired (Status: ${response.status})`);
     }
 
     return response.json();
   },
 
   /**
-   * Export table data to CSV
+   * Send query to chat
+   * POST /chat/{session_id}/query
+   * From chat.js:197-227
    */
-  exportTableToCSV(data: any[], filename: string = 'query_results.csv'): void {
-    if (!data || data.length === 0) {
-      throw new Error('No data to export');
+  async sendQuery(sessionId: string, query: string): Promise<ChatQueryResponse> {
+    const response = await fetch(`${API_BASE_URL}/chat/${sessionId}/query`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ query })
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to process query');
     }
 
-    // Get headers from first row
-    const headers = Object.keys(data[0]);
-
-    // Create CSV content
-    const csvContent = [
-      headers.join(','), // Header row
-      ...data.map(row =>
-        headers.map(header => {
-          const value = row[header];
-          // Handle values that contain commas or quotes
-          if (typeof value === 'string' && (value.includes(',') || value.includes('"'))) {
-            return `"${value.replace(/"/g, '""')}"`;
-          }
-          return value ?? '';
-        }).join(',')
-      ),
-    ].join('\n');
-
-    // Create blob and download
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    return response.json();
   },
 
   /**
-   * Get suggested questions for a dataset
+   * Send debug log to server
+   * POST /api/log
+   * From chat.js:641-650
    */
-  getSuggestedQuestions(): string[] {
-    return [
-      'How many total flights are in the dataset?',
-      'What is the total fuel consumption?',
-      'Which route has the highest fuel consumption?',
-      'Show me flights from JFK airport',
-      'What is the average fuel uplift per flight?',
-      'List all unique departure airports',
-      'Show flights longer than 5 hours',
-      'What is the fuel consumption by month?',
-    ];
+  async logDebug(message: string, data?: any, sessionId?: string): Promise<void> {
+    const logEntry: LogEntry = {
+      timestamp: new Date().toISOString(),
+      level: 'debug',
+      message,
+      data,
+      session_id: sessionId
+    };
+
+    try {
+      await fetch(`${API_BASE_URL}/api/log`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(logEntry)
+      });
+    } catch (error) {
+      // Silently fail - don't want logging to break the app
+      console.warn('Failed to send log to server:', error);
+    }
   },
 
   /**
-   * Format SQL query for display
+   * Send error log to server
+   * POST /api/log
+   * From chat.js:641-650
    */
-  formatSQL(sql: string): string {
-    // Basic SQL formatting for readability
-    return sql
-      .replace(/\bSELECT\b/gi, 'SELECT')
-      .replace(/\bFROM\b/gi, '\nFROM')
-      .replace(/\bWHERE\b/gi, '\nWHERE')
-      .replace(/\bGROUP BY\b/gi, '\nGROUP BY')
-      .replace(/\bORDER BY\b/gi, '\nORDER BY')
-      .replace(/\bLIMIT\b/gi, '\nLIMIT')
-      .replace(/\bJOIN\b/gi, '\nJOIN')
-      .replace(/\bAND\b/gi, '\n  AND')
-      .replace(/\bOR\b/gi, '\n  OR')
-      .trim();
+  async logError(message: string, data?: any, sessionId?: string): Promise<void> {
+    const logEntry: LogEntry = {
+      timestamp: new Date().toISOString(),
+      level: 'error',
+      message,
+      data,
+      session_id: sessionId
+    };
+
+    try {
+      await fetch(`${API_BASE_URL}/api/log`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(logEntry)
+      });
+    } catch (error) {
+      // Silently fail - don't want logging to break the app
+      console.warn('Failed to send log to server:', error);
+    }
   },
+
+  /**
+   * Generate a unique session ID
+   * From chat.js:130-131
+   */
+  generateSessionId(): string {
+    return `session_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+  }
 };
-
-export default chatService;

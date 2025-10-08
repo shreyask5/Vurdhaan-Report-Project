@@ -1,278 +1,534 @@
-/**
- * ChatInterface Component
- * AI chat interface for querying flight data with natural language
- */
+// Chat Interface Component
+// Based on chat.html and chat.js:26-233
 
-import { useState, useRef, useEffect } from 'react';
-import { Send, Loader2, MessageSquare, Code, Lightbulb } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
-import { Badge } from '@/components/ui/badge';
-import { CollapsibleTable } from './CollapsibleTable';
-import { chatService } from '@/services/chat';
-import type { ChatMessage } from '@/types/validation';
-import ReactMarkdown from 'react-markdown';
+import React, { useState, useRef, useEffect } from 'react';
+import { ChatMessage as ChatMessageType, SUGGESTED_QUESTIONS } from '../../types/chat';
+import { ChatMessage } from './ChatMessage';
 
 interface ChatInterfaceProps {
-  projectId: string;
-  sessionId?: string;
-  onSessionCreated?: (sessionId: string) => void;
+  sessionId: string | null;
+  messages: ChatMessageType[];
+  isInitialized: boolean;
+  isLoading: boolean;
+  onSendMessage: (message: string) => void;
+  onInitialize?: (cleanFile: File, errorFile: File) => void;
+  databaseInfo?: {
+    clean_flights_count?: number;
+    error_flights_count?: number;
+    total_flights?: number;
+  };
 }
 
-export function ChatInterface({ projectId, sessionId, onSessionCreated }: ChatInterfaceProps) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [input, setInput] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [currentSessionId, setCurrentSessionId] = useState(sessionId);
+export const ChatInterface: React.FC<ChatInterfaceProps> = ({
+  sessionId,
+  messages,
+  isInitialized,
+  isLoading,
+  onSendMessage,
+  onInitialize,
+  databaseInfo
+}) => {
+  const [inputValue, setInputValue] = useState('');
+  const [cleanFile, setCleanFile] = useState<File | null>(null);
+  const [errorFile, setErrorFile] = useState<File | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  const suggestedQuestions = chatService.getSuggestedQuestions();
-
+  // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
-    scrollToBottom();
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  useEffect(() => {
-    // Initialize session if not provided
-    if (!currentSessionId) {
-      initializeSession();
-    }
-  }, []);
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  const initializeSession = async () => {
-    try {
-      const session = await chatService.initializeSession(projectId);
-      setCurrentSessionId(session.session_id);
-      onSessionCreated?.(session.session_id);
-
-      // Add welcome message
-      setMessages([
-        {
-          role: 'system',
-          content: `Session initialized. You can now ask questions about your flight data.${
-            session.database_info?.clean_flights
-              ? `\n\nLoaded ${session.database_info.clean_flights.row_count} clean flight records.`
-              : ''
-          }`,
-          timestamp: new Date().toISOString(),
-        },
-      ]);
-    } catch (error: any) {
-      setMessages([
-        {
-          role: 'system',
-          content: `Failed to initialize chat session: ${error.message}`,
-          timestamp: new Date().toISOString(),
-        },
-      ]);
-    }
-  };
-
-  const handleSendMessage = async () => {
-    if (!input.trim() || isLoading || !currentSessionId) return;
-
-    const userMessage: ChatMessage = {
-      role: 'user',
-      content: input.trim(),
-      timestamp: new Date().toISOString(),
-    };
-
-    setMessages((prev) => [...prev, userMessage]);
-    setInput('');
-    setIsLoading(true);
-
-    try {
-      const response = await chatService.sendQuery(projectId, userMessage.content, currentSessionId);
-
-      const assistantMessage: ChatMessage = {
-        role: 'assistant',
-        content: response.answer || response.response,
-        sql_query: response.sql_query,
-        table_data: response.table_data,
-        timestamp: new Date().toISOString(),
-      };
-
-      setMessages((prev) => [...prev, assistantMessage]);
-    } catch (error: any) {
-      const errorMessage: ChatMessage = {
-        role: 'system',
-        content: `Error: ${error.message}`,
-        timestamp: new Date().toISOString(),
-      };
-      setMessages((prev) => [...prev, errorMessage]);
-    } finally {
-      setIsLoading(false);
-      textareaRef.current?.focus();
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (inputValue.trim() && isInitialized && !isLoading) {
+      onSendMessage(inputValue.trim());
+      setInputValue('');
     }
   };
 
   const handleSuggestedQuestion = (question: string) => {
-    setInput(question);
-    textareaRef.current?.focus();
+    if (isInitialized && !isLoading) {
+      onSendMessage(question);
+    }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSendMessage();
+  const handleInitialize = () => {
+    if (cleanFile && errorFile && onInitialize) {
+      onInitialize(cleanFile, errorFile);
+    }
+  };
+
+  // Keyboard shortcut: Ctrl+Enter to submit
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.ctrlKey && e.key === 'Enter') {
+      handleSubmit(e as any);
     }
   };
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="chat-interface">
       {/* Messages Area */}
-      <Card className="flex-1 flex flex-col overflow-hidden">
-        <CardHeader className="border-b border-border flex-shrink-0">
-          <div className="flex items-center gap-2">
-            <MessageSquare className="h-5 w-5 text-primary" />
-            <CardTitle>AI Chat Assistant</CardTitle>
-            {currentSessionId && (
-              <Badge variant="outline" className="ml-auto">
-                Session Active
-              </Badge>
-            )}
-          </div>
-        </CardHeader>
+      <div className="chat-messages" id="chatMessages">
+        {!isInitialized && onInitialize ? (
+          <div className="welcome-card">
+            <h2 className="welcome-title">Welcome to Flight Operations AI Assistant</h2>
+            <p className="welcome-subtitle">
+              Upload your flight data and start analyzing with natural language queries powered by AI.
+            </p>
 
-        <CardContent className="flex-1 overflow-y-auto p-4 space-y-4">
-          {messages.length === 0 && !isLoading && (
-            <div className="text-center py-12 space-y-4">
-              <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
-                <MessageSquare className="h-8 w-8 text-primary" />
+            {/* File Upload Section */}
+            <div className="file-upload-section">
+              <h3 className="upload-title">📂 Upload Your Data Files</h3>
+              <div className="file-inputs">
+                <div className="file-input-group">
+                  <label htmlFor="cleanFlightsFile" className="file-label">
+                    Clean Flights CSV
+                  </label>
+                  <input
+                    type="file"
+                    id="cleanFlightsFile"
+                    accept=".csv"
+                    onChange={(e) => setCleanFile(e.target.files?.[0] || null)}
+                    className="file-input"
+                  />
+                  {cleanFile && (
+                    <div className="file-selected">✓ {cleanFile.name}</div>
+                  )}
+                </div>
+                <div className="file-input-group">
+                  <label htmlFor="errorFlightsFile" className="file-label">
+                    Error Flights CSV
+                  </label>
+                  <input
+                    type="file"
+                    id="errorFlightsFile"
+                    accept=".csv"
+                    onChange={(e) => setErrorFile(e.target.files?.[0] || null)}
+                    className="file-input"
+                  />
+                  {errorFile && (
+                    <div className="file-selected">✓ {errorFile.name}</div>
+                  )}
+                </div>
               </div>
-              <div>
-                <h3 className="font-semibold text-lg mb-2">Start a Conversation</h3>
-                <p className="text-sm text-muted-foreground">
-                  Ask questions about your flight data in natural language
+              <button
+                onClick={handleInitialize}
+                disabled={!cleanFile || !errorFile}
+                className="init-button"
+              >
+                Initialize Chat Session
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Welcome Message with Database Info */}
+            {messages.length === 0 && databaseInfo && (
+              <div className="welcome-card initialized">
+                <h2 className="welcome-title">✈️ Chat Session Ready!</h2>
+                <p className="welcome-subtitle">
+                  Your flight data has been loaded. Ask me anything about your flights!
                 </p>
-              </div>
-
-              {/* Suggested Questions */}
-              <div className="max-w-2xl mx-auto space-y-2">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Lightbulb className="h-4 w-4" />
-                  <span>Try asking:</span>
+                <div className="database-stats">
+                  {databaseInfo.clean_flights_count !== undefined && (
+                    <div className="stat-item">
+                      <span className="stat-label">Clean Flights:</span>
+                      <span className="stat-value">{databaseInfo.clean_flights_count}</span>
+                    </div>
+                  )}
+                  {databaseInfo.error_flights_count !== undefined && (
+                    <div className="stat-item">
+                      <span className="stat-label">Error Flights:</span>
+                      <span className="stat-value">{databaseInfo.error_flights_count}</span>
+                    </div>
+                  )}
+                  {databaseInfo.total_flights !== undefined && (
+                    <div className="stat-item">
+                      <span className="stat-label">Total Flights:</span>
+                      <span className="stat-value">{databaseInfo.total_flights}</span>
+                    </div>
+                  )}
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  {suggestedQuestions.slice(0, 4).map((question, idx) => (
-                    <Button
-                      key={idx}
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleSuggestedQuestion(question)}
-                      className="justify-start text-left h-auto py-2 px-3 text-xs"
-                    >
-                      {question}
-                    </Button>
-                  ))}
-                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {messages.map((message, idx) => (
-            <ChatMessageBubble key={idx} message={message} />
-          ))}
+            {/* Chat Messages */}
+            {messages.map((message) => (
+              <ChatMessage key={message.id} message={message} />
+            ))}
 
-          {isLoading && (
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              <span className="text-sm">Thinking...</span>
-            </div>
-          )}
-
-          <div ref={messagesEndRef} />
-        </CardContent>
-      </Card>
-
-      {/* Input Area */}
-      <Card className="flex-shrink-0 mt-4">
-        <CardContent className="p-4">
-          <div className="flex gap-2">
-            <Textarea
-              ref={textareaRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Ask a question about your flight data..."
-              className="min-h-[60px] max-h-[200px] resize-none"
-              disabled={isLoading || !currentSessionId}
-            />
-            <Button
-              onClick={handleSendMessage}
-              disabled={!input.trim() || isLoading || !currentSessionId}
-              size="lg"
-              className="px-6"
-            >
-              {isLoading ? (
-                <Loader2 className="h-5 w-5 animate-spin" />
-              ) : (
-                <Send className="h-5 w-5" />
-              )}
-            </Button>
-          </div>
-          <p className="text-xs text-muted-foreground mt-2">
-            Press Enter to send, Shift+Enter for new line
-          </p>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-function ChatMessageBubble({ message }: { message: ChatMessage }) {
-  const isUser = message.role === 'user';
-  const isSystem = message.role === 'system';
-
-  return (
-    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
-      <div
-        className={`max-w-[80%] rounded-lg p-4 space-y-3 ${
-          isUser
-            ? 'bg-primary text-primary-foreground'
-            : isSystem
-            ? 'bg-muted border border-border'
-            : 'bg-card border border-border'
-        }`}
-      >
-        {/* Message Content */}
-        <div className="prose prose-sm dark:prose-invert max-w-none">
-          <ReactMarkdown>{message.content}</ReactMarkdown>
-        </div>
-
-        {/* SQL Query */}
-        {message.sql_query && (
-          <Card className="bg-muted/50">
-            <CardContent className="p-3">
-              <div className="flex items-center gap-2 mb-2">
-                <Code className="h-4 w-4 text-muted-foreground" />
-                <span className="text-xs font-medium text-muted-foreground">SQL Query</span>
+            {/* Loading Indicator */}
+            {isLoading && (
+              <div className="loading-message">
+                <div className="loading-spinner"></div>
+                <span>AI is thinking...</span>
               </div>
-              <pre className="text-xs font-mono overflow-x-auto bg-background p-2 rounded">
-                {chatService.formatSQL(message.sql_query)}
-              </pre>
-            </CardContent>
-          </Card>
-        )}
+            )}
 
-        {/* Table Data */}
-        {message.table_data && message.table_data.length > 0 && (
-          <CollapsibleTable data={message.table_data} title="Query Results" />
-        )}
-
-        {/* Timestamp */}
-        {message.timestamp && (
-          <div className="text-xs opacity-70">
-            {new Date(message.timestamp).toLocaleTimeString()}
-          </div>
+            <div ref={messagesEndRef} />
+          </>
         )}
       </div>
+
+      {/* Suggested Questions */}
+      {isInitialized && messages.length === 0 && (
+        <div className="suggested-questions">
+          <h3 className="suggestions-title">💡 Try asking:</h3>
+          <div className="suggestions-grid">
+            {SUGGESTED_QUESTIONS.map((question, index) => (
+              <button
+                key={index}
+                onClick={() => handleSuggestedQuestion(question)}
+                className="suggestion-item"
+                disabled={isLoading}
+              >
+                {question}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Chat Input */}
+      {isInitialized && (
+        <div className="chat-input-container">
+          <form onSubmit={handleSubmit} className="chat-form">
+            <div className="input-wrapper">
+              <input
+                ref={inputRef}
+                type="text"
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Ask anything about your flight data..."
+                className="chat-input"
+                disabled={isLoading}
+              />
+              <button
+                type="submit"
+                disabled={!inputValue.trim() || isLoading}
+                className="send-button"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20">
+                  <line x1="22" y1="2" x2="11" y2="13"/>
+                  <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                </svg>
+              </button>
+            </div>
+          </form>
+          <div className="input-hint">
+            Press <kbd>Ctrl + Enter</kbd> to send
+          </div>
+        </div>
+      )}
+
+      <style jsx>{`
+        .chat-interface {
+          display: flex;
+          flex-direction: column;
+          height: 100%;
+          background: #f8fafc;
+        }
+
+        .chat-messages {
+          flex: 1;
+          overflow-y: auto;
+          padding: 2rem;
+          min-height: 400px;
+        }
+
+        .welcome-card {
+          background: white;
+          border: 2px solid #e2e8f0;
+          border-radius: 1rem;
+          padding: 2.5rem;
+          text-align: center;
+          max-width: 600px;
+          margin: 0 auto;
+          box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .welcome-card.initialized {
+          background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%);
+          border-color: #c7d2fe;
+        }
+
+        .welcome-title {
+          font-size: 1.75rem;
+          font-weight: 700;
+          color: #1e293b;
+          margin: 0 0 1rem 0;
+        }
+
+        .welcome-subtitle {
+          font-size: 1rem;
+          color: #64748b;
+          margin: 0 0 2rem 0;
+          line-height: 1.6;
+        }
+
+        .file-upload-section {
+          margin-top: 2rem;
+        }
+
+        .upload-title {
+          font-size: 1.125rem;
+          font-weight: 600;
+          color: #475569;
+          margin: 0 0 1.5rem 0;
+        }
+
+        .file-inputs {
+          display: grid;
+          gap: 1rem;
+          margin-bottom: 1.5rem;
+        }
+
+        .file-input-group {
+          text-align: left;
+        }
+
+        .file-label {
+          display: block;
+          font-size: 0.875rem;
+          font-weight: 600;
+          color: #374151;
+          margin-bottom: 0.5rem;
+        }
+
+        .file-input {
+          display: block;
+          width: 100%;
+          padding: 0.75rem;
+          border: 2px solid #cbd5e1;
+          border-radius: 0.5rem;
+          font-size: 0.875rem;
+          cursor: pointer;
+          transition: all 0.2s ease;
+        }
+
+        .file-input:hover {
+          border-color: #6366f1;
+        }
+
+        .file-selected {
+          margin-top: 0.5rem;
+          font-size: 0.8125rem;
+          color: #10b981;
+          font-weight: 600;
+        }
+
+        .init-button {
+          padding: 0.875rem 2rem;
+          background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+          color: white;
+          border: none;
+          border-radius: 0.5rem;
+          font-weight: 600;
+          font-size: 0.9375rem;
+          cursor: pointer;
+          transition: all 0.2s ease;
+        }
+
+        .init-button:hover:not(:disabled) {
+          box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.3);
+          transform: translateY(-2px);
+        }
+
+        .init-button:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+
+        .database-stats {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+          gap: 1rem;
+          margin-top: 1.5rem;
+        }
+
+        .stat-item {
+          background: white;
+          padding: 1rem;
+          border-radius: 0.5rem;
+          border: 1px solid #c7d2fe;
+        }
+
+        .stat-label {
+          display: block;
+          font-size: 0.75rem;
+          color: #64748b;
+          margin-bottom: 0.25rem;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+        }
+
+        .stat-value {
+          display: block;
+          font-size: 1.5rem;
+          font-weight: 700;
+          color: #4f46e5;
+        }
+
+        .loading-message {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          padding: 1rem;
+          background: white;
+          border: 1px solid #e2e8f0;
+          border-radius: 0.75rem;
+          color: #64748b;
+          font-size: 0.875rem;
+        }
+
+        .loading-spinner {
+          width: 20px;
+          height: 20px;
+          border: 3px solid #e2e8f0;
+          border-top-color: #6366f1;
+          border-radius: 50%;
+          animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+
+        .suggested-questions {
+          padding: 1rem 2rem 0;
+        }
+
+        .suggestions-title {
+          font-size: 0.9375rem;
+          font-weight: 600;
+          color: #475569;
+          margin: 0 0 1rem 0;
+        }
+
+        .suggestions-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+          gap: 0.75rem;
+        }
+
+        .suggestion-item {
+          padding: 0.875rem 1.25rem;
+          background: white;
+          border: 2px solid #e2e8f0;
+          border-radius: 0.5rem;
+          text-align: left;
+          font-size: 0.8125rem;
+          color: #475569;
+          cursor: pointer;
+          transition: all 0.2s ease;
+        }
+
+        .suggestion-item:hover:not(:disabled) {
+          border-color: #6366f1;
+          background: #eef2ff;
+          transform: translateY(-2px);
+          box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .suggestion-item:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+
+        .chat-input-container {
+          padding: 1.5rem 2rem;
+          background: white;
+          border-top: 1px solid #e2e8f0;
+        }
+
+        .chat-form {
+          margin-bottom: 0.5rem;
+        }
+
+        .input-wrapper {
+          display: flex;
+          gap: 0.75rem;
+        }
+
+        .chat-input {
+          flex: 1;
+          padding: 0.875rem 1.25rem;
+          border: 2px solid #cbd5e1;
+          border-radius: 0.5rem;
+          font-size: 0.9375rem;
+          transition: all 0.2s ease;
+        }
+
+        .chat-input:focus {
+          outline: none;
+          border-color: #6366f1;
+          box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+        }
+
+        .chat-input:disabled {
+          background: #f1f5f9;
+          cursor: not-allowed;
+        }
+
+        .send-button {
+          padding: 0.875rem 1.25rem;
+          background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+          color: white;
+          border: none;
+          border-radius: 0.5rem;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .send-button:hover:not(:disabled) {
+          box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.3);
+          transform: translateY(-2px);
+        }
+
+        .send-button:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+
+        .input-hint {
+          font-size: 0.75rem;
+          color: #94a3b8;
+          text-align: center;
+        }
+
+        .input-hint kbd {
+          padding: 0.125rem 0.375rem;
+          background: #f1f5f9;
+          border: 1px solid #cbd5e1;
+          border-radius: 0.25rem;
+          font-family: monospace;
+          font-size: 0.6875rem;
+        }
+
+        /* Custom scrollbar */
+        .chat-messages::-webkit-scrollbar {
+          width: 10px;
+        }
+
+        .chat-messages::-webkit-scrollbar-track {
+          background: #f1f5f9;
+        }
+
+        .chat-messages::-webkit-scrollbar-thumb {
+          background: #cbd5e1;
+          border-radius: 5px;
+        }
+
+        .chat-messages::-webkit-scrollbar-thumb:hover {
+          background: #94a3b8;
+        }
+      `}</style>
     </div>
   );
-}
+};

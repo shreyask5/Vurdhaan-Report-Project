@@ -1,284 +1,224 @@
-/**
- * Validation Service - Handles CSV validation and error correction
- */
+// Validation Service
+// Handles all CSV validation API calls
+// Based on index4.html endpoints
 
-import { auth } from './firebase';
-import type {
-  ValidationParams,
-  ValidationResult,
-  ValidationErrorData,
-  ColumnMapping,
-} from '@/types/validation';
+import {
+  ValidationFormData,
+  ErrorData,
+  Correction,
+  UploadResponse,
+  CompressedErrorResponse
+} from '../types/validation';
+import { decompressLZStringErrorReport, isCompressedResponse } from '../utils/compression';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5002/api';
-
-async function getAuthToken(): Promise<string> {
-  const user = auth.currentUser;
-  if (!user) {
-    throw new Error('Not authenticated');
-  }
-  return await user.getIdToken();
-}
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 export const validationService = {
   /**
-   * Upload and validate CSV file for a project with all parameters
+   * Upload CSV file with validation parameters
+   * POST /upload
+   * From index4.html:2098-2165
    */
   async uploadFile(
-    projectId: string,
     file: File,
-    params: {
-      start_date: string;
-      end_date: string;
-      date_format?: string;
-      flight_starts_with?: string;
-      fuel_method?: string;
-    },
-    onProgress?: (progress: number) => void
-  ): Promise<{ success: boolean; is_valid: boolean; filename: string }> {
-    const token = await getAuthToken();
+    params: ValidationFormData
+  ): Promise<UploadResponse> {
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('start_date', params.start_date);
-    formData.append('end_date', params.end_date);
-    formData.append('date_format', params.date_format || 'DMY');
-    formData.append('flight_starts_with', params.flight_starts_with || '');
-    formData.append('fuel_method', params.fuel_method || 'Block Off - Block On');
+    formData.append('monitoring_year', params.monitoring_year);
+    formData.append('date_format', params.date_format);
+    formData.append('flight_starts_with', params.flight_starts_with);
+    formData.append('column_mapping', JSON.stringify(params.column_mapping));
+    formData.append('fuel_method', params.fuel_method);
 
-    return new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-
-      // Track upload progress
-      xhr.upload.addEventListener('progress', (e) => {
-        if (e.lengthComputable && onProgress) {
-          const progress = (e.loaded / e.total) * 100;
-          onProgress(progress);
-        }
-      });
-
-      xhr.addEventListener('load', () => {
-        if (xhr.status === 200) {
-          resolve(JSON.parse(xhr.responseText));
-        } else {
-          try {
-            const error = JSON.parse(xhr.responseText);
-            reject(new Error(error.error || 'Upload failed'));
-          } catch {
-            reject(new Error('Upload failed'));
-          }
-        }
-      });
-
-      xhr.addEventListener('error', () => {
-        reject(new Error('Upload failed'));
-      });
-
-      xhr.open('POST', `${API_BASE_URL}/projects/${projectId}/upload`);
-      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-      xhr.send(formData);
-    });
-  },
-
-  /**
-   * Get CSV columns by reading the file locally (client-side)
-   */
-  async getCSVColumns(file: File): Promise<string[]> {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-
-      reader.onload = (e) => {
-        const text = e.target?.result as string;
-        const firstLine = text.split('\n')[0];
-        const columns = firstLine.split(',').map(col => col.trim().replace(/^"|"$/g, ''));
-        resolve(columns);
-      };
-
-      reader.onerror = () => {
-        reject(new Error('Failed to read file'));
-      };
-
-      reader.readAsText(file);
-    });
-  },
-
-  /**
-   * Validate uploaded CSV with parameters
-   */
-  async validateFile(
-    projectId: string,
-    params: ValidationParams
-  ): Promise<ValidationResult> {
-    const token = await getAuthToken();
-
-    const response = await fetch(`${API_BASE_URL}/projects/${projectId}/validate`, {
+    const response = await fetch(`${API_BASE_URL}/upload`, {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(params),
+      body: formData
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Validation failed' }));
-      throw new Error(error.error || 'Validation failed');
+      const error = await response.json().catch(() => ({ message: 'Upload failed' }));
+      throw new Error(error.message || 'Failed to upload file');
     }
 
     return response.json();
   },
 
   /**
-   * Get validation errors for a project
+   * Fetch errors for a file
+   * GET /errors/{file_id}
+   * From index4.html:2167-2224
+   * Handles both compressed and uncompressed responses
    */
-  async getErrors(projectId: string): Promise<ValidationErrorData> {
-    const token = await getAuthToken();
-
-    const response = await fetch(`${API_BASE_URL}/projects/${projectId}/errors`, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-      },
-    });
+  async fetchErrors(fileId: string): Promise<ErrorData> {
+    const response = await fetch(`${API_BASE_URL}/errors/${fileId}`);
 
     if (!response.ok) {
       throw new Error('Failed to fetch errors');
     }
 
-    return response.json();
+    const data = await response.json();
+
+    // Check if response is compressed
+    if (isCompressedResponse(data)) {
+      console.log('📦 Compressed response detected, decompressing...');
+      return await decompressLZStringErrorReport((data as CompressedErrorResponse).compressed_data);
+    }
+
+    return data as ErrorData;
   },
 
   /**
-   * Save error corrections
+   * Save corrections for errors
+   * PUT /upload/{file_id}
+   * From index4.html:2841-2871
    */
   async saveCorrections(
-    projectId: string,
-    corrections: { [rowIdx: number]: any }
-  ): Promise<{ success: boolean; updated_count: number }> {
-    const token = await getAuthToken();
-
-    const response = await fetch(`${API_BASE_URL}/projects/${projectId}/corrections`, {
-      method: 'POST',
+    fileId: string,
+    corrections: Correction[]
+  ): Promise<UploadResponse> {
+    const response = await fetch(`${API_BASE_URL}/upload/${fileId}`, {
+      method: 'PUT',
       headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ corrections }),
+      body: JSON.stringify({ corrections })
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Failed to save corrections' }));
-      throw new Error(error.error || 'Failed to save corrections');
+      throw new Error('Failed to save corrections');
     }
 
     return response.json();
   },
 
   /**
-   * Download CSV file (clean or errors)
+   * Ignore errors and proceed
+   * PUT /upload/{file_id}
+   * From index4.html:2873-2897
    */
-  async downloadCSV(
-    projectId: string,
-    type: 'clean' | 'errors'
-  ): Promise<Blob> {
-    const token = await getAuthToken();
-
-    const response = await fetch(`${API_BASE_URL}/projects/${projectId}/download/${type}`, {
+  async ignoreErrors(fileId: string): Promise<UploadResponse> {
+    const response = await fetch(`${API_BASE_URL}/upload/${fileId}`, {
+      method: 'PUT',
       headers: {
-        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
       },
+      body: JSON.stringify({ ignore_errors: true })
     });
 
     if (!response.ok) {
-      throw new Error(`Failed to download ${type} CSV`);
+      throw new Error('Failed to ignore errors');
     }
 
-    return response.blob();
+    return response.json();
+  },
+
+  /**
+   * Revalidate the file
+   * PUT /upload/{file_id}
+   * From index4.html:3086-3124
+   */
+  async revalidate(fileId: string): Promise<UploadResponse> {
+    const response = await fetch(`${API_BASE_URL}/upload/${fileId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ revalidate: true })
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to revalidate');
+    }
+
+    return response.json();
+  },
+
+  /**
+   * Download clean CSV
+   * GET /download/{file_id}/clean
+   * From index4.html:3006-3025
+   */
+  async downloadClean(fileId: string): Promise<void> {
+    const response = await fetch(`${API_BASE_URL}/download/${fileId}/clean`);
+
+    if (!response.ok) {
+      throw new Error('Failed to download clean CSV');
+    }
+
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `clean_flights_${fileId}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  },
+
+  /**
+   * Download errors CSV
+   * GET /download/{file_id}/errors
+   * From index4.html:3027-3046
+   */
+  async downloadErrors(fileId: string): Promise<void> {
+    const response = await fetch(`${API_BASE_URL}/download/${fileId}/errors`);
+
+    if (!response.ok) {
+      throw new Error('Failed to download errors CSV');
+    }
+
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `error_flights_${fileId}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   },
 
   /**
    * Generate CORSIA report
+   * POST /report/{file_id}
+   * From index4.html:3048-3084
    */
-  async generateReport(
-    projectId: string,
-    flightPrefix?: string
-  ): Promise<Blob> {
-    const token = await getAuthToken();
-
-    const response = await fetch(`${API_BASE_URL}/projects/${projectId}/report`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ flight_starts_with: flightPrefix || '' }),
+  async generateReport(fileId: string): Promise<void> {
+    const response = await fetch(`${API_BASE_URL}/report/${fileId}`, {
+      method: 'POST'
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Report generation failed' }));
-      throw new Error(error.error || 'Report generation failed');
+      throw new Error('Failed to generate report');
     }
 
-    return response.blob();
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'template_filled.xlsx';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   },
 
   /**
-   * Get column mapping suggestions based on CSV headers
+   * Open chat session from validated file
+   * POST /open-chat/{file_id}
+   * From index4.html:2899-3003
    */
-  getSuggestedMapping(csvColumns: string[]): ColumnMapping {
-    const mapping: ColumnMapping = {};
-    const requiredColumns = [
-      'Flight Number',
-      'Departure Airport ICAO',
-      'Arrival Airport ICAO',
-      'Departure Date',
-      'Fuel Uplift',
-      'Block-Off',
-      'Block-On',
-    ];
-
-    // Simple fuzzy matching for common column names
-    const fuzzyMatch = (required: string, csv: string): number => {
-      const r = required.toLowerCase().replace(/[^a-z0-9]/g, '');
-      const c = csv.toLowerCase().replace(/[^a-z0-9]/g, '');
-
-      if (r === c) return 100;
-      if (c.includes(r) || r.includes(c)) return 80;
-
-      // Check for keyword matches
-      const keywords: { [key: string]: string[] } = {
-        'flight number': ['flight', 'flt', 'number', 'flightno'],
-        'departure airport icao': ['departure', 'dept', 'origin', 'from', 'icao'],
-        'arrival airport icao': ['arrival', 'arr', 'destination', 'dest', 'to', 'icao'],
-        'departure date': ['date', 'departure', 'dept'],
-        'fuel uplift': ['fuel', 'uplift'],
-        'blockoff': ['blockoff', 'block', 'off'],
-        'blockon': ['blockon', 'block', 'on'],
-      };
-
-      const reqKeywords = keywords[r] || [];
-      const matchCount = reqKeywords.filter(kw => c.includes(kw)).length;
-
-      return matchCount > 0 ? matchCount * 20 : 0;
-    };
-
-    requiredColumns.forEach(required => {
-      let bestMatch = '';
-      let bestScore = 0;
-
-      csvColumns.forEach(csv => {
-        const score = fuzzyMatch(required, csv);
-        if (score > bestScore) {
-          bestScore = score;
-          bestMatch = csv;
-        }
-      });
-
-      if (bestScore >= 50) {
-        mapping[required] = bestMatch;
-      }
+  async openChatSession(fileId: string): Promise<{ chat_url: string; session_id: string }> {
+    const response = await fetch(`${API_BASE_URL}/open-chat/${fileId}`, {
+      method: 'POST'
     });
 
-    return mapping;
-  },
-};
+    if (!response.ok) {
+      throw new Error('Failed to create chat session');
+    }
 
-export default validationService;
+    return response.json();
+  }
+};
