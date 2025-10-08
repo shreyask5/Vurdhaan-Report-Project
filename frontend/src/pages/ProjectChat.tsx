@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useChat } from '../contexts/ChatContext';
 import { ChatInterface } from '../components/project/ChatInterface';
 
-export const ProjectChat: React.FC = () => {
+const ProjectChat: React.FC = () => {
   const [searchParams] = useSearchParams();
   const {
     sessionId,
@@ -93,3 +93,5 @@ export const ProjectChat: React.FC = () => {
     </div>
   );
 };
+
+export default ProjectChat;

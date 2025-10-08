@@ -7,7 +7,7 @@ import { ColumnMappingWizard } from '../components/project/ColumnMappingWizard';
 import { ValidationForm } from '../components/project/ValidationForm';
 import { ValidationParams } from '../types/validation';
 
-export const ProjectUpload: React.FC = () => {
+const ProjectUpload: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const {
@@ -154,3 +154,5 @@ export const ProjectUpload: React.FC = () => {
     </div>
   );
 };
+
+export default ProjectUpload;

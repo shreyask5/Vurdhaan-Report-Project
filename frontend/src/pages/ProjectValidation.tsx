@@ -6,7 +6,7 @@ import { ErrorCategory } from '../components/project/ErrorCategory';
 import { FUEL_METHOD_COLUMNS } from '../types/validation';
 import { validationService } from '../services/validation';
 
-export const ProjectValidation: React.FC = () => {
+const ProjectValidation: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const {
@@ -300,3 +300,5 @@ export const ProjectValidation: React.FC = () => {
     </div>
   );
 };
+
+export default ProjectValidation;
