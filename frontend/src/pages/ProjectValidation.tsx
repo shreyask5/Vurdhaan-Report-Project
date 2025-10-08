@@ -7,7 +7,7 @@ import { FUEL_METHOD_COLUMNS } from '../types/validation';
 import { validationService } from '../services/validation';
 
 const ProjectValidation: React.FC = () => {
-  const { id } = useParams<{ id: string }>();
+  const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
   const {
     fileId,
@@ -59,27 +59,27 @@ const ProjectValidation: React.FC = () => {
   };
 
   const handleDownloadClean = async () => {
-    if (!fileId) return;
+    if (!projectId) return;
     try {
-      await validationService.downloadClean(fileId);
+      await validationService.downloadClean(projectId);
     } catch (error) {
       alert('Failed to download clean CSV');
     }
   };
 
   const handleDownloadErrors = async () => {
-    if (!fileId) return;
+    if (!projectId) return;
     try {
-      await validationService.downloadErrors(fileId);
+      await validationService.downloadErrors(projectId);
     } catch (error) {
       alert('Failed to download errors CSV');
     }
   };
 
   const handleGenerateReport = async () => {
-    if (!fileId) return;
+    if (!projectId) return;
     try {
-      await validationService.generateReport(fileId);
+      await validationService.generateReport(projectId);
       setTimeout(() => {
         reset();
         navigate('/dashboard');
@@ -113,7 +113,7 @@ const ProjectValidation: React.FC = () => {
     const confirmed = confirm('Are you sure you want to start over? All progress will be lost.');
     if (confirmed) {
       reset();
-      navigate(`/projects/${id}/upload`);
+      navigate(`/projects/${projectId}/upload`);
     }
   };
 
