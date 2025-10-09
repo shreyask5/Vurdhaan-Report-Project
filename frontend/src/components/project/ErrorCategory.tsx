@@ -19,6 +19,18 @@ export const ErrorCategory: React.FC<ErrorCategoryProps> = ({
   rowsData = {},
   onCorrection
 }) => {
+  // TEMPORARY DEBUG: Log what ErrorCategory receives
+  React.useEffect(() => {
+    console.log('[ERROR CATEGORY] Received props:', {
+      categoryName: category.name,
+      rowsDataType: typeof rowsData,
+      rowsDataIsArray: Array.isArray(rowsData),
+      rowsDataKeys: Object.keys(rowsData).slice(0, 5),
+      rowsDataKeysLength: Object.keys(rowsData).length,
+      rowsDataSample: rowsData[9] || rowsData[10] || rowsData[11]
+    });
+  }, [category.name, rowsData]);
+
   const [isExpanded, setIsExpanded] = useState(false);
 
   // Calculate total errors in this category
