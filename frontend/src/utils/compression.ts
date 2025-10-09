@@ -122,6 +122,19 @@ function restoreOriginalErrorStructure(optimizedData: any): ErrorData {
     console.log('✅ Structure restoration completed');
     console.log('Restored data summary:', restoredData.summary);
 
+    // TEMPORARY: Print entire decompressed JSON structure
+    console.log('═══════════════════════════════════════════════════════════');
+    console.log('FULL DECOMPRESSED ERROR DATA:');
+    console.log('═══════════════════════════════════════════════════════════');
+    console.log(JSON.stringify(restoredData, null, 2));
+    console.log('═══════════════════════════════════════════════════════════');
+    console.log('ROWS_DATA SAMPLE (first 3 rows):');
+    const rowKeys = Object.keys(restoredData.rows_data).slice(0, 3);
+    rowKeys.forEach(key => {
+      console.log(`Row ${key}:`, restoredData.rows_data[parseInt(key)]);
+    });
+    console.log('═══════════════════════════════════════════════════════════');
+
     // Validate restored structure
     if (!restoredData.summary || typeof restoredData.summary.total_errors !== 'number') {
       throw new Error('Restored data validation failed: invalid summary structure');
