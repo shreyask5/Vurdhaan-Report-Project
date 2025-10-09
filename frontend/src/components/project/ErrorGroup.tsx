@@ -1,7 +1,7 @@
 // Error Group Component
 // Based on index4.html:541-584, 2759-2839, 2497-2601
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ErrorGroup as ErrorGroupType, Correction } from '../../types/validation';
 import { EditableErrorCell } from './EditableErrorCell';
 import { SequenceErrorTable } from './SequenceErrorTable';
@@ -27,11 +27,17 @@ export const ErrorGroup: React.FC<ErrorGroupProps> = ({
 
   // Debug: print rowsData overview once per mount/update
   React.useEffect(() => {
-    const keys = Object.keys(rowsData || {});
-    const sampleKey = keys[0];
-    const sample = sampleKey !== undefined ? (rowsData as any)[sampleKey] : undefined;
+    const isArray = Array.isArray(rowsData as any);
+    const keys = isArray ? [] : Object.keys(rowsData || {});
+    const sampleKey = isArray ? 0 : keys[0];
+    const sample = isArray
+      ? (rowsData as any)[0]
+      : sampleKey !== undefined
+        ? (rowsData as any)[sampleKey]
+        : undefined;
     console.log('[ErrorGroup DEBUG] rowsData overview', {
-      totalKeys: keys.length,
+      isArray,
+      totalKeys: isArray ? (rowsData as any)?.length ?? 0 : keys.length,
       firstKey: sampleKey,
       firstRowSample: sample,
       columnOrder,
@@ -40,10 +46,55 @@ export const ErrorGroup: React.FC<ErrorGroupProps> = ({
     });
   }, [rowsData, columnOrder, errorGroup]);
 
+  // If rowsData is an array, build a fast lookup map by common row index keys
+  const arrayLookupMap = useMemo(() => {
+    const anyRows = rowsData as any;
+    if (!Array.isArray(anyRows)) return null;
+    const map = new Map<number, any>();
+    const candidates = ['row_idx', 'Row', 'row', 'index', 'idx', 'Row_Index', 'Row Index'];
+    for (let i = 0; i < anyRows.length; i++) {
+      const row = anyRows[i];
+      let key: any = undefined;
+      if (row && typeof row === 'object') {
+        for (const c of candidates) {
+          if (Object.prototype.hasOwnProperty.call(row, c)) {
+            key = row[c];
+            break;
+          }
+        }
+      }
+      if (key === undefined) key = i; // fallback to array index
+      const numKey = Number(key);
+      if (!Number.isNaN(numKey)) {
+        map.set(numKey, row);
+      }
+    }
+    console.log('[ErrorGroup DEBUG] Built arrayLookupMap', { size: map.size });
+    return map;
+  }, [rowsData]);
+
   // Resolve actual row data from rowsData using robust key matching.
   // Tries numeric key, string key, then falls back to index-based ordering.
   const getActualRowData = (rowIdx: number, renderIndex: number) => {
     const debugAttempt: any = { rowIdx, renderIndex };
+    const isArray = Array.isArray(rowsData as any);
+    if (isArray) {
+      // Prefer lookup by detected row index key
+      const fromMap = arrayLookupMap?.get(Number(rowIdx));
+      if (fromMap) {
+        console.log('[ErrorGroup DEBUG] Row resolve (array-map)', { ...debugAttempt, hit: 'array-map' }, { resolvedKeys: Object.keys(fromMap || {}) });
+        return fromMap;
+      }
+      // Fallback to direct index in array (render order)
+      const arr = rowsData as any[];
+      const byRenderIndex = arr[renderIndex];
+      if (byRenderIndex) {
+        console.warn('[ErrorGroup WARN] Using array renderIndex fallback to resolve row data', { ...debugAttempt, hit: 'array-index' }, {
+          fallbackResolved: Object.keys(byRenderIndex || {})
+        });
+        return byRenderIndex;
+      }
+    }
     // Direct numeric key
     if ((rowsData as any)[rowIdx] !== undefined) {
       debugAttempt.hit = 'numeric';
