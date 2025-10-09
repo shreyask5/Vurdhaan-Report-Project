@@ -10,7 +10,7 @@ import { ErrorCategory } from '../components/project/ErrorCategory';
 import { ActionButtons } from '../components/project/ActionButtons';
 import { SuccessSection } from '../components/project/SuccessSection';
 import { LoadingSection } from '../components/project/LoadingSection';
-import { createSequenceSummary } from '../utils/errorProcessing';
+import { createSequenceSummary, processSequenceGroups } from '../utils/errorProcessing';
 import { FUEL_METHOD_COLUMNS } from '../types/validation';
 
 export const ProjectErrorDisplay: React.FC = () => {
@@ -82,7 +82,7 @@ export const ProjectErrorDisplay: React.FC = () => {
       const allSequenceErrors = new Map();
       errorData.categories.forEach(category => {
         category.errors.forEach(errorGroup => {
-          const { sequenceErrors } = require('../utils/errorProcessing').processSequenceGroups(errorGroup);
+          const { sequenceErrors } = processSequenceGroups(errorGroup);
           sequenceErrors.forEach((value: any, key: string) => {
             allSequenceErrors.set(key, value);
           });
