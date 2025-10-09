@@ -23,6 +23,20 @@ export const EditableErrorCell: React.FC<EditableErrorCellProps> = ({
   const [isFocused, setIsFocused] = useState(false);
   const originalValue = value;
 
+  // TEMPORARY DEBUG: Log first few cells
+  React.useEffect(() => {
+    if (rowIdx === 11 && column === 'Date') {
+      console.log('[EDITABLE CELL DEBUG]', {
+        rowIdx,
+        column,
+        value,
+        valueType: typeof value,
+        isEditable,
+        currentValue
+      });
+    }
+  }, [rowIdx, column, value, isEditable, currentValue]);
+
   useEffect(() => {
     setCurrentValue(value);
   }, [value]);
@@ -57,7 +71,13 @@ export const EditableErrorCell: React.FC<EditableErrorCellProps> = ({
             padding: 0.375rem 0.75rem;
             font-size: 0.75rem;
             border-bottom: 1px solid #e2e8f0;
+            border-right: 1px solid #e2e8f0;
             text-align: center;
+            min-width: 100px;
+            max-width: 200px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
           }
         `}</style>
       </td>
@@ -81,9 +101,12 @@ export const EditableErrorCell: React.FC<EditableErrorCellProps> = ({
           padding: 0.25rem;
           font-size: 0.75rem;
           border-bottom: 1px solid #e2e8f0;
+          border-right: 1px solid #e2e8f0;
           text-align: center;
           background: white;
           transition: background-color 0.2s ease;
+          min-width: 100px;
+          max-width: 200px;
         }
 
         .table-cell.editable {
@@ -100,6 +123,7 @@ export const EditableErrorCell: React.FC<EditableErrorCellProps> = ({
 
         .cell-input {
           width: 100%;
+          min-width: 80px;
           padding: 0.375rem 0.5rem;
           border: 1px solid transparent;
           border-radius: 0.25rem;

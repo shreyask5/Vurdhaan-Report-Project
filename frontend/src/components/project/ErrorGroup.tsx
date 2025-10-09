@@ -80,6 +80,23 @@ export const ErrorGroup: React.FC<ErrorGroupProps> = ({
           // Get actual row data from rowsData
           const actualRowData = rowsData[rowError.row_idx] || {};
 
+          // TEMPORARY DEBUG: Log what we're rendering
+          if (index === 0) {
+            console.log('[ERROR ROW DEBUG]', {
+              row_idx: rowError.row_idx,
+              row_idx_type: typeof rowError.row_idx,
+              actualRowData,
+              actualRowDataKeys: Object.keys(actualRowData),
+              rowsDataHasKey: rowsData.hasOwnProperty(rowError.row_idx),
+              rowsDataHasStringKey: rowsData.hasOwnProperty(String(rowError.row_idx)),
+              rowsDataKeys: Object.keys(rowsData).slice(0, 5),
+              rowsData_11: rowsData[11],
+              rowsData_string_11: rowsData['11'],
+              columnOrder,
+              flatColumns: rowError.columns ? rowError.columns.flat(Infinity) : []
+            });
+          }
+
           return (
             <div key={`${rowError.row_idx}-${index}`} className="error-row">
               <div className="error-details">
@@ -281,10 +298,14 @@ export const ErrorGroup: React.FC<ErrorGroupProps> = ({
 
         .row-index-cell {
           font-weight: 600;
-          background: #f8fafc;
+          background: #f8fafc !important;
           color: #475569;
           min-width: 60px !important;
           max-width: 80px !important;
+          padding: 0.375rem 0.75rem;
+          text-align: center;
+          border-bottom: 1px solid #e2e8f0;
+          border-right: 1px solid #e2e8f0;
         }
 
         .load-more-btn {
