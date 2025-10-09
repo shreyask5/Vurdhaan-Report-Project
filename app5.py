@@ -459,6 +459,10 @@ def save_corrections_route(project_id):
         except Exception:
             df = pd.read_csv(base_csv)
 
+        # Normalize column names to avoid trailing/leading space issues
+        # This ensures required columns like 'Fuel Consumption' are detected correctly
+        df.columns = df.columns.str.strip()
+
         # Apply corrections with dtype-aware conversion (mirrors app4.py semantics)
         applied = 0
         for i, corr in enumerate(corrections):
