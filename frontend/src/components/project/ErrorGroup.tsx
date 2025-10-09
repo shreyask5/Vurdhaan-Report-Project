@@ -25,20 +25,55 @@ export const ErrorGroup: React.FC<ErrorGroupProps> = ({
 }) => {
   const [displayedRows, setDisplayedRows] = useState(100); // Initial batch size
 
+  // Debug: print rowsData overview once per mount/update
+  React.useEffect(() => {
+    const keys = Object.keys(rowsData || {});
+    const sampleKey = keys[0];
+    const sample = sampleKey !== undefined ? (rowsData as any)[sampleKey] : undefined;
+    console.log('[ErrorGroup DEBUG] rowsData overview', {
+      totalKeys: keys.length,
+      firstKey: sampleKey,
+      firstRowSample: sample,
+      columnOrder,
+      errorGroupReason: errorGroup?.reason,
+      errorRowsCount: errorGroup?.rows?.length
+    });
+  }, [rowsData, columnOrder, errorGroup]);
+
   // Resolve actual row data from rowsData using robust key matching.
   // Tries numeric key, string key, then falls back to index-based ordering.
   const getActualRowData = (rowIdx: number, renderIndex: number) => {
+    const debugAttempt: any = { rowIdx, renderIndex };
     // Direct numeric key
-    if ((rowsData as any)[rowIdx] !== undefined) return (rowsData as any)[rowIdx];
+    if ((rowsData as any)[rowIdx] !== undefined) {
+      debugAttempt.hit = 'numeric';
+      debugAttempt.key = rowIdx;
+      const result = (rowsData as any)[rowIdx];
+      console.log('[ErrorGroup DEBUG] Row resolve', debugAttempt, { resolvedKeys: Object.keys(result || {}) });
+      return result;
+    }
     // String key
     const stringKey = String(rowIdx);
-    if ((rowsData as any)[stringKey] !== undefined) return (rowsData as any)[stringKey];
+    if (Object.prototype.hasOwnProperty.call(rowsData, stringKey)) {
+      debugAttempt.hit = 'string';
+      debugAttempt.key = stringKey;
+      const result = (rowsData as any)[stringKey];
+      console.log('[ErrorGroup DEBUG] Row resolve', debugAttempt, { resolvedKeys: Object.keys(result || {}) });
+      return result;
+    }
     // Fallback: index-based access using stable key order
     const keys = Object.keys(rowsData);
     if (keys.length > renderIndex) {
       const fallbackKey = keys[renderIndex];
-      return (rowsData as any)[fallbackKey] ?? {};
+      debugAttempt.hit = 'index-fallback';
+      debugAttempt.key = fallbackKey;
+      const result = (rowsData as any)[fallbackKey] ?? {};
+      console.warn('[ErrorGroup WARN] Using index-based fallback to resolve row data', debugAttempt, {
+        fallbackResolved: Object.keys(result || {})
+      });
+      return result;
     }
+    console.error('[ErrorGroup ERROR] Unable to resolve row data for', debugAttempt, { rowsDataKeys: keys.slice(0, 20) });
     return {} as Record<string, unknown>;
   };
 
@@ -96,6 +131,16 @@ export const ErrorGroup: React.FC<ErrorGroupProps> = ({
         {errorGroup.rows.slice(0, displayedRows).map((rowError, index) => {
           // Get actual row data from rowsData (handles numeric/string keys and index fallback)
           const actualRowData = getActualRowData(rowError.row_idx, index);
+          if (index < 3 || !actualRowData || Object.keys(actualRowData).length === 0) {
+            console.log('[ErrorGroup DEBUG] Render row', {
+              mapIndex: index,
+              row_idx: rowError.row_idx,
+              cell_data: rowError.cell_data,
+              editableColumns: rowError.columns ? rowError.columns.flat(Infinity) : [],
+              resolvedEmpty: !actualRowData || Object.keys(actualRowData).length === 0,
+              resolvedKeys: Object.keys(actualRowData || {})
+            });
+          }
 
           // TEMPORARY DEBUG: Log what we're rendering
           if (index === 0) {
@@ -169,6 +214,7 @@ export const ErrorGroup: React.FC<ErrorGroupProps> = ({
         )}
       </div>
 
+      {/* @ts-ignore styled-jsx prop */}
       <style jsx>{`
         .error-group {
           background: white;
