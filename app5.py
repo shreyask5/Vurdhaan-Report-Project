@@ -272,17 +272,138 @@ def upload_route(project_id):
 
         projects.update_validation_results(project_id, is_valid, 0)
 
+        # Save error JSON for later retrieval
+        if error_json:
+            error_file_path = os.path.join(storage.get_project_path(project_id), 'error_report.json')
+            import json
+            with open(error_file_path, 'w') as f:
+                json.dump(error_json, f)
+
         return jsonify({
             'success': True,
             'project_id': project_id,
+            'file_id': project_id,
             'is_valid': is_valid,
-            'filename': file.filename
+            'filename': file.filename,
+            'has_errors': not is_valid
         }), 200
 
     except PermissionError:
         return jsonify({'error': 'Unauthorized'}), 403
     except Exception as e:
         print("ERROR: Upload failed:", str(e))
+        return jsonify({'error': str(e)}), 500
+
+# ============================================================================
+# ERROR HANDLING ENDPOINTS
+# ============================================================================
+
+@app.route('/api/projects/<project_id>/errors', methods=['GET'])
+@require_auth
+@limit_by_user("60 per minute")
+def get_errors_route(project_id):
+    """Get validation errors for a project"""
+    if not validate_project_id(project_id):
+        return jsonify({'error': 'Invalid project ID'}), 400
+
+    project = projects.get_project_with_validation(project_id, g.user['uid'])
+    if not project:
+        return jsonify({'error': 'Project not found'}), 404
+
+    try:
+        import json
+        error_file_path = os.path.join(storage.get_project_path(project_id), 'error_report.json')
+
+        if not os.path.exists(error_file_path):
+            # No errors - return empty structure
+            return jsonify({
+                'summary': {
+                    'total_errors': 0,
+                    'error_rows': 0,
+                    'categories': {}
+                },
+                'rows_data': {},
+                'categories': []
+            }), 200
+
+        with open(error_file_path, 'r') as f:
+            error_data = json.load(f)
+
+        return jsonify(error_data), 200
+
+    except Exception as e:
+        print("ERROR: Get errors failed:", str(e))
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/projects/<project_id>/corrections', methods=['POST'])
+@require_auth
+@limit_by_user("30 per hour")
+def save_corrections_route(project_id):
+    """Save user corrections"""
+    if not validate_project_id(project_id):
+        return jsonify({'error': 'Invalid project ID'}), 400
+
+    project = projects.get_project_with_validation(project_id, g.user['uid'])
+    if not project:
+        return jsonify({'error': 'Project not found'}), 404
+
+    try:
+        corrections = request.json.get('corrections', [])
+
+        # Save corrections to file
+        corrections_file = os.path.join(storage.get_project_path(project_id), 'corrections.json')
+        import json
+        with open(corrections_file, 'w') as f:
+            json.dump(corrections, f)
+
+        return jsonify({'success': True, 'corrections_saved': len(corrections)}), 200
+
+    except Exception as e:
+        print("ERROR: Save corrections failed:", str(e))
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/projects/<project_id>/ignore-errors', methods=['POST'])
+@require_auth
+@limit_by_user("10 per hour")
+def ignore_errors_route(project_id):
+    """Mark project as validated despite errors"""
+    if not validate_project_id(project_id):
+        return jsonify({'error': 'Invalid project ID'}), 400
+
+    project = projects.get_project_with_validation(project_id, g.user['uid'])
+    if not project:
+        return jsonify({'error': 'Project not found'}), 404
+
+    try:
+        # Update project to mark as validated
+        projects.update_validation_results(project_id, True, 0)
+
+        return jsonify({'success': True}), 200
+
+    except Exception as e:
+        print("ERROR: Ignore errors failed:", str(e))
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/projects/<project_id>/revalidate', methods=['POST'])
+@require_auth
+@limit_by_user("20 per hour")
+def revalidate_route(project_id):
+    """Re-validate the project data"""
+    if not validate_project_id(project_id):
+        return jsonify({'error': 'Invalid project ID'}), 400
+
+    project = projects.get_project_with_validation(project_id, g.user['uid'])
+    if not project:
+        return jsonify({'error': 'Project not found'}), 404
+
+    try:
+        # Reset validation status
+        projects.update_validation_results(project_id, False, 0)
+
+        return jsonify({'success': True}), 200
+
+    except Exception as e:
+        print("ERROR: Revalidate failed:", str(e))
         return jsonify({'error': str(e)}), 500
 
 # ============================================================================
