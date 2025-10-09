@@ -20,6 +20,19 @@ export const ProjectErrorDisplay: React.FC = () => {
   const [loadingMessage, setLoadingMessage] = useState('Loading errors...');
   const [sequenceSummaryItems, setSequenceSummaryItems] = useState<any[]>([]);
 
+  // TEMPORARY DEBUG: Log errorData from context
+  React.useEffect(() => {
+    if (errorData) {
+      console.log('[PROJECT ERROR DISPLAY] errorData from context:', {
+        hasRowsData: !!errorData.rows_data,
+        rowsDataType: typeof errorData.rows_data,
+        rowsDataKeys: errorData.rows_data ? Object.keys(errorData.rows_data).slice(0, 5) : [],
+        rowsDataKeysLength: errorData.rows_data ? Object.keys(errorData.rows_data).length : 0,
+        fullErrorData: errorData
+      });
+    }
+  }, [errorData]);
+
   // Get column order from actual row data or fall back to fuel method
   const columnOrder = React.useMemo(() => {
     // Try to get column order from fuel method first
