@@ -434,15 +434,21 @@ def save_corrections_route(project_id):
             json.dump(corrections, f)
 
         # Determine base CSV to apply corrections on
+        # Check both temp and permanent directories
+        temp_path_dir = storage.get_temp_path(project_id)
         project_path = storage.get_project_path(project_id)
-        candidate_files = [
-            os.path.join(project_path, 'original.csv'),
-            os.path.join(project_path, 'reordered.csv'),
-            os.path.join(project_path, 'trimmed.csv'),
-            os.path.join(project_path, 'clean_data.csv'),
-        ]
+
+        candidate_files = []
+        # Check temp directory first (where uploads are initially saved)
+        for filename in ['original.csv', 'reordered.csv', 'trimmed.csv', 'clean_data.csv']:
+            candidate_files.append(os.path.join(temp_path_dir, filename))
+        # Then check permanent directory
+        for filename in ['original.csv', 'reordered.csv', 'trimmed.csv', 'clean_data.csv']:
+            candidate_files.append(os.path.join(project_path, filename))
+
         base_csv = next((p for p in candidate_files if os.path.exists(p)), None)
         if not base_csv:
+            print(f"[CORRECTIONS ERROR] No base CSV found. Checked paths: {candidate_files}")
             return jsonify({'error': 'Base CSV not found for project'}), 404
 
         print(f"[CORRECTIONS] Applying {len(corrections)} corrections on: {base_csv}")
@@ -488,8 +494,9 @@ def save_corrections_route(project_id):
             df.at[row_idx, column] = new_value
             applied += 1
 
-        # Save corrected CSV within project directory
-        corrected_csv = os.path.join(project_path, 'corrected.csv')
+        # Save corrected CSV in the same directory as the base CSV
+        base_csv_dir = os.path.dirname(base_csv)
+        corrected_csv = os.path.join(base_csv_dir, 'corrected.csv')
         df.to_csv(corrected_csv, index=False, encoding='utf-8')
         print(f"[CORRECTIONS] Saved corrected CSV: {corrected_csv} (applied={applied})")
 
