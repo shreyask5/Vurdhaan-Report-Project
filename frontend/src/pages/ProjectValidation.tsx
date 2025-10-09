@@ -90,21 +90,23 @@ const ProjectValidation: React.FC = () => {
   };
 
   const handleSaveCorrections = async () => {
+    if (!projectId) return;
     try {
-      await saveCorrections();
-      alert('Corrections saved successfully!');
+      await saveCorrections(projectId);
+      alert('✅ Corrections saved successfully!');
     } catch (error) {
-      alert('Failed to save corrections');
+      alert('❌ Failed to save corrections');
     }
   };
 
   const handleIgnoreErrors = async () => {
+    if (!projectId) return;
     const confirmed = confirm('Are you sure you want to ignore all errors and proceed?');
     if (confirmed) {
       try {
-        await ignoreErrors();
+        await ignoreErrors(projectId);
       } catch (error) {
-        alert('Failed to ignore errors');
+        alert('❌ Failed to ignore errors');
       }
     }
   };

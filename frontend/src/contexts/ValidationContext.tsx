@@ -24,9 +24,9 @@ interface ValidationContextType {
   setFuelMethod: (method: FuelMethod) => void;
   setColumnMapping: (mapping: ColumnMapping) => void;
   uploadFile: (projectId: string, params: ValidationFormData) => Promise<void>;
-  fetchErrors: () => Promise<void>;
-  saveCorrections: () => Promise<void>;
-  ignoreErrors: () => Promise<void>;
+  fetchErrors: (projectId?: string) => Promise<void>;
+  saveCorrections: (projectId: string) => Promise<void>;
+  ignoreErrors: (projectId: string) => Promise<void>;
   addCorrection: (correction: Correction) => void;
   reset: () => void;
   goToStep: (step: ValidationStep) => void;
@@ -98,25 +98,25 @@ export const ValidationProvider: React.FC<{ children: ReactNode }> = ({ children
     }
   };
 
-  const saveCorrections = async () => {
-    if (!fileId) return;
+  const saveCorrections = async (projectId: string) => {
+    if (!projectId) return;
 
     setIsLoading(true);
     try {
-      await validationService.saveCorrections(fileId, Array.from(corrections.values()));
+      await validationService.saveCorrections(projectId, Array.from(corrections.values()));
       setCorrections(new Map());
-      await fetchErrors();
+      await fetchErrors(projectId);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const ignoreErrors = async () => {
-    if (!fileId) return;
+  const ignoreErrors = async (projectId: string) => {
+    if (!projectId) return;
 
     setIsLoading(true);
     try {
-      await validationService.ignoreErrors(fileId);
+      await validationService.ignoreErrors(projectId);
       setCurrentStep('success');
     } finally {
       setIsLoading(false);
@@ -124,8 +124,17 @@ export const ValidationProvider: React.FC<{ children: ReactNode }> = ({ children
   };
 
   const addCorrection = (correction: Correction) => {
-    const key = `${correction.row_idx}_${correction.column}`;
-    setCorrections(prev => new Map(prev).set(key, correction));
+    const key = `${correction.row_idx}-${correction.column}`;
+    setCorrections(prev => {
+      const newMap = new Map(prev);
+      // Remove correction if value reverted to original (matches index4.html behavior)
+      if (correction.new_value === correction.old_value) {
+        newMap.delete(key);
+      } else {
+        newMap.set(key, correction);
+      }
+      return newMap;
+    });
   };
 
   const reset = () => {
