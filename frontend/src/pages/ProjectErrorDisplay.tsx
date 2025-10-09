@@ -20,8 +20,28 @@ export const ProjectErrorDisplay: React.FC = () => {
   const [loadingMessage, setLoadingMessage] = useState('Loading errors...');
   const [sequenceSummaryItems, setSequenceSummaryItems] = useState<any[]>([]);
 
-  // Get column order based on fuel method
-  const columnOrder = selectedFuelMethod ? FUEL_METHOD_COLUMNS[selectedFuelMethod] : [];
+  // Get column order from actual row data or fall back to fuel method
+  const columnOrder = React.useMemo(() => {
+    // Try to get column order from fuel method first
+    if (selectedFuelMethod && FUEL_METHOD_COLUMNS[selectedFuelMethod]) {
+      return FUEL_METHOD_COLUMNS[selectedFuelMethod];
+    }
+
+    // Fall back to extracting from first row in rows_data
+    if (errorData && errorData.rows_data) {
+      const rowKeys = Object.keys(errorData.rows_data);
+      if (rowKeys.length > 0) {
+        const firstRow = errorData.rows_data[parseInt(rowKeys[0])];
+        if (firstRow && typeof firstRow === 'object') {
+          // Return all keys except 'error' which is a metadata field
+          return Object.keys(firstRow).filter(key => key !== 'error');
+        }
+      }
+    }
+
+    // Default fallback to Block Off - Block On method
+    return FUEL_METHOD_COLUMNS["Block Off - Block On"] || [];
+  }, [selectedFuelMethod, errorData]);
 
   useEffect(() => {
     if (errorData && errorData.categories) {
