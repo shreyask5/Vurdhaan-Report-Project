@@ -16,21 +16,37 @@ import { FUEL_METHOD_COLUMNS } from '../types/validation';
 export const ProjectErrorDisplay: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
-  const { errorData, corrections, addCorrection, selectedFuelMethod, isLoading } = useValidation();
+  const { errorData, corrections, addCorrection, selectedFuelMethod, isLoading, fetchErrors } = useValidation();
   const [loadingMessage, setLoadingMessage] = useState('Loading errors...');
   const [sequenceSummaryItems, setSequenceSummaryItems] = useState<any[]>([]);
 
-  // TEMPORARY DEBUG: Log errorData from context
+  // DEBUG: Log component mount and projectId
   React.useEffect(() => {
-    if (errorData) {
-      console.log('[PROJECT ERROR DISPLAY] errorData from context:', {
-        hasRowsData: !!errorData.rows_data,
-        rowsDataType: typeof errorData.rows_data,
-        rowsDataKeys: errorData.rows_data ? Object.keys(errorData.rows_data).slice(0, 5) : [],
-        rowsDataKeysLength: errorData.rows_data ? Object.keys(errorData.rows_data).length : 0,
-        fullErrorData: errorData
+    console.log('[PROJECT ERROR DISPLAY] Component mounted with projectId:', projectId);
+  }, [projectId]);
+
+  // Fetch errors when component mounts
+  React.useEffect(() => {
+    if (projectId) {
+      console.log('[PROJECT ERROR DISPLAY] Fetching errors for project:', projectId);
+      fetchErrors(projectId).catch(error => {
+        console.error('[PROJECT ERROR DISPLAY] Failed to fetch errors:', error);
+        setLoadingMessage('Failed to load errors');
       });
     }
+  }, [projectId, fetchErrors]);
+
+  // DEBUG: Log errorData from context
+  React.useEffect(() => {
+    console.log('[PROJECT ERROR DISPLAY] errorData changed:', {
+      hasErrorData: !!errorData,
+      hasRowsData: !!errorData?.rows_data,
+      rowsDataType: typeof errorData?.rows_data,
+      rowsDataKeys: errorData?.rows_data ? Object.keys(errorData.rows_data).slice(0, 5) : [],
+      rowsDataKeysLength: errorData?.rows_data ? Object.keys(errorData.rows_data).length : 0,
+      summary: errorData?.summary,
+      fullErrorData: errorData
+    });
   }, [errorData]);
 
   // Get column order from actual row data or fall back to fuel method

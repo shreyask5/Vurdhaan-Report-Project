@@ -423,12 +423,21 @@ def upload_route(project_id):
 @limit_by_user("60 per minute")
 def get_errors_route(project_id):
     """Get validation errors for a project"""
+    print(f"[ERRORS API] Request received for project: {project_id}")
+    print(f"[ERRORS API] User UID: {g.user['uid']}")
+    
     if not validate_project_id(project_id):
+        print(f"[ERRORS API] Invalid project ID: {project_id}")
         return jsonify({'error': 'Invalid project ID'}), 400
 
     project = projects.get_project_with_validation(project_id, g.user['uid'])
     if not project:
+        print(f"[ERRORS API] Project not found: {project_id}")
         return jsonify({'error': 'Project not found'}), 404
+
+    print(f"[ERRORS API] Project found: {project.get('name', 'Unknown')}")
+    print(f"[ERRORS API] Project status: {project.get('status', 'Unknown')}")
+    print(f"[ERRORS API] Upload completed: {project.get('upload_completed', 'Unknown')}")
 
     try:
         import json
@@ -436,6 +445,9 @@ def get_errors_route(project_id):
         # Check temp directory first (where validation saves files)
         temp_path = storage.get_temp_path(project_id)
         project_path = storage.get_project_path(project_id)
+        
+        print(f"[ERRORS API] Checking temp path: {temp_path}")
+        print(f"[ERRORS API] Checking project path: {project_path}")
 
         # Try compressed file first (preferred)
         # Check temp directory first, then permanent
@@ -446,6 +458,9 @@ def get_errors_route(project_id):
         json_file = os.path.join(temp_path, 'error_report.json')
         if not os.path.exists(json_file):
             json_file = os.path.join(project_path, 'error_report.json')
+
+        print(f"[ERRORS API] Compressed file exists: {os.path.exists(compressed_file)} at {compressed_file}")
+        print(f"[ERRORS API] JSON file exists: {os.path.exists(json_file)} at {json_file}")
 
         if os.path.exists(compressed_file):
             print(f"[ERRORS] Reading compressed error report: {compressed_file}")
@@ -463,10 +478,12 @@ def get_errors_route(project_id):
             print(f"[ERRORS] Reading JSON error report: {json_file}")
             with open(json_file, 'r') as f:
                 error_data = json.load(f)
+            print(f"[ERRORS API] JSON data loaded - summary: {error_data.get('summary', {})}")
             return jsonify(error_data), 200
         else:
             # No errors - return empty structure
             print(f"[ERRORS] No error report found for project {project_id}")
+            print(f"[ERRORS API] This might mean no validation has been run yet")
             return jsonify({
                 'summary': {
                     'total_errors': 0,
