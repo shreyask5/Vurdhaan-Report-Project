@@ -24,6 +24,7 @@ export const ProjectErrorDisplay: React.FC = () => {
   const columnOrder = React.useMemo(() => {
     // Try to get column order from fuel method first
     if (selectedFuelMethod && FUEL_METHOD_COLUMNS[selectedFuelMethod]) {
+      console.log('[COLUMN ORDER] Using fuel method:', selectedFuelMethod);
       return FUEL_METHOD_COLUMNS[selectedFuelMethod];
     }
 
@@ -34,12 +35,15 @@ export const ProjectErrorDisplay: React.FC = () => {
         const firstRow = errorData.rows_data[parseInt(rowKeys[0])];
         if (firstRow && typeof firstRow === 'object') {
           // Return all keys except 'error' which is a metadata field
-          return Object.keys(firstRow).filter(key => key !== 'error');
+          const columns = Object.keys(firstRow).filter(key => key !== 'error');
+          console.log('[COLUMN ORDER] Extracted from row data:', columns);
+          return columns;
         }
       }
     }
 
     // Default fallback to Block Off - Block On method
+    console.log('[COLUMN ORDER] Using default fallback');
     return FUEL_METHOD_COLUMNS["Block Off - Block On"] || [];
   }, [selectedFuelMethod, errorData]);
 

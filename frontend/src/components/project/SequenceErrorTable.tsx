@@ -216,6 +216,7 @@ export const SequenceErrorTable: React.FC<SequenceErrorTableProps> = ({
           position: sticky;
           top: 0;
           white-space: nowrap;
+          min-width: 100px;
         }
 
         .sequence-table td {
@@ -223,6 +224,11 @@ export const SequenceErrorTable: React.FC<SequenceErrorTableProps> = ({
           text-align: center;
           border-bottom: 1px solid #e2e8f0;
           font-size: 0.75rem;
+          min-width: 100px;
+          max-width: 200px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
         }
 
         .row-index-cell {
