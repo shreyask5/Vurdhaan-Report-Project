@@ -34,8 +34,8 @@ export const ProjectErrorDisplay: React.FC = () => {
       if (rowKeys.length > 0) {
         const firstRow = errorData.rows_data[parseInt(rowKeys[0])];
         if (firstRow && typeof firstRow === 'object') {
-          // Return all keys except 'error' which is a metadata field
-          const columns = Object.keys(firstRow).filter(key => key !== 'error');
+          // Return all keys except 'error' and 'index' which are metadata fields
+          const columns = Object.keys(firstRow).filter(key => key !== 'error' && key !== 'index');
           console.log('[COLUMN ORDER] Extracted from row data:', columns);
           return columns;
         }

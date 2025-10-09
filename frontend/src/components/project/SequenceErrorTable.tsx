@@ -40,7 +40,7 @@ export const SequenceErrorTable: React.FC<SequenceErrorTableProps> = ({
         // Prepare rows with actual data
         const rowsWithData = sortedRows.map(({ rowError }) => ({
           rowError,
-          rowData: rowsData[rowError.row_idx] || rowError.columns || {}
+          rowData: rowsData[rowError.row_idx] || {}
         }));
 
         // Find mismatched cells
@@ -95,8 +95,11 @@ export const SequenceErrorTable: React.FC<SequenceErrorTableProps> = ({
                             mc => mc.rowIdx === rowIndex && mc.col === col
                           );
 
+                          // Flatten nested arrays in rowError.columns
+                          const flatColumns = rowError.columns ? rowError.columns.flat(Infinity) : [];
+
                           // Destination and Origin ICAO are not editable in sequence tables
-                          const isEditable = errorGroup.columns?.includes(col) &&
+                          const isEditable = flatColumns.includes(col) &&
                                             col !== 'Destination ICAO' &&
                                             col !== 'Origin ICAO';
 

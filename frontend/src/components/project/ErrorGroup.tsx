@@ -25,17 +25,6 @@ export const ErrorGroup: React.FC<ErrorGroupProps> = ({
 }) => {
   const [displayedRows, setDisplayedRows] = useState(100); // Initial batch size
 
-  // Debug logging
-  React.useEffect(() => {
-    console.log('[ERROR GROUP] Rendering:', {
-      reason: errorGroup.reason,
-      rowCount: errorGroup.rows.length,
-      columnOrderLength: columnOrder.length,
-      columnOrder,
-      firstRow: errorGroup.rows[0],
-      rowsDataKeys: Object.keys(rowsData).length
-    });
-  }, [errorGroup, columnOrder, rowsData]);
 
   // Check if this is a sequence error group
   const isSequenceError = errorGroup.rows.some(row => parseErrorSequence(row.cell_data) !== null);
@@ -91,16 +80,6 @@ export const ErrorGroup: React.FC<ErrorGroupProps> = ({
           // Get actual row data from rowsData
           const actualRowData = rowsData[rowError.row_idx] || {};
 
-          // Debug log for first few rows
-          if (index < 2) {
-            console.log('[ERROR GROUP] Row data:', {
-              row_idx: rowError.row_idx,
-              actualRowData,
-              columns: errorGroup.columns,
-              cellData: rowError.cell_data
-            });
-          }
-
           return (
             <div key={`${rowError.row_idx}-${index}`} className="error-row">
               <div className="error-details">
@@ -115,6 +94,7 @@ export const ErrorGroup: React.FC<ErrorGroupProps> = ({
                 <table className="error-row-table">
                   <thead>
                     <tr>
+                      <th>Row</th>
                       {columnOrder.map(col => (
                         <th key={col}>{col}</th>
                       ))}
@@ -122,8 +102,11 @@ export const ErrorGroup: React.FC<ErrorGroupProps> = ({
                   </thead>
                   <tbody>
                     <tr>
+                      <td className="row-index-cell">{rowError.row_idx}</td>
                       {columnOrder.map(col => {
-                        const isEditable = errorGroup.columns?.includes(col) || false;
+                        // Flatten nested arrays in rowError.columns
+                        const flatColumns = rowError.columns ? rowError.columns.flat(Infinity) : [];
+                        const isEditable = flatColumns.includes(col);
                         const cellValue = actualRowData[col];
                         return (
                           <EditableErrorCell
@@ -294,6 +277,14 @@ export const ErrorGroup: React.FC<ErrorGroupProps> = ({
         .error-row-table :global(input.cell-input) {
           width: 100%;
           min-width: 80px;
+        }
+
+        .row-index-cell {
+          font-weight: 600;
+          background: #f8fafc;
+          color: #475569;
+          min-width: 60px !important;
+          max-width: 80px !important;
         }
 
         .load-more-btn {
