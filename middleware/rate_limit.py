@@ -23,21 +23,28 @@ class RateLimiter:
 
     def init_app(self, app):
         """Initialize rate limiter with Flask app"""
+        # Respect config toggle: allow disabling for testing
+        enabled = app.config.get('RATELIMIT_ENABLED', True)
+        if not enabled:
+            self.limiter = None
+            print("⚠️ Rate limiter disabled via RATELIMIT_ENABLED=False")
+            return
 
-        # Default storage: in-memory (use Redis in production)
+        # Storage and defaults from config
         storage_uri = app.config.get('RATELIMIT_STORAGE_URI', 'memory://')
+        default_limits = app.config.get('RATELIMIT_DEFAULT_LIMITS', ["120 per minute"])
 
         # Initialize Flask-Limiter
         self.limiter = Limiter(
             key_func=get_remote_address,
             app=app,
             storage_uri=storage_uri,
-            default_limits=["120 per minute"],  # Global default
+            default_limits=default_limits,
             headers_enabled=True,  # Add X-RateLimit-* headers
             swallow_errors=True  # Don't crash on Redis errors
         )
 
-        print(f"✅ Rate limiter initialized with storage: {storage_uri}")
+        print(f"✅ Rate limiter initialized with storage: {storage_uri} limits: {default_limits}")
 
     def get_user_id(self) -> Optional[str]:
         """Get user ID from Flask g object if authenticated"""

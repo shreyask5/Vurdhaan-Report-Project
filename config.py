@@ -38,6 +38,21 @@ class Config:
     LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
     LOG_FILE = os.getenv('LOG_FILE', '/var/log/flight-analyzer/app.log')
     
+    # ------------------------------------------------------------------------
+    # Rate Limiting (toggleable for testing)
+    # ------------------------------------------------------------------------
+    # Set to False during testing to disable all rate limits
+    RATELIMIT_ENABLED = os.getenv('RATELIMIT_ENABLED', 'false').lower() == 'true'
+    # Global default limits when enabled; can be overridden per-route
+    # Example env format: "120 per minute|2000 per hour"
+    _rl_defaults_env = os.getenv('RATELIMIT_DEFAULT_LIMITS')
+    if _rl_defaults_env:
+        RATELIMIT_DEFAULT_LIMITS = [part.strip() for part in _rl_defaults_env.split('|') if part.strip()]
+    else:
+        RATELIMIT_DEFAULT_LIMITS = ["120 per minute"]
+    # Storage backend for Flask-Limiter (use Redis in production)
+    RATELIMIT_STORAGE_URI = os.getenv('RATELIMIT_STORAGE_URI', 'memory://')
+    
     # ========================================================================
     # NEW: DUAL LLM ARCHITECTURE CONFIGURATION
     # ========================================================================
@@ -194,6 +209,10 @@ class Config:
         print(f"   Host: {cls.HOST}")
         print(f"   Port: {cls.PORT}")
         print(f"   Environment: {cls.FLASK_ENV}")
+        print(f"\n⏱️ RATE LIMITING:")
+        print(f"   Enabled: {cls.RATELIMIT_ENABLED}")
+        print(f"   Default Limits: {cls.RATELIMIT_DEFAULT_LIMITS}")
+        print(f"   Storage URI: {cls.RATELIMIT_STORAGE_URI}")
         
         print("=" * 60)
 
