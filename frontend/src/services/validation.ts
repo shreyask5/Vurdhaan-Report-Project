@@ -184,5 +184,94 @@ export const validationService = {
     }
 
     return response.json();
+  },
+
+  /**
+   * Fetch errors for a file/project
+   * GET /api/projects/{project_id}/errors (or similar endpoint)
+   * With decompression support from index4.html:2095-2224
+   */
+  async fetchErrors(projectId: string): Promise<ErrorData> {
+    const token = await getAuthToken();
+    const response = await fetch(`${API_BASE_URL}/projects/${projectId}/errors`, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to fetch errors: ${response.status} ${errorText}`);
+    }
+
+    // Check response headers to determine if data is compressed
+    const contentType = response.headers.get('content-type');
+    const compressionType = response.headers.get('x-compression');
+
+    let data: ErrorData;
+
+    if (compressionType === 'lzstring' || contentType === 'text/plain') {
+      // Handle LZ-String compressed data
+      const { decompressLZStringErrorReport } = await import('../utils/compression');
+      const compressedData = await response.text();
+      data = await decompressLZStringErrorReport(compressedData);
+    } else {
+      // Handle regular JSON
+      data = await response.json();
+    }
+
+    return data;
+  },
+
+  /**
+   * Save corrections
+   * POST /api/projects/{project_id}/corrections
+   */
+  async saveCorrections(projectId: string, corrections: Correction[]): Promise<void> {
+    const headers = await getAuthHeaders();
+    const response = await fetch(`${API_BASE_URL}/projects/${projectId}/corrections`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ corrections })
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Failed to save corrections' }));
+      throw new Error(error.error || 'Failed to save corrections');
+    }
+  },
+
+  /**
+   * Ignore remaining errors
+   * POST /api/projects/{project_id}/ignore-errors
+   */
+  async ignoreErrors(projectId: string): Promise<void> {
+    const headers = await getAuthHeaders();
+    const response = await fetch(`${API_BASE_URL}/projects/${projectId}/ignore-errors`, {
+      method: 'POST',
+      headers
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Failed to ignore errors' }));
+      throw new Error(error.error || 'Failed to ignore errors');
+    }
+  },
+
+  /**
+   * Re-validate and process again
+   * POST /api/projects/{project_id}/revalidate
+   */
+  async revalidate(projectId: string): Promise<void> {
+    const headers = await getAuthHeaders();
+    const response = await fetch(`${API_BASE_URL}/projects/${projectId}/revalidate`, {
+      method: 'POST',
+      headers
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Failed to re-validate' }));
+      throw new Error(error.error || 'Failed to re-validate');
+    }
   }
 };

@@ -44,85 +44,94 @@ export async function decompressLZStringErrorReport(compressedData: string): Pro
  * Restores original error structure from optimized format
  * From index4.html:2312-2494
  */
-function restoreOriginalErrorStructure(optimizedData: OptimizedErrorData): ErrorData {
+function restoreOriginalErrorStructure(optimizedData: any): ErrorData {
   try {
-    console.log('🔄 Restoring original error structure from optimized format...');
+    console.log('🔄 Restoring original error structure...');
 
-    const { meta, categories: categoriesData } = optimizedData;
-    const { field_map, schemas } = meta;
+    // Validate input structure
+    if (!optimizedData || !optimizedData.meta) {
+      throw new Error('Invalid optimized data structure: missing meta section');
+    }
 
-    // Create reverse map for field indices
-    const reverseFieldMap: Record<number, string> = {};
-    Object.entries(field_map).forEach(([field, index]) => {
-      reverseFieldMap[index as number] = field;
-    });
+    // Get field mapping for restoration
+    const fieldMap = optimizedData.meta.fm; // field map
+    if (!fieldMap) {
+      throw new Error('Invalid optimized data structure: missing field map');
+    }
 
-    console.log('Field map:', field_map);
-    console.log('Schemas:', schemas);
+    // Step 1: Restore row data with full field names
+    const restoredRows: Record<number, any> = {};
+    const rowsData = optimizedData.rd || {};
 
-    // Restore categories
-    const categories = categoriesData.map((catData: any[]) => {
-      const category: any = {};
+    for (const [rowIdx, rowData] of Object.entries(rowsData)) {
+      const restoredRow: any = {};
 
-      // Restore category fields based on schema
-      schemas.category.forEach((field, idx) => {
-        category[field] = catData[idx];
-      });
-
-      // Restore error groups
-      if (category.errors && Array.isArray(category.errors)) {
-        category.errors = category.errors.map((errData: any[]) => {
-          const errorGroup: any = {};
-
-          // Restore error group fields
-          schemas.error_group.forEach((field, idx) => {
-            errorGroup[field] = errData[idx];
-          });
-
-          // Restore rows
-          if (errorGroup.rows && Array.isArray(errorGroup.rows)) {
-            errorGroup.rows = errorGroup.rows.map((rowData: any[]) => {
-              const row: any = {};
-
-              // Restore row fields
-              schemas.row_error.forEach((field, idx) => {
-                row[field] = rowData[idx];
-              });
-
-              // Restore columns object from array
-              if (row.columns && Array.isArray(row.columns)) {
-                const columnsArray = row.columns;
-                row.columns = {};
-
-                columnsArray.forEach((value: any, idx: number) => {
-                  const fieldName = reverseFieldMap[idx];
-                  if (fieldName) {
-                    row.columns[fieldName] = value;
-                  }
-                });
-              }
-
-              return row;
-            });
-          }
-
-          return errorGroup;
-        });
+      for (const [shortKey, value] of Object.entries(rowData as any)) {
+        if (shortKey === 'err') {
+          // Handle error field
+          restoredRow['error'] = value;
+        } else {
+          // Restore full field name
+          const fullKey = fieldMap[shortKey] || shortKey;
+          restoredRow[fullKey] = value;
+        }
       }
 
-      return category;
-    });
+      restoredRows[parseInt(rowIdx)] = restoredRow;
+    }
 
-    const restoredData: ErrorData = { categories };
+    // Step 2: Restore category structure
+    const categories = optimizedData.c || [];
+    const restoredCategories = categories.map((category: any) => ({
+      name: category.n || '', // name
+      errors: (category.e || []).map((error: any) => ({ // errors
+        reason: error.r || '', // reason
+        rows: (error.rows || []).map((row: any) => {
+          if (row.fl) { // file_level
+            return {
+              file_level: true,
+              cell_data: row.cd || '',
+              columns: row.cols || []
+            };
+          } else {
+            return {
+              row_idx: row.idx,
+              cell_data: row.cd || '',
+              columns: row.cols || []
+            };
+          }
+        })
+      }))
+    }));
 
-    console.log('✅ Successfully restored error structure');
-    console.log('Categories count:', categories.length);
+    // Step 3: Restore summary structure
+    const summary = optimizedData.meta.s || {};
+    const restoredSummary = {
+      total_errors: summary.te || 0,
+      error_rows: summary.er || 0,
+      categories: summary.c || {}
+    };
+
+    // Step 4: Construct final restored structure
+    const restoredData: ErrorData = {
+      summary: restoredSummary,
+      rows_data: restoredRows,
+      categories: restoredCategories
+    };
+
+    console.log('✅ Structure restoration completed');
+    console.log('Restored data summary:', restoredData.summary);
+
+    // Validate restored structure
+    if (!restoredData.summary || typeof restoredData.summary.total_errors !== 'number') {
+      throw new Error('Restored data validation failed: invalid summary structure');
+    }
 
     return restoredData;
 
   } catch (error) {
-    console.error('❌ [ERROR] Structure restoration failed:', error);
-    throw new Error(`Failed to restore error structure: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    console.error('❌ [ERROR] Failed to restore error structure:', error);
+    throw new Error(`Structure restoration failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 

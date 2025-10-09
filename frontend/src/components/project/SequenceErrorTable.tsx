@@ -4,32 +4,29 @@
 import React from 'react';
 import { ErrorGroup, Correction } from '../../types/validation';
 import { EditableErrorCell } from './EditableErrorCell';
-import { downloadCSV } from '../../utils/csv';
-import { parseErrorSequence, processSequenceGroups } from '../../utils/validation';
+import { downloadSequenceTableCSV } from '../../utils/csv';
+import { parseErrorSequence, processSequenceGroups, findMismatchedSequenceCells } from '../../utils/errorProcessing';
 
 interface SequenceErrorTableProps {
   errorGroup: ErrorGroup;
   columnOrder: string[];
+  rowsData?: Record<number, any>;
   onCorrection: (correction: Correction) => void;
 }
 
 export const SequenceErrorTable: React.FC<SequenceErrorTableProps> = ({
   errorGroup,
   columnOrder,
+  rowsData = {},
   onCorrection
 }) => {
   // Process sequence groups
   const { groups, highlightMap } = processSequenceGroups(errorGroup);
 
-  const handleDownloadSequence = (groupRows: any[], sequenceKey: string) => {
-    const sequenceData = groupRows.map(({ rowError }) => ({
-      'Row Index': rowError.row_idx,
-      ...rowError.columns,
-      'Error Details': rowError.cell_data
-    }));
-
-    const filename = `sequence_${sequenceKey.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 30)}.csv`;
-    downloadCSV(sequenceData, filename);
+  const handleDownloadSequence = (tableRef: React.RefObject<HTMLTableElement>, sequenceKey: string) => {
+    if (tableRef.current) {
+      downloadSequenceTableCSV(tableRef.current, sequenceKey);
+    }
   };
 
   return (
@@ -38,6 +35,16 @@ export const SequenceErrorTable: React.FC<SequenceErrorTableProps> = ({
         // Sort by row_idx
         const sortedRows = [...groupRows].sort((a, b) => a.rowError.row_idx - b.rowError.row_idx);
         const sequence = parseErrorSequence(sequenceKey);
+        const tableRef = React.createRef<HTMLTableElement>();
+
+        // Prepare rows with actual data
+        const rowsWithData = sortedRows.map(({ rowError }) => ({
+          rowError,
+          rowData: rowsData[rowError.row_idx] || rowError.columns || {}
+        }));
+
+        // Find mismatched cells
+        const mismatchedCells = findMismatchedSequenceCells(rowsWithData, columnOrder);
 
         return (
           <div key={`${sequenceKey}-${groupIndex}`} className="sequence-group">
@@ -47,7 +54,7 @@ export const SequenceErrorTable: React.FC<SequenceErrorTableProps> = ({
                 Sequence Error: {sequence?.errorCode || 'Unknown'}
               </span>
               <button
-                onClick={() => handleDownloadSequence(sortedRows, sequenceKey)}
+                onClick={() => handleDownloadSequence(tableRef, sequenceKey)}
                 className="download-btn"
                 title="Download sequence as CSV"
               >
@@ -62,7 +69,7 @@ export const SequenceErrorTable: React.FC<SequenceErrorTableProps> = ({
 
             {/* Sequence Table */}
             <div className="table-wrapper">
-              <table className="sequence-table">
+              <table className="sequence-table" ref={tableRef}>
                 <thead>
                   <tr>
                     <th>Row</th>
@@ -72,14 +79,9 @@ export const SequenceErrorTable: React.FC<SequenceErrorTableProps> = ({
                   </tr>
                 </thead>
                 <tbody>
-                  {sortedRows.map(({ rowError, originalIndex }, rowIndex) => {
+                  {rowsWithData.map(({ rowError, rowData }, rowIndex) => {
                     const isHighlighted = highlightMap.get(rowError.row_idx) || false;
-                    const isLastInSequence = rowIndex === sortedRows.length - 1;
-
-                    // Determine cells to highlight (red for mismatched Destination/Origin)
-                    const nextRow = sortedRows[rowIndex + 1];
-                    const nextOriginICAO = nextRow?.rowError.columns['Origin ICAO'];
-                    const currentDestICAO = rowError.columns['Destination ICAO'];
+                    const isLastInSequence = rowIndex === rowsWithData.length - 1;
 
                     return (
                       <tr
@@ -89,32 +91,33 @@ export const SequenceErrorTable: React.FC<SequenceErrorTableProps> = ({
                         <td className="row-index-cell">{rowError.row_idx}</td>
                         {columnOrder.map(col => {
                           // Check if this cell should be red-highlighted
-                          const shouldHighlight =
-                            col === 'Destination ICAO' &&
-                            nextOriginICAO !== undefined &&
-                            currentDestICAO !== nextOriginICAO;
+                          const shouldHighlight = mismatchedCells.some(
+                            mc => mc.rowIdx === rowIndex && mc.col === col
+                          );
 
                           // Destination and Origin ICAO are not editable in sequence tables
-                          const isEditable = errorGroup.columns.includes(col) &&
+                          const isEditable = errorGroup.columns?.includes(col) &&
                                             col !== 'Destination ICAO' &&
                                             col !== 'Origin ICAO';
+
+                          const cellValue = rowData[col];
 
                           return (
                             <td key={col} className={shouldHighlight ? 'red-highlight' : ''}>
                               {isEditable ? (
                                 <input
                                   type="text"
-                                  defaultValue={rowError.columns[col] || ''}
+                                  defaultValue={cellValue || ''}
                                   onChange={(e) => onCorrection({
                                     row_idx: rowError.row_idx,
                                     column: col,
-                                    old_value: rowError.columns[col],
+                                    old_value: cellValue,
                                     new_value: e.target.value
                                   })}
                                   className="cell-input"
                                 />
                               ) : (
-                                <span>{rowError.columns[col] !== null && rowError.columns[col] !== undefined ? String(rowError.columns[col]) : ''}</span>
+                                <span>{cellValue !== null && cellValue !== undefined ? String(cellValue) : ''}</span>
                               )}
                             </td>
                           );

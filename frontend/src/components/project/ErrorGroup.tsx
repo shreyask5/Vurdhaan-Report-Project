@@ -5,18 +5,22 @@ import React, { useState } from 'react';
 import { ErrorGroup as ErrorGroupType, Correction } from '../../types/validation';
 import { EditableErrorCell } from './EditableErrorCell';
 import { SequenceErrorTable } from './SequenceErrorTable';
-import { downloadCSV } from '../../utils/csv';
-import { parseErrorSequence } from '../../utils/validation';
+import { downloadReasonGroupCSV } from '../../utils/csv';
+import { parseErrorSequence } from '../../utils/errorProcessing';
 
 interface ErrorGroupProps {
   errorGroup: ErrorGroupType;
+  categoryName: string;
   columnOrder: string[];
+  rowsData?: Record<number, any>;
   onCorrection: (correction: Correction) => void;
 }
 
 export const ErrorGroup: React.FC<ErrorGroupProps> = ({
   errorGroup,
+  categoryName,
   columnOrder,
+  rowsData = {},
   onCorrection
 }) => {
   const [displayedRows, setDisplayedRows] = useState(100); // Initial batch size
@@ -26,16 +30,7 @@ export const ErrorGroup: React.FC<ErrorGroupProps> = ({
 
   const handleDownloadGroup = (e: React.MouseEvent) => {
     e.stopPropagation();
-
-    const groupData = errorGroup.rows.map(rowError => ({
-      'Row Index': rowError.row_idx,
-      Reason: errorGroup.reason,
-      ...rowError.columns,
-      ...(rowError.cell_data ? { 'Error Details': rowError.cell_data } : {})
-    }));
-
-    const filename = `errors_${errorGroup.reason.replace(/\s+/g, '_').substring(0, 30)}.csv`;
-    downloadCSV(groupData, filename);
+    downloadReasonGroupCSV(categoryName, errorGroup, rowsData);
   };
 
   const loadMoreRows = () => {
@@ -50,6 +45,7 @@ export const ErrorGroup: React.FC<ErrorGroupProps> = ({
       <SequenceErrorTable
         errorGroup={errorGroup}
         columnOrder={columnOrder}
+        rowsData={rowsData}
         onCorrection={onCorrection}
       />
     );
@@ -79,46 +75,51 @@ export const ErrorGroup: React.FC<ErrorGroupProps> = ({
 
       <div className="group-content">
         {/* Render errors in batches - From index4.html:2497-2601 */}
-        {errorGroup.rows.slice(0, displayedRows).map((rowError, index) => (
-          <div key={`${rowError.row_idx}-${index}`} className="error-row">
-            <div className="error-details">
-              <strong>Row {rowError.row_idx}</strong>
-              {rowError.cell_data && (
-                <span className="cell-data"> - {rowError.cell_data}</span>
-              )}
-            </div>
+        {errorGroup.rows.slice(0, displayedRows).map((rowError, index) => {
+          // Get actual row data from rowsData or use columns from rowError
+          const actualRowData = rowsData[rowError.row_idx] || rowError.columns || {};
 
-            {/* One-row table with editable cells */}
-            <div className="table-wrapper">
-              <table className="error-row-table">
-                <thead>
-                  <tr>
-                    {columnOrder.map(col => (
-                      <th key={col}>{col}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    {columnOrder.map(col => {
-                      const isEditable = errorGroup.columns.includes(col);
-                      return (
-                        <EditableErrorCell
-                          key={col}
-                          rowIdx={rowError.row_idx}
-                          column={col}
-                          value={rowError.columns[col]}
-                          isEditable={isEditable}
-                          onChange={onCorrection}
-                        />
-                      );
-                    })}
-                  </tr>
-                </tbody>
-              </table>
+          return (
+            <div key={`${rowError.row_idx}-${index}`} className="error-row">
+              <div className="error-details">
+                <strong>Row {rowError.row_idx}</strong>
+                {rowError.cell_data && (
+                  <span className="cell-data"> - {rowError.cell_data}</span>
+                )}
+              </div>
+
+              {/* One-row table with editable cells */}
+              <div className="table-wrapper">
+                <table className="error-row-table">
+                  <thead>
+                    <tr>
+                      {columnOrder.map(col => (
+                        <th key={col}>{col}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      {columnOrder.map(col => {
+                        const isEditable = errorGroup.columns?.includes(col) || false;
+                        return (
+                          <EditableErrorCell
+                            key={col}
+                            rowIdx={rowError.row_idx}
+                            column={col}
+                            value={actualRowData[col]}
+                            isEditable={isEditable}
+                            onChange={onCorrection}
+                          />
+                        );
+                      })}
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
 
         {/* Load More Button */}
         {hasMoreRows && (

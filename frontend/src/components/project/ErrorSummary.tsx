@@ -9,23 +9,25 @@ interface ErrorSummaryProps {
 }
 
 export const ErrorSummary: React.FC<ErrorSummaryProps> = ({ errorData }) => {
-  // Calculate total errors and affected rows
-  const totalErrors = errorData.categories.reduce((sum, category) =>
+  // Use summary data from backend if available, otherwise calculate
+  const totalErrors = errorData.summary?.total_errors || errorData.categories.reduce((sum, category) =>
     sum + category.errors.reduce((catSum, errorGroup) =>
       catSum + errorGroup.rows.length, 0), 0);
 
-  const errorRows = new Set<number>();
-  errorData.categories.forEach(category => {
-    category.errors.forEach(errorGroup => {
-      errorGroup.rows.forEach(rowError => {
-        if (!rowError.file_level) {
-          errorRows.add(rowError.row_idx);
-        }
+  const affectedRows = errorData.summary?.error_rows || (() => {
+    const errorRows = new Set<number>();
+    errorData.categories.forEach(category => {
+      category.errors.forEach(errorGroup => {
+        errorGroup.rows.forEach(rowError => {
+          if (!rowError.file_level) {
+            errorRows.add(rowError.row_idx);
+          }
+        });
       });
     });
-  });
+    return errorRows.size;
+  })();
 
-  const affectedRows = errorRows.size;
   const categoryCount = errorData.categories.length;
 
   return (

@@ -69,12 +69,15 @@ export const ValidationProvider: React.FC<{ children: ReactNode }> = ({ children
     setIsLoading(true);
     try {
       const response = await validationService.uploadFile(projectId, selectedFile, params);
-      setFileId(response.file_id);
+      setFileId(response.file_id || projectId);
 
-      if (response.errors) {
-        setErrorData(response.errors);
+      // Fetch errors after upload
+      const errors = await validationService.fetchErrors(projectId);
+      setErrorData(errors);
+
+      if (errors && errors.summary && errors.summary.total_errors > 0) {
         setCurrentStep('validation');
-      } else if (response.success) {
+      } else {
         setCurrentStep('success');
       }
     } finally {
@@ -82,12 +85,13 @@ export const ValidationProvider: React.FC<{ children: ReactNode }> = ({ children
     }
   };
 
-  const fetchErrors = async () => {
-    if (!fileId) return;
+  const fetchErrors = async (projectId?: string) => {
+    const id = projectId || fileId;
+    if (!id) return;
 
     setIsLoading(true);
     try {
-      const errors = await validationService.fetchErrors(fileId);
+      const errors = await validationService.fetchErrors(id);
       setErrorData(errors);
     } finally {
       setIsLoading(false);

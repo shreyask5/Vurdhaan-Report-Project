@@ -26,12 +26,13 @@ export interface ErrorRow {
   cell_data?: string;
   columns: Record<string, any>;
   file_level?: boolean;
+  highlight?: boolean; // For sequence error highlighting
 }
 
 export interface ErrorGroup {
   reason: string;
   rows: ErrorRow[];
-  columns: string[];
+  columns?: string[];
 }
 
 export interface ErrorCategory {
@@ -40,10 +41,17 @@ export interface ErrorCategory {
   file_level?: boolean;
 }
 
+// Summary structure from backend
+export interface ErrorSummary {
+  total_errors: number;
+  error_rows: number;
+  categories: Record<string, number>;
+}
+
 export interface ErrorData {
+  summary: ErrorSummary;
+  rows_data: Record<number, any>;
   categories: ErrorCategory[];
-  total_errors?: number;
-  affected_rows?: number;
 }
 
 // Sequence error structure from index4.html:1608-1627

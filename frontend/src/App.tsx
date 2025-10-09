@@ -11,6 +11,7 @@ import AdminLogin from "./pages/AdminLogin";
 import Dashboard from "./pages/Dashboard";
 import Admin from "./pages/Admin";
 import ProjectUpload from "./pages/ProjectUpload";
+import { ProjectErrorDisplay } from "./pages/ProjectErrorDisplay";
 import ProjectValidation from "./pages/ProjectValidation";
 import ProjectChat from "./pages/ProjectChat";
 import NotFound from "./pages/NotFound";
@@ -32,6 +33,11 @@ const App = () => (
             <Route path="/projects/:projectId/upload" element={
               <ValidationProvider>
                 <ProjectUpload />
+              </ValidationProvider>
+            } />
+            <Route path="/projects/:projectId/errors" element={
+              <ValidationProvider>
+                <ProjectErrorDisplay />
               </ValidationProvider>
             } />
             <Route path="/projects/:projectId/validation" element={

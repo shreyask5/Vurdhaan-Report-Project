@@ -4,17 +4,19 @@
 import React, { useState } from 'react';
 import { ErrorCategory as ErrorCategoryType, Correction } from '../../types/validation';
 import { ErrorGroup } from './ErrorGroup';
-import { downloadCSV } from '../../utils/csv';
+import { downloadCategoryCSV } from '../../utils/csv';
 
 interface ErrorCategoryProps {
   category: ErrorCategoryType;
   columnOrder: string[];
+  rowsData?: Record<number, any>;
   onCorrection: (correction: Correction) => void;
 }
 
 export const ErrorCategory: React.FC<ErrorCategoryProps> = ({
   category,
   columnOrder,
+  rowsData = {},
   onCorrection
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -25,30 +27,7 @@ export const ErrorCategory: React.FC<ErrorCategoryProps> = ({
 
   const handleDownloadCategory = (e: React.MouseEvent) => {
     e.stopPropagation();
-
-    // Prepare enriched data with category/reason/details/row index
-    const enrichedData: any[] = [];
-
-    category.errors.forEach(errorGroup => {
-      errorGroup.rows.forEach(rowError => {
-        const rowData: any = {
-          Category: category.name,
-          Reason: errorGroup.reason,
-          'Row Index': rowError.row_idx,
-          ...rowError.columns
-        };
-
-        // Add cell_data if present
-        if (rowError.cell_data) {
-          rowData['Error Details'] = rowError.cell_data;
-        }
-
-        enrichedData.push(rowData);
-      });
-    });
-
-    const filename = `errors_${category.name.replace(/\s+/g, '_')}.csv`;
-    downloadCSV(enrichedData, filename);
+    downloadCategoryCSV(category.name, category.errors, rowsData);
   };
 
   const toggleExpand = () => {
@@ -85,7 +64,9 @@ export const ErrorCategory: React.FC<ErrorCategoryProps> = ({
             <ErrorGroup
               key={`${category.name}-${errorGroup.reason}-${index}`}
               errorGroup={errorGroup}
+              categoryName={category.name}
               columnOrder={columnOrder}
+              rowsData={rowsData}
               onCorrection={onCorrection}
             />
           ))}

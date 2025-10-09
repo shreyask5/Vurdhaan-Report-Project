@@ -124,3 +124,128 @@ export function formatFileSize(bytes: number): string {
 export function isCSVFile(file: File): boolean {
   return file.type === 'text/csv' || file.name.toLowerCase().endsWith('.csv');
 }
+
+/**
+ * Download category CSV with enriched data
+ * From index4.html:1431-1467
+ */
+export function downloadCategoryCSV(
+  categoryName: string,
+  errorGroups: any[],
+  rowsData: Record<number, any>
+): void {
+  try {
+    const sanitizedName = categoryName.replace(/[^a-zA-Z0-9]/g, '_');
+    const filename = `${sanitizedName}_errors.csv`;
+
+    console.log('📂 [DEBUG] Downloading category CSV:', categoryName);
+
+    const allRowsData: any[] = [];
+
+    // Process each error group in the category
+    errorGroups.forEach(errorGroup => {
+      errorGroup.rows.forEach((rowError: any) => {
+        if (!rowError.file_level) {
+          const rowData = rowsData[rowError.row_idx] || {};
+          const enrichedRow = {
+            'Error_Category': categoryName,
+            'Error_Reason': errorGroup.reason,
+            'Error_Details': rowError.cell_data || '',
+            'Row_Index': rowError.row_idx,
+            ...rowData
+          };
+          allRowsData.push(enrichedRow);
+        }
+      });
+    });
+
+    downloadCSV(allRowsData, filename);
+
+  } catch (error) {
+    console.error('💥 [DEBUG] Category CSV download failed:', error);
+    alert('Failed to download category CSV: ' + (error as Error).message);
+  }
+}
+
+/**
+ * Download reason group CSV with enriched data
+ * From index4.html:1469-1503
+ */
+export function downloadReasonGroupCSV(
+  categoryName: string,
+  errorGroup: any,
+  rowsData: Record<number, any>
+): void {
+  try {
+    const sanitizedReason = errorGroup.reason.replace(/[^a-zA-Z0-9]/g, '_');
+    const filename = `${sanitizedReason}_errors.csv`;
+
+    console.log('📊 [DEBUG] Downloading reason group CSV:', errorGroup.reason);
+
+    const reasonRowsData: any[] = [];
+
+    errorGroup.rows.forEach((rowError: any) => {
+      if (!rowError.file_level) {
+        const rowData = rowsData[rowError.row_idx] || {};
+        const enrichedRow = {
+          'Error_Category': categoryName,
+          'Error_Reason': errorGroup.reason,
+          'Error_Details': rowError.cell_data || '',
+          'Row_Index': rowError.row_idx,
+          ...rowData
+        };
+        reasonRowsData.push(enrichedRow);
+      }
+    });
+
+    downloadCSV(reasonRowsData, filename);
+
+  } catch (error) {
+    console.error('💥 [DEBUG] Reason group CSV download failed:', error);
+    alert('Failed to download reason group CSV: ' + (error as Error).message);
+  }
+}
+
+/**
+ * Download sequence table CSV
+ * From index4.html:1505-1554
+ */
+export function downloadSequenceTableCSV(
+  tableElement: HTMLTableElement,
+  headerText: string
+): void {
+  try {
+    const filename = `${headerText.replace(/[^a-zA-Z0-9]/g, '_')}.csv`;
+
+    console.log('🔄 [DEBUG] Downloading sequence table CSV:', filename);
+
+    const tableData: any[] = [];
+    const headers: string[] = [];
+
+    // Get headers
+    const headerRow = tableElement.querySelector('thead tr');
+    if (headerRow) {
+      headerRow.querySelectorAll('th').forEach(th => {
+        headers.push(th.textContent?.trim() || '');
+      });
+    }
+
+    // Get data rows
+    const dataRows = tableElement.querySelectorAll('tbody tr');
+    dataRows.forEach(row => {
+      const rowData: any = {};
+      row.querySelectorAll('td').forEach((td, index) => {
+        const input = td.querySelector('input') as HTMLInputElement;
+        const cellValue = input ? input.value : td.textContent?.trim() || '';
+        rowData[headers[index] || `Column_${index + 1}`] = cellValue;
+      });
+      tableData.push(rowData);
+    });
+
+    downloadCSV(tableData, filename);
+
+  } catch (error) {
+    console.error('💥 [DEBUG] Sequence table CSV download failed:', error);
+    alert('Failed to download sequence table CSV: ' + (error as Error).message);
+  }
+}
