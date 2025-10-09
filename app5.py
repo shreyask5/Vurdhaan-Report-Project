@@ -339,11 +339,20 @@ def get_errors_route(project_id):
 
     try:
         import json
+
+        # Check temp directory first (where validation saves files)
+        temp_path = storage.get_temp_path(project_id)
         project_path = storage.get_project_path(project_id)
 
         # Try compressed file first (preferred)
-        compressed_file = os.path.join(project_path, 'error_report.lzs')
-        json_file = os.path.join(project_path, 'error_report.json')
+        # Check temp directory first, then permanent
+        compressed_file = os.path.join(temp_path, 'error_report.lzs')
+        if not os.path.exists(compressed_file):
+            compressed_file = os.path.join(project_path, 'error_report.lzs')
+
+        json_file = os.path.join(temp_path, 'error_report.json')
+        if not os.path.exists(json_file):
+            json_file = os.path.join(project_path, 'error_report.json')
 
         if os.path.exists(compressed_file):
             print(f"[ERRORS] Reading compressed error report: {compressed_file}")
@@ -396,12 +405,16 @@ def save_corrections_route(project_id):
     try:
         corrections = request.json.get('corrections', [])
 
-        # Save corrections to file
-        corrections_file = os.path.join(storage.get_project_path(project_id), 'corrections.json')
+        # Save corrections to temp directory (where validation files are)
+        temp_path = storage.get_temp_path(project_id)
+        os.makedirs(temp_path, exist_ok=True)
+        corrections_file = os.path.join(temp_path, 'corrections.json')
+
         import json
         with open(corrections_file, 'w') as f:
             json.dump(corrections, f)
 
+        print(f"[CORRECTIONS] Saved {len(corrections)} corrections to {corrections_file}")
         return jsonify({'success': True, 'corrections_saved': len(corrections)}), 200
 
     except Exception as e:
