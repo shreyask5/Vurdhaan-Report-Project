@@ -19,6 +19,7 @@ export const ProjectErrorDisplay: React.FC = () => {
   const { errorData, corrections, addCorrection, selectedFuelMethod, isLoading, fetchErrors } = useValidation();
   const [loadingMessage, setLoadingMessage] = useState('Loading errors...');
   const [sequenceSummaryItems, setSequenceSummaryItems] = useState<any[]>([]);
+  const hasFetchedRef = React.useRef(false);
 
   // DEBUG: Log component mount and projectId
   React.useEffect(() => {
@@ -27,14 +28,15 @@ export const ProjectErrorDisplay: React.FC = () => {
 
   // Fetch errors when component mounts
   React.useEffect(() => {
-    if (projectId) {
+    if (projectId && !hasFetchedRef.current) {
+      hasFetchedRef.current = true;
       console.log('[PROJECT ERROR DISPLAY] Fetching errors for project:', projectId);
       fetchErrors(projectId).catch(error => {
         console.error('[PROJECT ERROR DISPLAY] Failed to fetch errors:', error);
         setLoadingMessage('Failed to load errors');
       });
     }
-  }, [projectId, fetchErrors]);
+  }, [projectId]); // Removed fetchErrors from dependencies to prevent infinite loop
 
   // DEBUG: Log errorData from context
   React.useEffect(() => {

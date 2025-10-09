@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useCallback } from 'react';
 import { ErrorData, Correction, ValidationFormData, ColumnMapping, FuelMethod } from '../types/validation';
 import { validationService } from '../services/validation';
 import { readCSVColumns } from '../utils/csv';
@@ -85,7 +85,7 @@ export const ValidationProvider: React.FC<{ children: ReactNode }> = ({ children
     }
   };
 
-  const fetchErrors = async (projectId?: string) => {
+  const fetchErrors = useCallback(async (projectId?: string) => {
     const id = projectId || fileId;
     if (!id) return;
 
@@ -96,7 +96,7 @@ export const ValidationProvider: React.FC<{ children: ReactNode }> = ({ children
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [fileId]);
 
   const saveCorrections = async (projectId: string) => {
     if (!projectId) return;
@@ -123,7 +123,7 @@ export const ValidationProvider: React.FC<{ children: ReactNode }> = ({ children
     }
   };
 
-  const addCorrection = (correction: Correction) => {
+  const addCorrection = useCallback((correction: Correction) => {
     const key = `${correction.row_idx}-${correction.column}`;
     setCorrections(prev => {
       const newMap = new Map(prev);
@@ -135,7 +135,7 @@ export const ValidationProvider: React.FC<{ children: ReactNode }> = ({ children
       }
       return newMap;
     });
-  };
+  }, []);
 
   const reset = () => {
     setFileId(null);
