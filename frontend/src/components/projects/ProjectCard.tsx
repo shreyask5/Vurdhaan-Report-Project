@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -44,6 +45,8 @@ export function ProjectCard({
   onEdit,
   onDelete,
 }: ProjectCardProps) {
+  const navigate = useNavigate();
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'completed':
@@ -151,22 +154,32 @@ export function ProjectCard({
 
         {/* Action Buttons */}
         <div className="grid grid-cols-2 gap-2">
-          {/* Upload CSV Button */}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onUploadCSV?.(project.id)}
-            className="w-full"
-            disabled={project.upload_completed && project.save_files_on_server}
-            title={
-              project.upload_completed && project.save_files_on_server
-                ? 'File already uploaded. Create new project to re-upload.'
-                : 'Upload CSV file'
-            }
-          >
-            <Upload className="mr-2 h-4 w-4" />
-            {project.upload_completed ? 'Uploaded' : 'Upload CSV'}
-          </Button>
+          {/* Upload CSV / View Errors Button */}
+          {!project.upload_completed && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onUploadCSV?.(project.id)}
+              className="w-full"
+              title="Upload CSV file"
+            >
+              <Upload className="mr-2 h-4 w-4" />
+              Upload CSV
+            </Button>
+          )}
+
+          {project.upload_completed && project.save_files_on_server && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate(`/projects/${project.id}/errors`)}
+              className="w-full"
+              title="View validation errors"
+            >
+              <AlertCircle className="mr-2 h-4 w-4" />
+              View Errors
+            </Button>
+          )}
 
           {/* AI Chat Button - Only show if enabled */}
           {project.ai_chat_enabled && project.has_file && (

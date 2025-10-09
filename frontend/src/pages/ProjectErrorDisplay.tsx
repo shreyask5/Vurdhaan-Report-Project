@@ -14,7 +14,7 @@ import { createSequenceSummary } from '../utils/errorProcessing';
 import { FUEL_METHOD_COLUMNS } from '../types/validation';
 
 export const ProjectErrorDisplay: React.FC = () => {
-  const { id } = useParams<{ id: string }>();
+  const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
   const { errorData, corrections, addCorrection, selectedFuelMethod, isLoading } = useValidation();
   const [loadingMessage, setLoadingMessage] = useState('Loading errors...');
@@ -77,53 +77,53 @@ export const ProjectErrorDisplay: React.FC = () => {
   }, [errorData]);
 
   const handleSaveCorrections = async () => {
-    if (!id) return;
+    if (!projectId) return;
     try {
       setLoadingMessage('Saving corrections...');
-      await validationService.saveCorrections(id, Array.from(corrections.values()));
+      await validationService.saveCorrections(projectId, Array.from(corrections.values()));
       // Refresh error data
-      await validationService.fetchErrors(id);
+      await validationService.fetchErrors(projectId);
     } catch (error) {
       alert('Failed to save corrections: ' + (error as Error).message);
     }
   };
 
   const handleIgnoreErrors = async () => {
-    if (!id) return;
+    if (!projectId) return;
     if (!confirm('Are you sure you want to ignore all remaining errors?')) return;
     try {
       setLoadingMessage('Ignoring errors...');
-      await validationService.ignoreErrors(id);
-      navigate(`/project/${id}`);
+      await validationService.ignoreErrors(projectId);
+      navigate(`/projects/${projectId}`);
     } catch (error) {
       alert('Failed to ignore errors: ' + (error as Error).message);
     }
   };
 
   const handleDownloadClean = async () => {
-    if (!id) return;
+    if (!projectId) return;
     try {
-      await validationService.downloadClean(id);
+      await validationService.downloadClean(projectId);
     } catch (error) {
       alert('Failed to download clean CSV: ' + (error as Error).message);
     }
   };
 
   const handleDownloadErrors = async () => {
-    if (!id) return;
+    if (!projectId) return;
     try {
-      await validationService.downloadErrors(id);
+      await validationService.downloadErrors(projectId);
     } catch (error) {
       alert('Failed to download errors CSV: ' + (error as Error).message);
     }
   };
 
   const handleOpenChat = async () => {
-    if (!id) return;
+    if (!projectId) return;
     try {
       setLoadingMessage('Initializing AI chat...');
-      await validationService.initializeChatSession(id);
-      navigate(`/project/${id}/chat`);
+      await validationService.initializeChatSession(projectId);
+      navigate(`/projects/${projectId}/chat`);
     } catch (error) {
       alert('Failed to initialize chat: ' + (error as Error).message);
     }
@@ -131,26 +131,26 @@ export const ProjectErrorDisplay: React.FC = () => {
 
   const handleStartOver = () => {
     if (!confirm('Are you sure you want to start over? All progress will be lost.')) return;
-    navigate(`/project/${id}`);
+    navigate(`/projects/${projectId}`);
   };
 
   const handleGenerateReport = async () => {
-    if (!id) return;
+    if (!projectId) return;
     try {
       setLoadingMessage('Generating CORSIA report...');
-      await validationService.generateReport(id);
+      await validationService.generateReport(projectId);
     } catch (error) {
       alert('Failed to generate report: ' + (error as Error).message);
     }
   };
 
   const handleRevalidate = async () => {
-    if (!id) return;
+    if (!projectId) return;
     try {
       setLoadingMessage('Re-validating data...');
-      await validationService.revalidate(id);
+      await validationService.revalidate(projectId);
       // Refresh error data
-      await validationService.fetchErrors(id);
+      await validationService.fetchErrors(projectId);
     } catch (error) {
       alert('Failed to re-validate: ' + (error as Error).message);
     }
@@ -183,7 +183,7 @@ export const ProjectErrorDisplay: React.FC = () => {
             <ErrorSummary errorData={errorData} />
 
             <ActionButtons
-              projectId={id || ''}
+              projectId={projectId || ''}
               onSaveCorrections={handleSaveCorrections}
               onIgnoreErrors={handleIgnoreErrors}
               onDownloadClean={handleDownloadClean}
