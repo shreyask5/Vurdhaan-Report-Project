@@ -24,7 +24,7 @@ class StorageService:
         """
         self.base_folder = base_upload_folder or os.getenv(
             'UPLOAD_FOLDER',
-            os.path.join(os.getcwd(), 'uploads')
+            '/home/ubuntu/project/uploads'  # Default to Ubuntu server path
         )
         self.temp_folder = os.path.join(self.base_folder, 'temp')
 

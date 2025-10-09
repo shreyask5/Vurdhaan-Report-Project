@@ -239,6 +239,26 @@ def delete_project_route(project_id):
 # FILE UPLOAD
 # ============================================================================
 
+@app.route('/api/projects/<project_id>/upload-status', methods=['GET'])
+@require_auth
+@limit_by_user("60 per minute")
+def upload_status_route(project_id):
+    """Check if file has been uploaded and get validation status"""
+    if not validate_project_id(project_id):
+        return jsonify({'error': 'Invalid project ID'}), 400
+
+    project = projects.get_project_with_validation(project_id, g.user['uid'])
+    if not project:
+        return jsonify({'error': 'Project not found'}), 404
+
+    return jsonify({
+        'upload_completed': project.get('upload_completed', False),
+        'validation_status': project.get('validation_status'),
+        'has_errors': not project.get('validation_status', True),
+        'error_summary': project.get('error_summary'),
+        'validation_params': project.get('file_metadata', {})
+    }), 200
+
 @app.route('/api/projects/<project_id>/upload', methods=['POST'])
 @require_auth
 @limit_expensive("10 per hour")
@@ -246,6 +266,14 @@ def delete_project_route(project_id):
 def upload_route(project_id):
     if not validate_project_id(project_id):
         return jsonify({'error': 'Invalid project ID'}), 400
+
+    # Check if upload already completed for this project
+    project = projects.get_project_with_validation(project_id, g.user['uid'])
+    if not project:
+        return jsonify({'error': 'Project not found'}), 404
+
+    if project.get('upload_completed') and project.get('save_files_on_server'):
+        return jsonify({'error': 'File already uploaded. Create a new project to upload again.'}), 400
 
     file = g.validated_file
 
@@ -303,7 +331,26 @@ def upload_route(project_id):
             'fuel_method': fuel_method
         }
 
-        projects.update_validation_results(project_id, is_valid, 0, file_metadata)
+        # Calculate error summary for Firebase
+        error_summary = None
+        if not is_valid and error_json:
+            try:
+                total_errors = error_json.get('summary', {}).get('total_errors', 0)
+                error_rows = error_json.get('summary', {}).get('error_rows', 0)
+                categories = error_json.get('categories', [])
+                top_error = categories[0]['errors'][0]['reason'] if categories and categories[0].get('errors') else 'Validation errors found'
+
+                error_summary = {
+                    'total_errors': total_errors,
+                    'total_clean_rows': len(result_df) - error_rows,
+                    'has_errors': True,
+                    'categories_count': len(categories),
+                    'top_error': top_error[:100]  # Limit length
+                }
+            except Exception as e:
+                print(f"[UPLOAD] Could not generate error summary: {e}")
+
+        projects.update_validation_results(project_id, is_valid, 0, file_metadata, error_summary)
         print(f"[UPLOAD] Validation results updated in database")
 
         # Note: error_report.lzs is already saved by validate_and_process_file in the project directory
@@ -315,7 +362,8 @@ def upload_route(project_id):
             'file_id': project_id,
             'is_valid': is_valid,
             'filename': file.filename,
-            'has_errors': not is_valid
+            'has_errors': not is_valid,
+            'error_summary': error_summary
         }), 200
 
     except PermissionError as e:
@@ -628,9 +676,16 @@ def chat_init(project_id):
         return jsonify({'error': 'No file uploaded'}), 400
 
     try:
-        path = storage.get_project_path(project_id)
-        clean_csv = os.path.join(path, 'clean_data.csv')
-        error_csv = os.path.join(path, 'errors_data.csv')
+        # Check temp directory first, then permanent directory
+        temp_path = storage.get_temp_path(project_id)
+        project_path = storage.get_project_path(project_id)
+
+        clean_csv = os.path.join(temp_path, 'clean_data.csv')
+        error_csv = os.path.join(temp_path, 'errors_data.csv')
+
+        if not os.path.exists(clean_csv):
+            clean_csv = os.path.join(project_path, 'clean_data.csv')
+            error_csv = os.path.join(project_path, 'errors_data.csv')
 
         if not os.path.exists(clean_csv):
             return jsonify({'error': 'Data files not found'}), 400
@@ -704,11 +759,22 @@ def report_route(project_id):
         return jsonify({'error': 'Not found or not validated'}), 400
 
     try:
-        path = storage.get_project_path(project_id)
-        csv = os.path.join(path, 'clean_data.csv')
+        # Check temp directory first, then permanent directory
+        temp_path = storage.get_temp_path(project_id)
+        project_path = storage.get_project_path(project_id)
+
+        csv = os.path.join(temp_path, 'clean_data.csv')
+        if not os.path.exists(csv):
+            csv = os.path.join(project_path, 'clean_data.csv')
+
+        if not os.path.exists(csv):
+            return jsonify({'error': 'Clean data file not found'}), 404
+
         prefix = request.json.get('flight_starts_with', '')
 
-        output = os.path.join(path, 'template_filled.xlsx')
+        # Save output in same directory as csv
+        output_dir = os.path.dirname(csv)
+        output = os.path.join(output_dir, 'template_filled.xlsx')
         build_report(csv, prefix)
 
         return send_file(output, as_attachment=True, download_name='report_{}.xlsx'.format(project_id))
@@ -727,13 +793,20 @@ def download_route(project_id, csv_type):
     if not project:
         return jsonify({'error': 'Not found'}), 404
 
-    path = storage.get_project_path(project_id)
-    csv_path = os.path.join(path, '{}_data.csv'.format(csv_type))
+    # Check temp directory first, then permanent directory
+    temp_path = storage.get_temp_path(project_id)
+    project_path = storage.get_project_path(project_id)
+
+    filename = '{}_data.csv'.format(csv_type)
+    csv_path = os.path.join(temp_path, filename)
+
+    if not os.path.exists(csv_path):
+        csv_path = os.path.join(project_path, filename)
 
     if not os.path.exists(csv_path):
         return jsonify({'error': 'File not found'}), 404
 
-    return send_file(csv_path, as_attachment=True, download_name='{}_data.csv'.format(csv_type))
+    return send_file(csv_path, as_attachment=True, download_name=filename)
 
 # ============================================================================
 # STARTUP

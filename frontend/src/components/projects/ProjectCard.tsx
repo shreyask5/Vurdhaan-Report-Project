@@ -135,11 +135,17 @@ export function ProjectCard({
               CSV file uploaded
             </p>
           )}
-          {project.error_count > 0 && (
-            <p className="text-red-600 font-medium mt-1">
-              <AlertCircle className="inline h-3 w-3 mr-1" />
-              {project.error_count} validation errors
-            </p>
+          {project.error_summary && project.error_summary.has_errors && (
+            <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded">
+              <p className="text-red-600 font-medium">
+                <AlertCircle className="inline h-3 w-3 mr-1" />
+                {project.error_summary.total_errors} errors found
+              </p>
+              <p className="text-xs text-red-500 mt-1">{project.error_summary.top_error}</p>
+              <p className="text-xs text-green-600 mt-1">
+                {project.error_summary.total_clean_rows} clean rows
+              </p>
+            </div>
           )}
         </div>
 
@@ -151,9 +157,15 @@ export function ProjectCard({
             size="sm"
             onClick={() => onUploadCSV?.(project.id)}
             className="w-full"
+            disabled={project.upload_completed && project.save_files_on_server}
+            title={
+              project.upload_completed && project.save_files_on_server
+                ? 'File already uploaded. Create new project to re-upload.'
+                : 'Upload CSV file'
+            }
           >
             <Upload className="mr-2 h-4 w-4" />
-            Upload CSV
+            {project.upload_completed ? 'Uploaded' : 'Upload CSV'}
           </Button>
 
           {/* AI Chat Button - Only show if enabled */}

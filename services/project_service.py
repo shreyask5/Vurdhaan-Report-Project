@@ -222,7 +222,8 @@ class ProjectService:
         project_id: str,
         validation_status: bool,
         error_count: int = 0,
-        file_metadata: Optional[Dict[str, Any]] = None
+        file_metadata: Optional[Dict[str, Any]] = None,
+        error_summary: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         Update project with validation results
@@ -232,6 +233,7 @@ class ProjectService:
             validation_status: Whether validation passed
             error_count: Number of errors
             file_metadata: Additional file metadata
+            error_summary: Error summary for display
 
         Returns:
             Updated project
@@ -239,11 +241,15 @@ class ProjectService:
         updates = {
             'validation_status': validation_status,
             'error_count': error_count,
-            'status': 'completed' if validation_status else 'error'
+            'status': 'completed' if validation_status else 'error',
+            'upload_completed': True  # Mark that upload is complete
         }
 
         if file_metadata:
             updates['file_metadata'] = file_metadata
+
+        if error_summary:
+            updates['error_summary'] = error_summary
 
         return self.firestore.update_project(project_id, updates)
 

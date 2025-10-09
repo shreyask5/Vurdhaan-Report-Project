@@ -60,8 +60,24 @@ export default function Dashboard() {
     }
   };
 
-  const handleUploadCSV = (projectId: string) => {
-    navigate(`/projects/${projectId}/upload`);
+  const handleUploadCSV = async (projectId: string) => {
+    try {
+      // Check upload status first
+      const status = await projectsApi.getUploadStatus(projectId);
+
+      if (status.upload_completed && status.validation_status !== null) {
+        // Already uploaded and validated - go to error display or success page
+        toast.info('File already uploaded. Navigating to results...');
+        navigate(`/projects/${projectId}/errors`);
+      } else {
+        // Not uploaded yet - go to upload page
+        navigate(`/projects/${projectId}/upload`);
+      }
+    } catch (error) {
+      // If status check fails, just go to upload page
+      console.error('Failed to check upload status:', error);
+      navigate(`/projects/${projectId}/upload`);
+    }
   };
 
   const handleOpenChat = (projectId: string) => {

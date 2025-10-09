@@ -20,6 +20,22 @@ export interface Project {
   has_file?: boolean;
   validation_status?: boolean;
   error_count?: number;
+  upload_completed?: boolean;
+  error_summary?: {
+    total_errors: number;
+    total_clean_rows: number;
+    has_errors: boolean;
+    categories_count: number;
+    top_error: string;
+  };
+  file_metadata?: {
+    filename: string;
+    start_date: string;
+    end_date: string;
+    date_format: string;
+    flight_starts_with: string;
+    fuel_method: string;
+  };
 }
 
 export interface CreateProjectData {
@@ -126,6 +142,19 @@ export const projectsApi = {
   },
 
   /**
+   * Get upload status for a project
+   */
+  async getUploadStatus(projectId: string): Promise<{
+    upload_completed: boolean;
+    validation_status: boolean | null;
+    has_errors: boolean;
+    error_summary: any;
+    validation_params: any;
+  }> {
+    return apiRequest(`/projects/${projectId}/upload-status`);
+  },
+
+  /**
    * Upload CSV file to project
    */
   async uploadCSV(
@@ -138,7 +167,7 @@ export const projectsApi = {
       flight_starts_with?: string;
       fuel_method?: string;
     }
-  ): Promise<{ success: boolean; is_valid: boolean; filename: string }> {
+  ): Promise<{ success: boolean; is_valid: boolean; filename: string; error_summary?: any }> {
     const token = await getAuthToken();
     const formData = new FormData();
     formData.append('file', file);

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useValidation } from '../contexts/ValidationContext';
 import { FileUploadSection } from '../components/project/FileUploadSection';
@@ -6,10 +6,13 @@ import { FuelMethodSelector } from '../components/project/FuelMethodSelector';
 import { ColumnMappingWizard } from '../components/project/ColumnMappingWizard';
 import { ValidationForm } from '../components/project/ValidationForm';
 import { ValidationParams } from '../types/validation';
+import { projectsApi } from '../services/api';
 
 const ProjectUpload: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
+  const [uploadStatus, setUploadStatus] = useState<any>(null);
+  const [isCheckingStatus, setIsCheckingStatus] = useState(true);
   const {
     currentStep,
     selectedFile,
@@ -23,6 +26,29 @@ const ProjectUpload: React.FC = () => {
     uploadFile,
     goToStep
   } = useValidation();
+
+  // Check upload status on mount
+  useEffect(() => {
+    const checkStatus = async () => {
+      if (!projectId) return;
+
+      try {
+        const status = await projectsApi.getUploadStatus(projectId);
+        setUploadStatus(status);
+
+        // If already uploaded and validated, redirect to error display
+        if (status.upload_completed && status.validation_status !== null) {
+          navigate(`/projects/${projectId}/errors`, { replace: true });
+        }
+      } catch (error) {
+        console.error('Failed to check upload status:', error);
+      } finally {
+        setIsCheckingStatus(false);
+      }
+    };
+
+    checkStatus();
+  }, [projectId, navigate]);
 
   const handleValidationSubmit = async (params: ValidationParams) => {
     if (!selectedFuelMethod || !projectId) return;
@@ -42,6 +68,39 @@ const ProjectUpload: React.FC = () => {
       alert('Upload failed. Please try again.');
     }
   };
+
+  // Show loading while checking status
+  if (isCheckingStatus) {
+    return (
+      <div className="min-h-screen bg-gradient-radial flex items-center justify-center">
+        <div className="bg-white rounded-xl p-8 shadow-xl text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-primary mx-auto mb-4"></div>
+          <p className="text-lg font-semibold text-gray-700">Checking project status...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show message if already uploaded
+  if (uploadStatus?.upload_completed) {
+    return (
+      <div className="min-h-screen bg-gradient-radial flex items-center justify-center">
+        <div className="bg-white rounded-xl p-8 shadow-xl text-center max-w-md">
+          <div className="text-yellow-500 text-6xl mb-4">⚠️</div>
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">File Already Uploaded</h2>
+          <p className="text-gray-600 mb-4">
+            This project already has a file uploaded. Create a new project to upload a different file.
+          </p>
+          <button
+            onClick={() => navigate('/dashboard')}
+            className="bg-primary text-white px-6 py-2 rounded-lg hover:bg-primary-dark transition"
+          >
+            Return to Dashboard
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-radial">
