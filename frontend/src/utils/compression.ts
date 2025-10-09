@@ -121,6 +121,9 @@ function restoreOriginalErrorStructure(optimizedData: any): ErrorData {
 
     console.log('✅ Structure restoration completed');
     console.log('Restored data summary:', restoredData.summary);
+    console.log('[DECOMPRESSION] restoredData.rows_data type:', typeof restoredData.rows_data);
+    console.log('[DECOMPRESSION] restoredData.rows_data keys:', Object.keys(restoredData.rows_data));
+    console.log('[DECOMPRESSION] restoredData.rows_data is array?', Array.isArray(restoredData.rows_data));
 
     // TEMPORARY: Print entire decompressed JSON structure
     console.log('═══════════════════════════════════════════════════════════');
