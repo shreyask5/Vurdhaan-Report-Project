@@ -237,6 +237,7 @@ const ProjectValidation: React.FC = () => {
               key={`${category.name}-${index}`}
               category={category}
               columnOrder={columnOrder}
+              rowsData={errorData.rows_data}
               onCorrection={addCorrection}
             />
           ))}
