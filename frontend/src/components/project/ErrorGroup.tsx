@@ -25,6 +25,23 @@ export const ErrorGroup: React.FC<ErrorGroupProps> = ({
 }) => {
   const [displayedRows, setDisplayedRows] = useState(100); // Initial batch size
 
+  // Resolve actual row data from rowsData using robust key matching.
+  // Tries numeric key, string key, then falls back to index-based ordering.
+  const getActualRowData = (rowIdx: number, renderIndex: number) => {
+    // Direct numeric key
+    if ((rowsData as any)[rowIdx] !== undefined) return (rowsData as any)[rowIdx];
+    // String key
+    const stringKey = String(rowIdx);
+    if ((rowsData as any)[stringKey] !== undefined) return (rowsData as any)[stringKey];
+    // Fallback: index-based access using stable key order
+    const keys = Object.keys(rowsData);
+    if (keys.length > renderIndex) {
+      const fallbackKey = keys[renderIndex];
+      return (rowsData as any)[fallbackKey] ?? {};
+    }
+    return {} as Record<string, unknown>;
+  };
+
 
   // Check if this is a sequence error group
   const isSequenceError = errorGroup.rows.some(row => parseErrorSequence(row.cell_data) !== null);
@@ -77,8 +94,8 @@ export const ErrorGroup: React.FC<ErrorGroupProps> = ({
       <div className="group-content">
         {/* Render errors in batches - From index4.html:2497-2601 */}
         {errorGroup.rows.slice(0, displayedRows).map((rowError, index) => {
-          // Get actual row data from rowsData
-          const actualRowData = rowsData[rowError.row_idx] || {};
+          // Get actual row data from rowsData (handles numeric/string keys and index fallback)
+          const actualRowData = getActualRowData(rowError.row_idx, index);
 
           // TEMPORARY DEBUG: Log what we're rendering
           if (index === 0) {
