@@ -61,21 +61,26 @@ export default function Dashboard() {
   };
 
   const handleUploadCSV = async (projectId: string) => {
+    console.log('[DASHBOARD DEBUG] handleUploadCSV called for project:', projectId);
     try {
       // Check upload status first
+      console.log('[DASHBOARD DEBUG] Fetching upload status...');
       const status = await projectsApi.getUploadStatus(projectId);
+      console.log('[DASHBOARD DEBUG] Upload status received:', status);
 
       if (status.upload_completed && status.validation_status !== null) {
         // Already uploaded and validated - go to error display or success page
+        console.log('[DASHBOARD DEBUG] File already uploaded, navigating to errors page');
         toast.info('File already uploaded. Navigating to results...');
         navigate(`/projects/${projectId}/errors`);
       } else {
         // Not uploaded yet - go to upload page
+        console.log('[DASHBOARD DEBUG] File not uploaded, navigating to upload page');
         navigate(`/projects/${projectId}/upload`);
       }
     } catch (error) {
       // If status check fails, just go to upload page
-      console.error('Failed to check upload status:', error);
+      console.error('[DASHBOARD ERROR] Failed to check upload status:', error);
       navigate(`/projects/${projectId}/upload`);
     }
   };

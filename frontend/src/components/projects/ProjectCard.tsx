@@ -47,6 +47,17 @@ export function ProjectCard({
 }: ProjectCardProps) {
   const navigate = useNavigate();
 
+  // Debug logging
+  console.log('[PROJECT CARD DEBUG] Rendering project:', {
+    id: project.id,
+    name: project.name,
+    upload_completed: project.upload_completed,
+    save_files_on_server: project.save_files_on_server,
+    validation_status: project.validation_status,
+    error_summary: project.error_summary,
+    has_file: project.has_file
+  });
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'completed':

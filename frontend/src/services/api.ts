@@ -99,7 +99,11 @@ export const projectsApi = {
    */
   async list(status?: string): Promise<{ projects: Project[]; total: number }> {
     const params = status ? `?status=${status}` : '';
-    return apiRequest(`/projects${params}`);
+    console.log('[API DEBUG] Fetching projects list');
+    const result = await apiRequest(`/projects${params}`);
+    console.log('[API DEBUG] Projects list response:', result);
+    console.log('[API DEBUG] First project sample:', result.projects?.[0]);
+    return result;
   },
 
   /**
@@ -151,7 +155,10 @@ export const projectsApi = {
     error_summary: any;
     validation_params: any;
   }> {
-    return apiRequest(`/projects/${projectId}/upload-status`);
+    console.log('[API DEBUG] getUploadStatus called for projectId:', projectId);
+    const result = await apiRequest(`/projects/${projectId}/upload-status`);
+    console.log('[API DEBUG] getUploadStatus response:', result);
+    return result;
   },
 
   /**

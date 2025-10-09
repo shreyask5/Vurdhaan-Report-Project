@@ -238,6 +238,11 @@ class ProjectService:
         Returns:
             Updated project
         """
+        print(f"[PROJECT SERVICE DEBUG] update_validation_results called")
+        print(f"[PROJECT SERVICE DEBUG] project_id={project_id}")
+        print(f"[PROJECT SERVICE DEBUG] validation_status={validation_status}")
+        print(f"[PROJECT SERVICE DEBUG] error_summary={error_summary}")
+
         updates = {
             'validation_status': validation_status,
             'error_count': error_count,
@@ -247,11 +252,16 @@ class ProjectService:
 
         if file_metadata:
             updates['file_metadata'] = file_metadata
+            print(f"[PROJECT SERVICE DEBUG] Added file_metadata: {list(file_metadata.keys())}")
 
         if error_summary:
             updates['error_summary'] = error_summary
+            print(f"[PROJECT SERVICE DEBUG] Added error_summary: {error_summary}")
 
-        return self.firestore.update_project(project_id, updates)
+        print(f"[PROJECT SERVICE DEBUG] Final updates dict: {updates.keys()}")
+        result = self.firestore.update_project(project_id, updates)
+        print(f"[PROJECT SERVICE DEBUG] Firestore update completed")
+        return result
 
     # ========================================================================
     # Project Listing and Search

@@ -30,18 +30,23 @@ const ProjectUpload: React.FC = () => {
   // Check upload status on mount
   useEffect(() => {
     const checkStatus = async () => {
+      console.log('[PROJECT UPLOAD DEBUG] Checking upload status for project:', projectId);
       if (!projectId) return;
 
       try {
         const status = await projectsApi.getUploadStatus(projectId);
+        console.log('[PROJECT UPLOAD DEBUG] Upload status received:', status);
         setUploadStatus(status);
 
         // If already uploaded and validated, redirect to error display
         if (status.upload_completed && status.validation_status !== null) {
+          console.log('[PROJECT UPLOAD DEBUG] File already uploaded, redirecting to errors page');
           navigate(`/projects/${projectId}/errors`, { replace: true });
+        } else {
+          console.log('[PROJECT UPLOAD DEBUG] Upload page allowed - upload_completed:', status.upload_completed);
         }
       } catch (error) {
-        console.error('Failed to check upload status:', error);
+        console.error('[PROJECT UPLOAD ERROR] Failed to check upload status:', error);
       } finally {
         setIsCheckingStatus(false);
       }

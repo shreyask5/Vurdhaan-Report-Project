@@ -244,20 +244,32 @@ def delete_project_route(project_id):
 @limit_by_user("60 per minute")
 def upload_status_route(project_id):
     """Check if file has been uploaded and get validation status"""
+    print(f"[UPLOAD STATUS DEBUG] Called for project_id={project_id}")
+
     if not validate_project_id(project_id):
+        print(f"[UPLOAD STATUS DEBUG] Invalid project ID")
         return jsonify({'error': 'Invalid project ID'}), 400
 
     project = projects.get_project_with_validation(project_id, g.user['uid'])
     if not project:
+        print(f"[UPLOAD STATUS DEBUG] Project not found")
         return jsonify({'error': 'Project not found'}), 404
 
-    return jsonify({
+    print(f"[UPLOAD STATUS DEBUG] Project found: {project.keys() if project else 'None'}")
+    print(f"[UPLOAD STATUS DEBUG] upload_completed={project.get('upload_completed')}")
+    print(f"[UPLOAD STATUS DEBUG] validation_status={project.get('validation_status')}")
+    print(f"[UPLOAD STATUS DEBUG] error_summary={project.get('error_summary')}")
+    print(f"[UPLOAD STATUS DEBUG] save_files_on_server={project.get('save_files_on_server')}")
+
+    response = {
         'upload_completed': project.get('upload_completed', False),
         'validation_status': project.get('validation_status'),
         'has_errors': not project.get('validation_status', True),
         'error_summary': project.get('error_summary'),
         'validation_params': project.get('file_metadata', {})
-    }), 200
+    }
+    print(f"[UPLOAD STATUS DEBUG] Returning response: {response}")
+    return jsonify(response), 200
 
 @app.route('/api/projects/<project_id>/upload', methods=['POST'])
 @require_auth
@@ -333,11 +345,17 @@ def upload_route(project_id):
 
         # Calculate error summary for Firebase
         error_summary = None
+        print(f"[UPLOAD DEBUG] Starting error summary generation")
+        print(f"[UPLOAD DEBUG] is_valid={is_valid}, error_json exists={error_json is not None}")
+
         if not is_valid and error_json:
             try:
+                print(f"[UPLOAD DEBUG] error_json keys: {error_json.keys() if error_json else 'None'}")
                 total_errors = error_json.get('summary', {}).get('total_errors', 0)
                 error_rows = error_json.get('summary', {}).get('error_rows', 0)
                 categories = error_json.get('categories', [])
+                print(f"[UPLOAD DEBUG] total_errors={total_errors}, error_rows={error_rows}, categories_count={len(categories)}")
+
                 top_error = categories[0]['errors'][0]['reason'] if categories and categories[0].get('errors') else 'Validation errors found'
 
                 error_summary = {
@@ -347,11 +365,17 @@ def upload_route(project_id):
                     'categories_count': len(categories),
                     'top_error': top_error[:100]  # Limit length
                 }
+                print(f"[UPLOAD DEBUG] Error summary created: {error_summary}")
             except Exception as e:
-                print(f"[UPLOAD] Could not generate error summary: {e}")
+                print(f"[UPLOAD ERROR] Could not generate error summary: {e}")
+                import traceback
+                print(f"[UPLOAD ERROR] Traceback: {traceback.format_exc()}")
+        else:
+            print(f"[UPLOAD DEBUG] No error summary needed (is_valid={is_valid})")
 
+        print(f"[UPLOAD DEBUG] Calling update_validation_results with error_summary={error_summary}")
         projects.update_validation_results(project_id, is_valid, 0, file_metadata, error_summary)
-        print(f"[UPLOAD] Validation results updated in database")
+        print(f"[UPLOAD DEBUG] Validation results updated in database successfully")
 
         # Note: error_report.lzs is already saved by validate_and_process_file in the project directory
         # The compressed file is created automatically during validation
