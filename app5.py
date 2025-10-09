@@ -292,7 +292,18 @@ def upload_route(project_id):
         )
         print(f"[UPLOAD] Validation completed: is_valid={is_valid}")
 
-        projects.update_validation_results(project_id, is_valid, 0)
+        # Store validation parameters in file_metadata for later use (e.g., corrections)
+        file_metadata = {
+            'filename': file.filename,
+            'upload_time': datetime.utcnow().isoformat(),
+            'start_date': start_date.isoformat(),
+            'end_date': end_date.isoformat(),
+            'date_format': date_format,
+            'flight_starts_with': flight_prefix,
+            'fuel_method': fuel_method
+        }
+
+        projects.update_validation_results(project_id, is_valid, 0, file_metadata)
         print(f"[UPLOAD] Validation results updated in database")
 
         # Note: error_report.lzs is already saved by validate_and_process_file in the project directory
@@ -403,19 +414,138 @@ def save_corrections_route(project_id):
         return jsonify({'error': 'Project not found'}), 404
 
     try:
-        corrections = request.json.get('corrections', [])
+        import json
+        import pandas as pd
+        from datetime import datetime as dt
 
-        # Save corrections to temp directory (where validation files are)
+        # Retrieve stored validation parameters from file_metadata
+        file_meta = project.get('file_metadata', {})
+        print(f"[CORRECTIONS] Retrieved file_metadata: {file_meta}")
+
+        corrections = request.json.get('corrections', [])
+        if not isinstance(corrections, list):
+            return jsonify({'error': 'Invalid corrections payload'}), 400
+
+        # Persist raw corrections for traceability
         temp_path = storage.get_temp_path(project_id)
         os.makedirs(temp_path, exist_ok=True)
         corrections_file = os.path.join(temp_path, 'corrections.json')
-
-        import json
         with open(corrections_file, 'w') as f:
             json.dump(corrections, f)
 
-        print(f"[CORRECTIONS] Saved {len(corrections)} corrections to {corrections_file}")
-        return jsonify({'success': True, 'corrections_saved': len(corrections)}), 200
+        # Determine base CSV to apply corrections on
+        project_path = storage.get_project_path(project_id)
+        candidate_files = [
+            os.path.join(project_path, 'original.csv'),
+            os.path.join(project_path, 'reordered.csv'),
+            os.path.join(project_path, 'trimmed.csv'),
+            os.path.join(project_path, 'clean_data.csv'),
+        ]
+        base_csv = next((p for p in candidate_files if os.path.exists(p)), None)
+        if not base_csv:
+            return jsonify({'error': 'Base CSV not found for project'}), 404
+
+        print(f"[CORRECTIONS] Applying {len(corrections)} corrections on: {base_csv}")
+
+        # Load CSV with robust encoding
+        try:
+            df = pd.read_csv(base_csv, encoding='utf-8', encoding_errors='replace')
+        except Exception:
+            df = pd.read_csv(base_csv)
+
+        # Apply corrections with dtype-aware conversion (mirrors app4.py semantics)
+        applied = 0
+        for i, corr in enumerate(corrections):
+            row_idx = corr.get('row') or corr.get('row_idx')
+            column = corr.get('column')
+            new_value = corr.get('new_value')
+
+            if row_idx is None or not column:
+                continue
+
+            # Normalize row index to int if possible
+            try:
+                row_idx = int(float(row_idx))
+            except Exception:
+                continue
+
+            if row_idx < 0 or row_idx >= len(df) or column not in df.columns:
+                continue
+
+            current_dtype = df[column].dtype
+            try:
+                if pd.api.types.is_numeric_dtype(current_dtype):
+                    if new_value == '' or new_value is None:
+                        new_value = pd.NA if pd.api.types.is_integer_dtype(current_dtype) else float('nan')
+                    else:
+                        new_value = int(float(new_value)) if pd.api.types.is_integer_dtype(current_dtype) else float(new_value)
+                else:
+                    new_value = '' if new_value is None else str(new_value)
+            except Exception:
+                # Fallback to string
+                new_value = '' if new_value is None else str(new_value)
+
+            df.at[row_idx, column] = new_value
+            applied += 1
+
+        # Save corrected CSV within project directory
+        corrected_csv = os.path.join(project_path, 'corrected.csv')
+        df.to_csv(corrected_csv, index=False, encoding='utf-8')
+        print(f"[CORRECTIONS] Saved corrected CSV: {corrected_csv} (applied={applied})")
+
+        # Re-run validation using corrected CSV
+        # Use stored validation parameters from original upload
+        date_format = file_meta.get('date_format', 'DMY')
+        flight_prefix = file_meta.get('flight_starts_with', '')
+        fuel_method = file_meta.get('fuel_method', 'Block Off - Block On')
+
+        # Parse stored dates from file_metadata
+        start_date = None
+        end_date = None
+        try:
+            if file_meta.get('start_date'):
+                start_date = dt.fromisoformat(file_meta['start_date']).date()
+            if file_meta.get('end_date'):
+                end_date = dt.fromisoformat(file_meta['end_date']).date()
+            print(f"[CORRECTIONS] Using stored dates: start={start_date}, end={end_date}")
+        except Exception as e:
+            print(f"[CORRECTIONS] Could not parse stored dates: {e}")
+
+        # Fallback: infer date range from 'Date' column if stored dates are unavailable
+        if not start_date or not end_date:
+            try:
+                if 'Date' in df.columns:
+                    dates = pd.to_datetime(df['Date'], errors='coerce', utc=False)
+                    if dates.notna().any():
+                        start_date = dates.min().date()
+                        end_date = dates.max().date()
+                        print(f"[CORRECTIONS] Inferred dates from data: start={start_date}, end={end_date}")
+            except Exception as e:
+                print(f"[CORRECTIONS] Could not infer dates from data: {e}")
+
+        # Load reference airports data
+        airports_path = 'airports.csv'
+        if not os.path.exists(airports_path):
+            return jsonify({'error': 'Reference file airports.csv not found'}), 500
+
+        ref_df = pd.read_csv(airports_path, encoding='utf-8', encoding_errors='replace')
+
+        print(f"[CORRECTIONS] Re-validating corrected data with parameters: start={start_date}, end={end_date}, fmt={date_format}, prefix={flight_prefix}, fuel={fuel_method}")
+        is_valid, processed_path, _, error_json = validate_and_process_file(
+            corrected_csv, df, ref_df, date_format, flight_prefix, start_date, end_date, fuel_method
+        )
+
+        # Update project validation status (error count unknown -> infer from file existence/flag)
+        error_count = 0 if is_valid else 1
+        projects.update_validation_results(project_id, is_valid, error_count)
+
+        return jsonify({
+            'success': True,
+            'corrections_saved': len(corrections),
+            'applied': applied,
+            'revalidated': True,
+            'is_valid': is_valid
+        }), 200
 
     except Exception as e:
         print("ERROR: Save corrections failed:", str(e))
