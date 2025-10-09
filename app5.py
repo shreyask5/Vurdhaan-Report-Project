@@ -295,13 +295,8 @@ def upload_route(project_id):
         projects.update_validation_results(project_id, is_valid, 0)
         print(f"[UPLOAD] Validation results updated in database")
 
-        # Save error JSON for later retrieval
-        if error_json:
-            error_file_path = os.path.join(storage.get_project_path(project_id), 'error_report.json')
-            import json
-            with open(error_file_path, 'w') as f:
-                json.dump(error_json, f)
-            print(f"[UPLOAD] Error report saved to {error_file_path}")
+        # Note: error_report.lzs is already saved by validate_and_process_file in the project directory
+        # The compressed file is created automatically during validation
 
         return jsonify({
             'success': True,
@@ -344,10 +339,32 @@ def get_errors_route(project_id):
 
     try:
         import json
-        error_file_path = os.path.join(storage.get_project_path(project_id), 'error_report.json')
+        project_path = storage.get_project_path(project_id)
 
-        if not os.path.exists(error_file_path):
+        # Try compressed file first (preferred)
+        compressed_file = os.path.join(project_path, 'error_report.lzs')
+        json_file = os.path.join(project_path, 'error_report.json')
+
+        if os.path.exists(compressed_file):
+            print(f"[ERRORS] Reading compressed error report: {compressed_file}")
+            # Read compressed file and decompress
+            with open(compressed_file, 'r') as f:
+                compressed_data = f.read()
+
+            # Return compressed data with header indicating compression
+            from flask import Response
+            response = Response(compressed_data, mimetype='text/plain')
+            response.headers['X-Compression'] = 'lzstring'
+            return response
+
+        elif os.path.exists(json_file):
+            print(f"[ERRORS] Reading JSON error report: {json_file}")
+            with open(json_file, 'r') as f:
+                error_data = json.load(f)
+            return jsonify(error_data), 200
+        else:
             # No errors - return empty structure
+            print(f"[ERRORS] No error report found for project {project_id}")
             return jsonify({
                 'summary': {
                     'total_errors': 0,
@@ -358,13 +375,10 @@ def get_errors_route(project_id):
                 'categories': []
             }), 200
 
-        with open(error_file_path, 'r') as f:
-            error_data = json.load(f)
-
-        return jsonify(error_data), 200
-
     except Exception as e:
-        print("ERROR: Get errors failed:", str(e))
+        print(f"[ERRORS] Get errors failed: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/projects/<project_id>/corrections', methods=['POST'])
