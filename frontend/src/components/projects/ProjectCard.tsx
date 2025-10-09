@@ -143,7 +143,7 @@ export function ProjectCard({
           <p>
             Created {formatDistanceToNow(new Date(project.created_at), { addSuffix: true })}
           </p>
-          {project.has_file && (
+          {project.upload_completed && (
             <p className="text-green-600 font-medium mt-1">
               <CheckCircle2 className="inline h-3 w-3 mr-1" />
               CSV file uploaded

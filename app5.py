@@ -158,7 +158,12 @@ def list_projects_route():
             'ai_chat_enabled': p.get('ai_chat_enabled', False),
             'save_files_on_server': p.get('save_files_on_server', False),
             'created_at': p['created_at'].isoformat() if isinstance(p['created_at'], datetime) else p['created_at'],
-            'has_file': p.get('file_metadata') is not None
+            'has_file': p.get('file_metadata') is not None,
+            'upload_completed': p.get('upload_completed'),
+            'validation_status': p.get('validation_status'),
+            'error_count': p.get('error_count'),
+            'file_metadata': p.get('file_metadata'),
+            'updated_at': p.get('updated_at').isoformat() if p.get('updated_at') and isinstance(p.get('updated_at'), datetime) else p.get('updated_at')
         })
 
     return jsonify({'projects': formatted, 'total': len(formatted)}), 200
@@ -205,7 +210,12 @@ def get_project_route(project_id):
         'ai_chat_enabled': project.get('ai_chat_enabled'),
         'save_files_on_server': project.get('save_files_on_server'),
         'validation_status': project.get('validation_status'),
-        'file_metadata': project.get('file_metadata')
+        'file_metadata': project.get('file_metadata'),
+        'upload_completed': project.get('upload_completed'),
+        'error_count': project.get('error_count'),
+        'has_file': project.get('file_metadata') is not None,
+        'created_at': project['created_at'].isoformat() if isinstance(project['created_at'], datetime) else project['created_at'],
+        'updated_at': project.get('updated_at').isoformat() if project.get('updated_at') and isinstance(project.get('updated_at'), datetime) else project.get('updated_at')
     }), 200
 
 @app.route('/api/projects/<project_id>', methods=['PUT'])
