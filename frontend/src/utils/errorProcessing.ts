@@ -13,8 +13,8 @@ export function parseErrorSequence(cellData?: string): SequenceError | null {
     return null;
   }
 
-  // Match pattern like "TCCOH : LTAF → LTAI"
-  const match = cellData.match(/(\w+)\s*:\s*(\w+)\s*[→->]\s*(\w+)/);
+  // Match pattern like "TCCOH : LTAF → LTAI" or "TCCOH : LTAF -> LTAI"
+  const match = cellData.match(/(\w+)\s*:\s*(\w+)\s*(?:→|->)\s*(\w+)/);
 
   if (match) {
     return {
