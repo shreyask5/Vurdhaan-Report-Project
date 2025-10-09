@@ -92,9 +92,14 @@ def not_found(e):
 
 @app.errorhandler(500)
 def internal_error(e):
+    error_details = {
+        'error': 'Internal server error',
+        'message': str(e),
+        'traceback': traceback.format_exc()
+    }
     print("ERROR:", str(e))
-    print(traceback.format_exc())
-    return jsonify({'error': 'Internal error'}), 500
+    print("TRACEBACK:", traceback.format_exc())
+    return jsonify(error_details), 500
 
 @app.errorhandler(429)
 def rate_limit_error(e):
@@ -251,26 +256,44 @@ def upload_route(project_id):
         date_format = request.form.get('date_format', 'DMY')
         flight_prefix = request.form.get('flight_starts_with', '')
         fuel_method = request.form.get('fuel_method', 'Block Off - Block On')
-    except:
-        return jsonify({'error': 'Invalid form data'}), 400
+        print(f"[UPLOAD] Form data parsed: start_date={start_date}, end_date={end_date}, date_format={date_format}")
+    except Exception as e:
+        print(f"[UPLOAD ERROR] Form data parsing failed: {str(e)}")
+        return jsonify({'error': 'Invalid form data', 'details': str(e)}), 400
 
     try:
+        print(f"[UPLOAD] Starting file upload for project {project_id}")
         upload_result = projects.handle_file_upload(project_id, g.user['uid'], file, {
             'start_date': start_date,
             'end_date': end_date
         })
+        print(f"[UPLOAD] File uploaded successfully: {upload_result['file_path']}")
 
+        # Check if airports.csv exists
+        airports_path = 'airports.csv'
+        if not os.path.exists(airports_path):
+            print(f"[UPLOAD ERROR] airports.csv not found at {airports_path}")
+            return jsonify({'error': 'Reference file airports.csv not found'}), 500
+
+        print(f"[UPLOAD] Reading reference data from {airports_path}")
         # Validation
-        ref_df = pd.read_csv('airports.csv', encoding='utf-8', encoding_errors='replace')
+        ref_df = pd.read_csv(airports_path, encoding='utf-8', encoding_errors='replace')
+        print(f"[UPLOAD] Reference data loaded: {len(ref_df)} rows")
+        
+        print(f"[UPLOAD] Reading uploaded file: {upload_result['file_path']}")
         result_df = pd.read_csv(upload_result['file_path'], encoding='utf-8', encoding_errors='replace')
         result_df.columns = result_df.columns.str.strip()
+        print(f"[UPLOAD] Uploaded file loaded: {len(result_df)} rows, columns: {list(result_df.columns)}")
 
+        print(f"[UPLOAD] Starting validation with validate_and_process_file")
         is_valid, processed_path, _, error_json = validate_and_process_file(
             upload_result['file_path'], result_df, ref_df,
             date_format, flight_prefix, start_date, end_date, fuel_method
         )
+        print(f"[UPLOAD] Validation completed: is_valid={is_valid}")
 
         projects.update_validation_results(project_id, is_valid, 0)
+        print(f"[UPLOAD] Validation results updated in database")
 
         # Save error JSON for later retrieval
         if error_json:
@@ -278,6 +301,7 @@ def upload_route(project_id):
             import json
             with open(error_file_path, 'w') as f:
                 json.dump(error_json, f)
+            print(f"[UPLOAD] Error report saved to {error_file_path}")
 
         return jsonify({
             'success': True,
@@ -288,11 +312,19 @@ def upload_route(project_id):
             'has_errors': not is_valid
         }), 200
 
-    except PermissionError:
-        return jsonify({'error': 'Unauthorized'}), 403
+    except PermissionError as e:
+        print(f"[UPLOAD ERROR] Permission denied: {str(e)}")
+        return jsonify({'error': 'Unauthorized', 'details': str(e)}), 403
+    except FileNotFoundError as e:
+        print(f"[UPLOAD ERROR] File not found: {str(e)}")
+        return jsonify({'error': 'Required file not found', 'details': str(e)}), 500
+    except ImportError as e:
+        print(f"[UPLOAD ERROR] Import error: {str(e)}")
+        return jsonify({'error': 'Missing dependency', 'details': str(e)}), 500
     except Exception as e:
-        print("ERROR: Upload failed:", str(e))
-        return jsonify({'error': str(e)}), 500
+        print(f"[UPLOAD ERROR] Unexpected error: {str(e)}")
+        print(f"[UPLOAD ERROR] Traceback: {traceback.format_exc()}")
+        return jsonify({'error': 'Upload failed', 'details': str(e)}), 500
 
 # ============================================================================
 # ERROR HANDLING ENDPOINTS
