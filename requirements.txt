@@ -50,3 +50,7 @@ langgraph==0.0.20
 firebase-admin==6.5.0
 flask-limiter==3.5.0
 cryptography==42.0.0
+
+# PDF/Image processing
+PyPDF2==3.0.1
+pillow==11.3.0

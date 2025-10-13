@@ -42,6 +42,7 @@ class OpenAIService:
 
         try:
             # Call GPT-5 with high reasoning effort
+            # Note: GPT-5 only supports default temperature (1), so we don't set it
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
@@ -54,7 +55,6 @@ class OpenAIService:
                         "content": f"{prompt}\n\nMonitoring Plan Document:\n{content}"
                     }
                 ],
-                temperature=0.1,
                 reasoning_effort="high",  # High reasoning as requested
                 response_format={"type": "json_object"}
             )
@@ -122,6 +122,7 @@ class OpenAIService:
         mime_type = f"image/{file_ext if file_ext != 'jpg' else 'jpeg'}"
 
         # Use GPT-5 with vision to extract text
+        # Note: GPT-5 only supports default temperature (1)
         response = self.client.chat.completions.create(
             model=self.model,
             messages=[
@@ -140,8 +141,7 @@ class OpenAIService:
                         }
                     ]
                 }
-            ],
-            temperature=0.1
+            ]
         )
 
         return response.choices[0].message.content
