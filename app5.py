@@ -27,14 +27,16 @@ from config import Config
 from middleware.auth import FirebaseAuth, require_auth
 from middleware.rate_limit import rate_limiter, limit_by_user, limit_expensive, exempt_from_rate_limit
 from middleware.validation import (
-    validate_json, validate_file, CreateProjectSchema,
-    UpdateProjectSchema, ChatQuerySchema, validate_project_id
+    validate_json, validate_file, validate_monitoring_plan_file,
+    CreateProjectSchema, UpdateProjectSchema, ChatQuerySchema,
+    SchemeSelectionSchema, validate_project_id
 )
 
 # Services
 from services.firebase_service import FirestoreService
 from services.project_service import ProjectService
 from services.storage_service import StorageService
+from services.openai_service import OpenAIService
 
 # Existing helpers
 from helpers.clean import validate_and_process_file
@@ -66,6 +68,7 @@ firestore = FirestoreService()
 projects = ProjectService()
 storage = StorageService()
 sessions = SessionManager()
+openai_service = OpenAIService()
 
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
 
@@ -244,6 +247,92 @@ def delete_project_route(project_id):
         return jsonify({'error': 'Not found or unauthorized'}), 404
 
     return jsonify({'success': True}), 200
+
+# ============================================================================
+# SCHEME SELECTION & MONITORING PLAN
+# ============================================================================
+
+@app.route('/api/projects/<project_id>/scheme', methods=['PUT'])
+@require_auth
+@limit_by_user("30 per hour")
+@validate_json(SchemeSelectionSchema)
+def update_scheme_route(project_id):
+    """Update project scheme and airline size"""
+    if not validate_project_id(project_id):
+        return jsonify({'error': 'Invalid project ID'}), 400
+
+    data = g.validated_data
+    updated = projects.update_scheme(
+        project_id,
+        g.user['uid'],
+        data['scheme'],
+        data['airline_size']
+    )
+
+    if not updated:
+        return jsonify({'error': 'Not found or unauthorized'}), 404
+
+    return jsonify({
+        'success': True,
+        'scheme': data['scheme'],
+        'airline_size': data['airline_size']
+    }), 200
+
+@app.route('/api/projects/<project_id>/monitoring-plan', methods=['POST'])
+@require_auth
+@limit_expensive("5 per hour")
+@validate_monitoring_plan_file('file', max_size_mb=50)
+def upload_monitoring_plan_route(project_id):
+    """Upload and process monitoring plan file"""
+    if not validate_project_id(project_id):
+        return jsonify({'error': 'Invalid project ID'}), 400
+
+    project = projects.get_project_with_validation(project_id, g.user['uid'])
+    if not project:
+        return jsonify({'error': 'Project not found'}), 404
+
+    file = g.validated_file
+
+    try:
+        # Save file temporarily for processing
+        print(f"[MONITORING PLAN] Starting upload for project {project_id}")
+        temp_path = storage.get_temp_path(project_id)
+        os.makedirs(temp_path, exist_ok=True)
+
+        file_extension = file.filename.rsplit('.', 1)[-1].lower()
+        temp_file_path = os.path.join(temp_path, f'temp_monitoring_plan.{file_extension}')
+
+        file.save(temp_file_path)
+        print(f"[MONITORING PLAN] File saved to: {temp_file_path}")
+
+        # Extract information using OpenAI GPT-5
+        print(f"[MONITORING PLAN] Extracting information using GPT-5")
+        extracted_data = openai_service.extract_monitoring_plan_info(temp_file_path, file_extension)
+        print(f"[MONITORING PLAN] Extraction completed")
+
+        # Save file and extracted data to project
+        file.seek(0)  # Reset file pointer
+        result = projects.handle_monitoring_plan_upload(
+            project_id,
+            g.user['uid'],
+            file,
+            extracted_data
+        )
+
+        # Clean up temp file
+        if os.path.exists(temp_file_path):
+            os.remove(temp_file_path)
+
+        return jsonify({
+            'success': True,
+            'filename': result['filename'],
+            'extracted_data': result['extracted_data']
+        }), 200
+
+    except Exception as e:
+        print(f"[MONITORING PLAN ERROR] Upload failed: {str(e)}")
+        print(f"[MONITORING PLAN ERROR] Traceback: {traceback.format_exc()}")
+        return jsonify({'error': 'Upload failed', 'details': str(e)}), 500
 
 # ============================================================================
 # FILE UPLOAD

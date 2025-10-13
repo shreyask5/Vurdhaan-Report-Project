@@ -5,6 +5,69 @@ export type FuelMethod = "Block Off - Block On" | "Method B";
 
 export type DateFormat = "DMY" | "MDY";
 
+export type SchemeType = "CORSIA" | "EU ETS" | "UK ETS" | "CH ETS" | "ReFuelEU";
+
+export type AirlineSize = "small" | "medium" | "large";
+
+export interface SchemeSelection {
+  scheme: SchemeType;
+  airline_size: AirlineSize;
+}
+
+export interface MonitoringPlanData {
+  monitoring_plan_processes: {
+    CORSIA?: string;
+    EU_ETS?: string;
+    UK_ETS?: string;
+    CH_ETS?: string;
+    ReFuelEU?: string;
+  };
+  basic_info: {
+    airline_name?: string;
+    registration_details?: string;
+    contact_info?: string;
+    version?: string;
+    date?: string;
+  };
+  method: {
+    fuel_monitoring_methodology?: string;
+    calculation_methods?: string;
+    standards_references?: string;
+  };
+  fuel_data_collection: {
+    collection_method?: "automatic" | "manual" | "hybrid";
+    details?: string;
+  };
+  primary_data_source: {
+    is_automatic?: boolean;
+    system_used?: string;
+    frequency?: string;
+    accuracy?: string;
+  };
+  secondary_source: {
+    uses_paper_logs?: boolean;
+    backup_procedures?: string;
+    validation_methods?: string;
+  };
+  geographical_presence: {
+    is_eu_based?: boolean;
+    is_non_eu_based?: boolean;
+    primary_region?: string;
+    scheme_priority?: {
+      CORSIA?: "high" | "standard" | "low";
+      EU_ETS?: "high" | "standard" | "low";
+      UK_ETS?: "high" | "standard" | "low";
+      CH_ETS?: "high" | "standard" | "low";
+      ReFuelEU?: "high" | "standard" | "low";
+    };
+  };
+  extraction_metadata?: {
+    model?: string;
+    reasoning_effort?: string;
+    extracted_at?: string;
+  };
+}
+
 export interface ValidationParams {
   monitoring_year: string;
   date_format: DateFormat;

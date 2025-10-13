@@ -58,7 +58,11 @@ class FirestoreService:
             'file_metadata': None,
             'validation_status': None,
             'error_count': 0,
-            'session_id': None  # For chat session
+            'session_id': None,  # For chat session
+            'scheme': None,  # CORSIA, EU ETS, UK ETS, CH ETS, ReFuelEU
+            'airline_size': None,  # small, medium, large
+            'monitoring_plan': None,  # Extracted monitoring plan data
+            'monitoring_plan_file_path': None  # Path to uploaded monitoring plan file
         }
 
         # Store in Firestore

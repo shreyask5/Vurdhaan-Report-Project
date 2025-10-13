@@ -380,3 +380,96 @@ class ProjectService:
                 deleted_count += 1
 
         return deleted_count
+
+    # ========================================================================
+    # Scheme and Monitoring Plan Operations
+    # ========================================================================
+
+    def update_scheme(
+        self,
+        project_id: str,
+        owner_uid: str,
+        scheme: str,
+        airline_size: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Update project scheme and airline size
+
+        Args:
+            project_id: Project ID
+            owner_uid: User UID (for ownership check)
+            scheme: Scheme type (CORSIA, EU ETS, etc.)
+            airline_size: Airline size (small, medium, large)
+
+        Returns:
+            Updated project or None if not authorized
+        """
+        # Validate ownership
+        project = self.get_project_with_validation(project_id, owner_uid)
+        if not project:
+            return None
+
+        updates = {
+            'scheme': scheme,
+            'airline_size': airline_size
+        }
+
+        return self.firestore.update_project(project_id, updates)
+
+    def handle_monitoring_plan_upload(
+        self,
+        project_id: str,
+        owner_uid: str,
+        file,
+        extracted_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Handle monitoring plan file upload and save extracted data
+
+        Args:
+            project_id: Project ID
+            owner_uid: User UID
+            file: Uploaded file object
+            extracted_data: Data extracted from monitoring plan
+
+        Returns:
+            Upload result with extracted data
+        """
+        # Validate ownership
+        project = self.get_project_with_validation(project_id, owner_uid)
+        if not project:
+            raise PermissionError("Not authorized to upload to this project")
+
+        try:
+            # Save file based on project settings
+            if project['save_files_on_server']:
+                file_path = self.storage.save_uploaded_file(
+                    project_id,
+                    file,
+                    f'monitoring_plan.{file.filename.rsplit(".", 1)[-1]}'
+                )
+            else:
+                # Save to temp
+                file_path = self.storage.save_temp_file(
+                    project_id,
+                    file,
+                    f'monitoring_plan.{file.filename.rsplit(".", 1)[-1]}'
+                )
+
+            # Update project with monitoring plan data
+            updates = {
+                'monitoring_plan': extracted_data,
+                'monitoring_plan_file_path': file_path
+            }
+
+            self.firestore.update_project(project_id, updates)
+
+            return {
+                'success': True,
+                'file_path': file_path,
+                'extracted_data': extracted_data,
+                'filename': file.filename
+            }
+
+        except Exception as e:
+            raise

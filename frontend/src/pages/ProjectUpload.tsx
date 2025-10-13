@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useValidation } from '../contexts/ValidationContext';
+import { SchemeSelector } from '../components/project/SchemeSelector';
+import { MonitoringPlanUpload } from '../components/project/MonitoringPlanUpload';
 import { FileUploadSection } from '../components/project/FileUploadSection';
 import { FuelMethodSelector } from '../components/project/FuelMethodSelector';
 import { ColumnMappingWizard } from '../components/project/ColumnMappingWizard';
 import { ValidationForm } from '../components/project/ValidationForm';
-import { ValidationParams } from '../types/validation';
+import { ValidationParams, SchemeType, AirlineSize } from '../types/validation';
 import { projectsApi } from '../services/api';
 
 const ProjectUpload: React.FC = () => {
@@ -15,11 +17,16 @@ const ProjectUpload: React.FC = () => {
   const [isCheckingStatus, setIsCheckingStatus] = useState(true);
   const {
     currentStep,
+    selectedScheme,
+    airlineSize,
+    monitoringPlanData,
     selectedFile,
     selectedFuelMethod,
     uploadedColumns,
     columnMapping,
     isLoading,
+    setScheme,
+    uploadMonitoringPlan,
     setFile,
     setFuelMethod,
     setColumnMapping,
@@ -54,6 +61,16 @@ const ProjectUpload: React.FC = () => {
 
     checkStatus();
   }, [projectId, navigate]);
+
+  const handleSchemeSelect = async (scheme: SchemeType, airlineSize: AirlineSize) => {
+    if (!projectId) return;
+    await setScheme(projectId, scheme, airlineSize);
+  };
+
+  const handleMonitoringPlanUpload = async (file: File) => {
+    if (!projectId) return;
+    await uploadMonitoringPlan(projectId, file);
+  };
 
   const handleValidationSubmit = async (params: ValidationParams) => {
     if (!selectedFuelMethod || !projectId) return;
@@ -127,8 +144,8 @@ const ProjectUpload: React.FC = () => {
         {/* Progress Indicator */}
         <div className="mb-8 bg-white rounded-xl p-6 shadow-card">
           <div className="flex items-center justify-between">
-            {['Upload', 'Fuel Method', 'Column Mapping', 'Parameters'].map((step, index) => {
-              const stepKeys = ['upload', 'fuel_method', 'mapping', 'parameters'];
+            {['Scheme', 'Monitoring Plan', 'Upload', 'Fuel Method', 'Column Mapping', 'Parameters'].map((step, index) => {
+              const stepKeys = ['scheme', 'monitoring_plan', 'upload', 'fuel_method', 'mapping', 'parameters'];
               const currentIndex = stepKeys.indexOf(currentStep);
               const isActive = index === currentIndex;
               const isCompleted = index < currentIndex;
@@ -155,7 +172,7 @@ const ProjectUpload: React.FC = () => {
                       {step}
                     </span>
                   </div>
-                  {index < 3 && (
+                  {index < 5 && (
                     <div
                       className={`flex-1 h-1 mx-4 rounded ${
                         isCompleted ? 'bg-success' : 'bg-gray-200'
@@ -170,6 +187,26 @@ const ProjectUpload: React.FC = () => {
 
         {/* Step Content */}
         <div className="step-content">
+          {currentStep === 'scheme' && (
+            <div className="bg-white rounded-2xl p-8 shadow-card">
+              <SchemeSelector
+                onSelect={handleSchemeSelect}
+                selectedScheme={selectedScheme}
+                selectedAirlineSize={airlineSize}
+              />
+            </div>
+          )}
+
+          {currentStep === 'monitoring_plan' && (
+            <div className="bg-white rounded-2xl p-8 shadow-card">
+              <MonitoringPlanUpload
+                onUpload={handleMonitoringPlanUpload}
+                extractedData={monitoringPlanData}
+                onBack={() => goToStep('scheme')}
+              />
+            </div>
+          )}
+
           {currentStep === 'upload' && (
             <div className="bg-white rounded-2xl p-8 shadow-card">
               <h2 className="text-2xl font-semibold mb-6 text-gray-700">Upload CSV File</h2>

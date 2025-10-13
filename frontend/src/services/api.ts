@@ -219,6 +219,47 @@ export const projectsApi = {
   },
 
   /**
+   * Update project scheme and airline size
+   */
+  async updateScheme(
+    projectId: string,
+    scheme: string,
+    airlineSize: string
+  ): Promise<{ success: boolean; scheme: string; airline_size: string }> {
+    return apiRequest(`/projects/${projectId}/scheme`, {
+      method: 'PUT',
+      body: JSON.stringify({ scheme, airline_size: airlineSize }),
+    });
+  },
+
+  /**
+   * Upload monitoring plan file
+   */
+  async uploadMonitoringPlan(
+    projectId: string,
+    file: File
+  ): Promise<{ success: boolean; filename: string; extracted_data: any }> {
+    const token = await getAuthToken();
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await fetch(`${API_BASE_URL}/projects/${projectId}/monitoring-plan`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Upload failed' }));
+      throw new Error(error.error || 'Upload failed');
+    }
+
+    return response.json();
+  },
+
+  /**
    * Generate CORSIA report
    */
   async generateReport(

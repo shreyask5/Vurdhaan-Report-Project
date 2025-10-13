@@ -134,6 +134,21 @@ class ChatQuerySchema(BaseModel):
         extra = 'forbid'
 
 
+class SchemeSelectionSchema(BaseModel):
+    """Schema for scheme selection"""
+    scheme: str = Field(
+        description="Scheme type",
+        pattern='^(CORSIA|EU ETS|UK ETS|CH ETS|ReFuelEU)$'
+    )
+    airline_size: str = Field(
+        description="Airline size category",
+        pattern='^(small|medium|large)$'
+    )
+
+    class Config:
+        extra = 'forbid'
+
+
 class CSVCorrectionSchema(BaseModel):
     """Schema for CSV corrections"""
     row: int = Field(ge=0, description="Row index")
@@ -282,6 +297,29 @@ def validate_form(schema: BaseModel):
 
         return wrapper
     return decorator
+
+
+def validate_monitoring_plan_file(
+    field_name: str = 'file',
+    max_size_mb: int = 50
+):
+    """
+    Decorator to validate monitoring plan file uploads
+    Accepts: PDF, Excel, CSV, and image formats
+
+    Usage:
+        @app.post('/api/upload-monitoring-plan')
+        @validate_monitoring_plan_file('file', max_size_mb=50)
+        def upload():
+            file = g.validated_file
+            return {'filename': file.filename}
+
+    Args:
+        field_name: Name of the file field in request
+        max_size_mb: Maximum file size in MB
+    """
+    allowed_extensions = ['pdf', 'xlsx', 'xls', 'csv', 'png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff', 'webp']
+    return validate_file(field_name, allowed_extensions, max_size_mb)
 
 
 def validate_file(

@@ -1,9 +1,10 @@
 import React, { createContext, useContext, useState, ReactNode, useCallback } from 'react';
-import { ErrorData, Correction, ValidationFormData, ColumnMapping, FuelMethod } from '../types/validation';
+import { ErrorData, Correction, ValidationFormData, ColumnMapping, FuelMethod, SchemeType, AirlineSize, MonitoringPlanData } from '../types/validation';
 import { validationService } from '../services/validation';
 import { readCSVColumns } from '../utils/csv';
+import { projectsApi } from '../services/api';
 
-type ValidationStep = 'upload' | 'fuel_method' | 'mapping' | 'parameters' | 'validation' | 'success';
+type ValidationStep = 'scheme' | 'monitoring_plan' | 'upload' | 'fuel_method' | 'mapping' | 'parameters' | 'validation' | 'success';
 
 interface ValidationContextType {
   // State
@@ -13,6 +14,11 @@ interface ValidationContextType {
   isLoading: boolean;
   currentStep: ValidationStep;
 
+  // Scheme & Monitoring Plan
+  selectedScheme: SchemeType | null;
+  airlineSize: AirlineSize | null;
+  monitoringPlanData: MonitoringPlanData | null;
+
   // File/Fuel Method
   selectedFile: File | null;
   selectedFuelMethod: FuelMethod | null;
@@ -20,6 +26,8 @@ interface ValidationContextType {
   columnMapping: ColumnMapping;
 
   // Actions
+  setScheme: (projectId: string, scheme: SchemeType, airlineSize: AirlineSize) => Promise<void>;
+  uploadMonitoringPlan: (projectId: string, file: File) => Promise<void>;
   setFile: (file: File) => Promise<void>;
   setFuelMethod: (method: FuelMethod) => void;
   setColumnMapping: (mapping: ColumnMapping) => void;
@@ -39,12 +47,39 @@ export const ValidationProvider: React.FC<{ children: ReactNode }> = ({ children
   const [errorData, setErrorData] = useState<ErrorData | null>(null);
   const [corrections, setCorrections] = useState<Map<string, Correction>>(new Map());
   const [isLoading, setIsLoading] = useState(false);
-  const [currentStep, setCurrentStep] = useState<ValidationStep>('upload');
+  const [currentStep, setCurrentStep] = useState<ValidationStep>('scheme');
+
+  const [selectedScheme, setSelectedSchemeState] = useState<SchemeType | null>(null);
+  const [airlineSize, setAirlineSizeState] = useState<AirlineSize | null>(null);
+  const [monitoringPlanData, setMonitoringPlanData] = useState<MonitoringPlanData | null>(null);
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedFuelMethod, setSelectedFuelMethod] = useState<FuelMethod | null>(null);
   const [uploadedColumns, setUploadedColumns] = useState<string[]>([]);
   const [columnMapping, setColumnMappingState] = useState<ColumnMapping>({});
+
+  const setScheme = async (projectId: string, scheme: SchemeType, airlineSize: AirlineSize) => {
+    setIsLoading(true);
+    try {
+      await projectsApi.updateScheme(projectId, scheme, airlineSize);
+      setSelectedSchemeState(scheme);
+      setAirlineSizeState(airlineSize);
+      setCurrentStep('monitoring_plan');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const uploadMonitoringPlan = async (projectId: string, file: File) => {
+    setIsLoading(true);
+    try {
+      const result = await projectsApi.uploadMonitoringPlan(projectId, file);
+      setMonitoringPlanData(result.extracted_data);
+      setCurrentStep('upload');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const setFile = async (file: File) => {
     setSelectedFile(file);
@@ -141,11 +176,14 @@ export const ValidationProvider: React.FC<{ children: ReactNode }> = ({ children
     setFileId(null);
     setErrorData(null);
     setCorrections(new Map());
+    setSelectedSchemeState(null);
+    setAirlineSizeState(null);
+    setMonitoringPlanData(null);
     setSelectedFile(null);
     setSelectedFuelMethod(null);
     setUploadedColumns([]);
     setColumnMappingState({});
-    setCurrentStep('upload');
+    setCurrentStep('scheme');
   };
 
   const goToStep = (step: ValidationStep) => {
@@ -159,10 +197,15 @@ export const ValidationProvider: React.FC<{ children: ReactNode }> = ({ children
       corrections,
       isLoading,
       currentStep,
+      selectedScheme,
+      airlineSize,
+      monitoringPlanData,
       selectedFile,
       selectedFuelMethod,
       uploadedColumns,
       columnMapping,
+      setScheme,
+      uploadMonitoringPlan,
       setFile,
       setFuelMethod,
       setColumnMapping,
