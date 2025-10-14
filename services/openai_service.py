@@ -1,17 +1,24 @@
 """
 OpenAI Service
 Handles OpenAI API interactions for monitoring plan extraction
+
+Enhancements:
+- Flexible, hallucination-safe prompt tailored to CORSIA EMP
+- Multi-format ingestion (.xlsx/.xls, .csv, .pdf, .docx, images)
+- Sheet/page-aware content formatting to support simple provenance
 """
 
 import os
 import base64
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from openai import OpenAI
 import json
 import PyPDF2
 import pandas as pd
 from PIL import Image
 import io
+import pdfplumber
+from docx import Document
 
 
 class OpenAIService:
@@ -48,11 +55,15 @@ class OpenAIService:
                 messages=[
                     {
                         "role": "system",
-                        "content": "You are an expert aviation compliance analyst specializing in monitoring plans for emissions trading schemes (CORSIA, EU ETS, UK ETS, CH ETS, ReFuelEU)."
+                        "content": (
+                            "You are an expert in ICAO CORSIA Emissions Monitoring Plans (Annex 16, Vol IV). "
+                            "Extract only what is explicitly present. Do not infer or fabricate. If a field is unknown, set it to null and list it in missing_fields. "
+                            "Provide concise evidence excerpts and simple provenance identifiers where possible."
+                        ),
                     },
                     {
                         "role": "user",
-                        "content": f"{prompt}\n\nMonitoring Plan Document:\n{content}"
+                        "content": f"{prompt}\n\nSOURCE CONTENT (with markers for simple provenance):\n{content}"
                     }
                 ],
                 reasoning_effort="high",  # High reasoning as requested
@@ -70,18 +81,22 @@ class OpenAIService:
             raise Exception(f"Failed to extract monitoring plan information: {str(e)}")
 
     def _extract_content_from_file(self, file_path: str, file_extension: str) -> str:
-        """Extract text content from various file formats"""
+        """Extract text content from various file formats and add lightweight provenance markers."""
 
         try:
-            if file_extension == 'pdf':
+            ext = (file_extension or '').lower()
+            if ext == 'pdf':
                 return self._extract_from_pdf(file_path)
-            elif file_extension in ['xlsx', 'xls']:
+            if ext in ['xlsx', 'xls']:
                 return self._extract_from_excel(file_path)
-            elif file_extension == 'csv':
+            if ext == 'csv':
                 return self._extract_from_csv(file_path)
-            elif file_extension in ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff', 'webp']:
+            if ext in ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff', 'webp']:
                 return self._extract_from_image(file_path)
-            else:
+            if ext in ['docx']:
+                return self._extract_from_docx(file_path)
+            if ext in ['txt', 'text']:
+                return self._extract_from_txt(file_path)
                 raise ValueError(f"Unsupported file format: {file_extension}")
 
         except Exception as e:
@@ -89,27 +104,49 @@ class OpenAIService:
             raise
 
     def _extract_from_pdf(self, file_path: str) -> str:
-        """Extract text from PDF"""
-        text = []
+        """Extract text from PDF. Prefer pdfplumber (layout-aware), fallback to PyPDF2."""
+        chunks: List[str] = []
+        try:
+            with pdfplumber.open(file_path) as pdf:
+                for i, page in enumerate(pdf.pages, start=1):
+                    page_text = page.extract_text() or ""
+                    # Add a page marker for simple provenance
+                    chunks.append(f"\n=== PAGE {i} START ===\n{page_text}\n=== PAGE {i} END ===")
+        except Exception:
+            # Fallback to PyPDF2
         with open(file_path, 'rb') as file:
-            pdf_reader = PyPDF2.PdfReader(file)
-            for page in pdf_reader.pages:
-                text.append(page.extract_text())
-        return "\n".join(text)
+                reader = PyPDF2.PdfReader(file)
+                for i, page in enumerate(reader.pages, start=1):
+                    page_text = page.extract_text() or ""
+                    chunks.append(f"\n=== PAGE {i} START ===\n{page_text}\n=== PAGE {i} END ===")
+        return "\n".join(chunks).strip()
 
     def _extract_from_excel(self, file_path: str) -> str:
-        """Extract text from Excel file"""
-        df = pd.read_excel(file_path, sheet_name=None)  # Read all sheets
-        text = []
-        for sheet_name, sheet_df in df.items():
-            text.append(f"Sheet: {sheet_name}\n")
-            text.append(sheet_df.to_string())
-        return "\n".join(text)
+        """Extract content from all sheets, preserving sheet names for provenance."""
+        sheets = pd.read_excel(file_path, sheet_name=None)  # All sheets
+        parts: List[str] = []
+        for sheet_name, sheet_df in sheets.items():
+            try:
+                sheet_df = sheet_df.copy()
+                sheet_df.columns = [str(c).strip() for c in sheet_df.columns]
+            except Exception:
+                pass
+            parts.append(f"\n=== SHEET {sheet_name} START ===")
+            parts.append(sheet_df.to_string(index=False))
+            parts.append(f"=== SHEET {sheet_name} END ===")
+        return "\n".join(parts).strip()
 
     def _extract_from_csv(self, file_path: str) -> str:
-        """Extract text from CSV"""
+        """Extract text from CSV with robust encoding and include a single-sheet marker."""
+        try:
+            df = pd.read_csv(file_path, encoding='utf-8', encoding_errors='replace')
+        except Exception:
         df = pd.read_csv(file_path)
-        return df.to_string()
+        try:
+            df.columns = df.columns.str.strip()
+        except Exception:
+            pass
+        return f"=== SHEET CSV START ===\n{df.to_string(index=False)}\n=== SHEET CSV END ==="
 
     def _extract_from_image(self, file_path: str) -> str:
         """Extract text from image using GPT-5 Vision"""
@@ -146,125 +183,71 @@ class OpenAIService:
 
         return response.choices[0].message.content
 
+    def _extract_from_docx(self, file_path: str) -> str:
+        """Extract paragraphs and tables from DOCX with simple section markers."""
+        doc = Document(file_path)
+        parts: List[str] = []
+        parts.append("=== DOCX PARAGRAPHS START ===")
+        for para in doc.paragraphs:
+            text = (para.text or "").strip()
+            if text:
+                parts.append(text)
+        parts.append("=== DOCX PARAGRAPHS END ===")
+
+        # Tables
+        if getattr(doc, 'tables', None):
+            for t_idx, table in enumerate(doc.tables, start=1):
+                parts.append(f"=== DOCX TABLE {t_idx} START ===")
+                for row in table.rows:
+                    cells = [cell.text.replace('\n', ' ').strip() for cell in row.cells]
+                    parts.append(" | ".join(cells))
+                parts.append(f"=== DOCX TABLE {t_idx} END ===")
+        return "\n".join(parts).strip()
+
+    def _extract_from_txt(self, file_path: str) -> str:
+        """Extract plain text with a top-level marker."""
+        with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+            data = f.read()
+        return f"=== TEXT START ===\n{data}\n=== TEXT END ==="
+
     def _build_extraction_prompt(self) -> str:
-        """Build the extraction prompt for GPT-5"""
-        return """
-Please extract and structure the following information from the monitoring plan document:
-
-1. **Monitoring Plan Processes (per scheme)**:
-   - List all monitoring processes mentioned for each scheme (CORSIA, EU ETS, UK ETS, CH ETS, ReFuelEU)
-   - Include details about data collection, verification, and reporting procedures
-
-2. **Basic Information**:
-   - Airline/operator name
-   - Registration details
-   - Contact information
-   - Version and date of monitoring plan
-
-3. **Method**:
-   - Fuel monitoring methodology
-   - Calculation methods used
-   - Standards and references
-
-4. **How Fuel Data is Collected from Aircraft**:
-   - Automatic collection systems (specify system names/types)
-   - Manual collection using paper logs
-   - Hybrid approaches
-
-5. **Primary Data Source**:
-   - Is the primary source automatic? (yes/no)
-   - System/technology used
-   - Data frequency and accuracy
-
-6. **Secondary Source**:
-   - Are paper logs used as secondary source? (yes/no)
-   - Backup procedures
-   - Validation methods
-
-7. **Geographical Presence**:
-   - EU-based operations (yes/no)
-   - Non-EU based operations (yes/no)
-   - Primary operational region
-   - Based on this, determine scheme priority:
-     * If EU-based: EU ETS should be HIGH priority, CORSIA standard priority
-     * If Non-EU based: CORSIA should be HIGH priority, EU ETS lower priority
-
-Return the information as a structured JSON object with these exact keys:
-{
-    "monitoring_plan_processes": {
-        "CORSIA": "...",
-        "EU_ETS": "...",
-        "UK_ETS": "...",
-        "CH_ETS": "...",
-        "ReFuelEU": "..."
-    },
-    "basic_info": {
-        "airline_name": "...",
-        "registration_details": "...",
-        "contact_info": "...",
-        "version": "...",
-        "date": "..."
-    },
-    "method": {
-        "fuel_monitoring_methodology": "...",
-        "calculation_methods": "...",
-        "standards_references": "..."
-    },
-    "fuel_data_collection": {
-        "collection_method": "automatic|manual|hybrid",
-        "details": "..."
-    },
-    "primary_data_source": {
-        "is_automatic": true|false,
-        "system_used": "...",
-        "frequency": "...",
-        "accuracy": "..."
-    },
-    "secondary_source": {
-        "uses_paper_logs": true|false,
-        "backup_procedures": "...",
-        "validation_methods": "..."
-    },
-    "geographical_presence": {
-        "is_eu_based": true|false,
-        "is_non_eu_based": true|false,
-        "primary_region": "...",
-        "scheme_priority": {
-            "CORSIA": "high|standard|low",
-            "EU_ETS": "high|standard|low",
-            "UK_ETS": "high|standard|low",
-            "CH_ETS": "high|standard|low",
-            "ReFuelEU": "high|standard|low"
-        }
-    }
-}
-
-If any information is not found in the document, use null or "Not specified" for that field.
-"""
+        """Build a flexible, hallucination-safe extraction prompt for GPT-5."""
+        return (
+            "Extract all relevant information from the CORSIA Emissions Monitoring Plan (EMP). "
+            "Return a SINGLE JSON object. Do not include explanations. Rules: "
+            "1) Only extract what is explicitly present in the source. 2) If a field is unknown, set null and add a string to missing_fields. 3) Provide concise evidence excerpts and simple provenance identifiers (e.g., 'PAGE 2', 'SHEET Fleet'). 4) Normalize dates to YYYY-MM-DD when explicit; also include original if different. 5) Preserve table content verbatim as arrays of objects when clearly structured.\n\n"
+            "JSON shape (keys optional; include only if content exists or explicitly null):\n"
+            "{\n"
+            "  \"metadata\": { \"document_name\": string, \"mime_type\": string, \"extracted_at\": string, \"generator_version\": string },\n"
+            "  \"operator\": { \"name\": {\"value\": string|null, \"__meta\": {\"provenance\": string, \"confidence\": number}}, \"address\": {\"lines\": [string], \"city\": string|null, \"region\": string|null, \"postal_code\": string|null, \"country\": string|null}, \"legal_representative\": {\"title\": string|null, \"first_name\": string|null, \"last_name\": string|null, \"email\": string|null}, \"contacts\": [object], \"aoc\": {\"code\": string|null, \"issued_at\": string|null, \"expires_at\": string|null, \"authority\": {\"name\": string|null, \"address\": object}, \"scope\": [string]} , \"group_structure\": {\"parent_subsidiary_single_entity\": boolean|null, \"subsidiaries\": [{\"name\": string, \"aircraft_identification_method\": string}] } },\n"
+            "  \"flight_attribution\": { \"icao_designator\": string|null, \"registration_marks\": [string], \"responsibility_under_corsia\": string|null, \"additional_info\": string|null },\n"
+            "  \"activities\": { \"description\": string|null, \"main_state_pairs\": [string], \"leasing_arrangements\": [string], \"operation_types\": [string], \"geographic_scope\": [string] },\n"
+            "  \"fleet\": { \"aircraft_list\": [{\"registration_mark\": string, \"type\": string|null, \"notes\": string|null}] },\n"
+            "  \"methods\": { \"fuel_use_method_a\": object, \"method_b\": object, \"block_off_on\": object, \"fuel_uplift\": object, \"allocation_block_hour\": object, \"cert_usage\": {\"used\": boolean|null, \"details\": string|null} },\n"
+            "  \"data_management\": { \"data_flow\": string|null, \"controls\": string|null, \"risk_analysis\": string|null, \"data_gaps\": string|null },\n"
+            "  \"tables\": { string: [object] },\n"
+            "  \"provenance_index\": [{ \"id\": string, \"location\": string, \"excerpt\": string }],\n"
+            "  \"missing_fields\": [string]\n"
+            "}\n"
+        )
 
     def _process_extracted_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Process and validate extracted data"""
+        """Attach extraction metadata and ensure minimal structure without enforcing rigid keys."""
+        if not isinstance(data, dict):
+            data = {"raw": data}
 
-        # Ensure all required fields are present
-        required_fields = [
-            'monitoring_plan_processes',
-            'basic_info',
-            'method',
-            'fuel_data_collection',
-            'primary_data_source',
-            'secondary_source',
-            'geographical_presence'
-        ]
+        meta = data.get('metadata', {}) if isinstance(data.get('metadata'), dict) else {}
+        meta.setdefault('extracted_at', pd.Timestamp.now().isoformat())
+        meta.setdefault('generator_version', 'v1-flex')
+        data['metadata'] = meta
 
-        for field in required_fields:
-            if field not in data:
-                data[field] = {}
-
-        # Add extraction metadata
         data['extraction_metadata'] = {
             'model': self.model,
-            'reasoning_effort': 'high',
-            'extracted_at': pd.Timestamp.now().isoformat()
+            'reasoning_effort': 'high'
         }
+
+        # Ensure missing_fields exists
+        if 'missing_fields' not in data or not isinstance(data.get('missing_fields'), list):
+            data['missing_fields'] = []
 
         return data
