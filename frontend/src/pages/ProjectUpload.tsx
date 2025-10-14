@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useValidation } from '../contexts/ValidationContext';
 import { SchemeSelector } from '../components/project/SchemeSelector';
@@ -91,6 +91,61 @@ const ProjectUpload: React.FC = () => {
     }
   };
 
+  // Auto-select fuel method from project metadata when entering Parameters
+  useEffect(() => {
+    const fetchProjectDefaults = async () => {
+      if (!projectId || currentStep !== 'parameters') return;
+      try {
+        const p = await projectsApi.get(projectId);
+        const fm = p?.file_metadata?.fuel_method;
+        if (fm) setFuelMethod(fm as any);
+      } catch (e) {
+        console.warn('Could not auto-select fuel method:', e);
+      }
+    };
+    fetchProjectDefaults();
+  }, [projectId, currentStep, setFuelMethod]);
+
+  // Editable monitoring plan (parameters) state and save with debounce
+  const [editablePlan, setEditablePlan] = useState<any | null>(null);
+  const saveTimer = useRef<number | null>(null);
+  useEffect(() => {
+    if (currentStep === 'parameters') {
+      setEditablePlan(monitoringPlanData || null);
+    }
+  }, [currentStep, monitoringPlanData]);
+
+  const saveMonitoringPlan = useMemo(() => {
+    return async (plan: any) => {
+      if (!projectId) return;
+      try {
+        await fetch(`/api/projects/${projectId}/monitoring-plan`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(plan)
+        });
+      } catch (e) {
+        console.error('Failed saving monitoring plan edits', e);
+      }
+    };
+  }, [projectId]);
+
+  const onEditPlanField = (path: string[], value: any) => {
+    setEditablePlan((prev: any) => {
+      const next = { ...(prev || {}) } as any;
+      let cursor: any = next;
+      for (let i = 0; i < path.length - 1; i++) {
+        const key = path[i];
+        cursor[key] = cursor[key] ?? {};
+        cursor = cursor[key];
+      }
+      cursor[path[path.length - 1]] = value;
+      if (saveTimer.current) window.clearTimeout(saveTimer.current);
+      saveTimer.current = window.setTimeout(() => saveMonitoringPlan(next), 600);
+      return next;
+    });
+  };
+
   // Show loading while checking status
   if (isCheckingStatus) {
     return (
@@ -144,8 +199,8 @@ const ProjectUpload: React.FC = () => {
         {/* Progress Indicator */}
         <div className="mb-8 bg-white rounded-xl p-6 shadow-card">
           <div className="flex items-center justify-between">
-            {['Scheme', 'Monitoring Plan', 'Upload', 'Fuel Method', 'Column Mapping', 'Parameters'].map((step, index) => {
-              const stepKeys = ['scheme', 'monitoring_plan', 'upload', 'fuel_method', 'mapping', 'parameters'];
+            {['Scheme', 'Monitoring Plan', 'Parameters', 'Upload', 'Column Mapping'].map((step, index) => {
+              const stepKeys = ['scheme', 'monitoring_plan', 'parameters', 'upload', 'mapping'];
               const currentIndex = stepKeys.indexOf(currentStep);
               const isActive = index === currentIndex;
               const isCompleted = index < currentIndex;
@@ -172,7 +227,7 @@ const ProjectUpload: React.FC = () => {
                       {step}
                     </span>
                   </div>
-                  {index < 5 && (
+                  {index < 4 && (
                     <div
                       className={`flex-1 h-1 mx-4 rounded ${
                         isCompleted ? 'bg-success' : 'bg-gray-200'
@@ -207,6 +262,51 @@ const ProjectUpload: React.FC = () => {
             </div>
           )}
 
+          {currentStep === 'parameters' && (
+            <div className="bg-white rounded-2xl p-8 shadow-card">
+              <h2 className="text-2xl font-semibold mb-6 text-gray-700">Parameters</h2>
+              {/* Fuel Method inside Parameters */}
+              <div className="mb-8">
+                <h3 className="text-lg font-semibold mb-3 text-gray-700">Fuel Calculation Method</h3>
+                <FuelMethodSelector onSelect={setFuelMethod} selectedMethod={selectedFuelMethod} />
+              </div>
+
+              {/* Editable Monitoring Plan (basic fields) */}
+              {editablePlan && (
+                <div className="space-y-6">
+                  <h3 className="text-lg font-semibold text-gray-700">Extracted Monitoring Plan</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-sm text-gray-600">Operator Name</label>
+                      <input
+                        className="mt-1 w-full border rounded px-3 py-2"
+                        value={editablePlan?.operator?.name?.value || ''}
+                        onChange={(e) => onEditPlanField(['operator','name','value'], e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm text-gray-600">ICAO Designator</label>
+                      <input
+                        className="mt-1 w-full border rounded px-3 py-2"
+                        value={editablePlan?.flight_attribution?.icao_designator || ''}
+                        onChange={(e) => onEditPlanField(['flight_attribution','icao_designator'], e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-sm text-gray-600">Activities Description</label>
+                    <textarea
+                      className="mt-1 w-full border rounded px-3 py-2"
+                      rows={4}
+                      value={editablePlan?.activities?.description || ''}
+                      onChange={(e) => onEditPlanField(['activities','description'], e.target.value)}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {currentStep === 'upload' && (
             <div className="bg-white rounded-2xl p-8 shadow-card">
               <h2 className="text-2xl font-semibold mb-6 text-gray-700">Upload CSV File</h2>
@@ -214,15 +314,7 @@ const ProjectUpload: React.FC = () => {
             </div>
           )}
 
-          {currentStep === 'fuel_method' && selectedFile && (
-            <div className="bg-white rounded-2xl p-8 shadow-card">
-              <h2 className="text-2xl font-semibold mb-6 text-gray-700">Select Fuel Calculation Method</h2>
-              <FuelMethodSelector
-                onSelect={setFuelMethod}
-                selectedMethod={selectedFuelMethod}
-              />
-            </div>
-          )}
+          {/* Fuel method step removed; now handled within Parameters */}
 
           {currentStep === 'mapping' && selectedFuelMethod && (
             <ColumnMappingWizard

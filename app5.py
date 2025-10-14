@@ -44,6 +44,8 @@ from helpers.corsia import build_report
 from modules.session_manager import SessionManager
 from modules.database import DuckDBManager
 from modules.sql_generator import create_sql_agent
+from concurrent.futures import ThreadPoolExecutor
+import uuid
 
 # ============================================================================
 # INITIALIZATION
@@ -69,6 +71,10 @@ projects = ProjectService()
 storage = StorageService()
 sessions = SessionManager()
 openai_service = OpenAIService()
+executor_workers = int(os.getenv('MONITORING_PLAN_WORKERS', '4'))
+executor = ThreadPoolExecutor(max_workers=executor_workers)
+# Simple in-memory task registry; for multi-instance deployments, replace with Redis.
+monitoring_plan_tasks = {}
 
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
 
@@ -283,7 +289,7 @@ def update_scheme_route(project_id):
 @limit_expensive("5 per hour")
 @validate_monitoring_plan_file('file', max_size_mb=50)
 def upload_monitoring_plan_route(project_id):
-    """Upload and process monitoring plan file"""
+    """Upload and asynchronously process monitoring plan file"""
     if not validate_project_id(project_id):
         return jsonify({'error': 'Invalid project ID'}), 400
 
@@ -295,7 +301,7 @@ def upload_monitoring_plan_route(project_id):
 
     try:
         # Save file temporarily for processing
-        print(f"[MONITORING PLAN] Starting upload for project {project_id}")
+        print(f"[MONITORING PLAN] Starting async upload for project {project_id}")
         temp_path = storage.get_temp_path(project_id)
         os.makedirs(temp_path, exist_ok=True)
 
@@ -305,34 +311,118 @@ def upload_monitoring_plan_route(project_id):
         file.save(temp_file_path)
         print(f"[MONITORING PLAN] File saved to: {temp_file_path}")
 
-        # Extract information using OpenAI GPT-5
-        print(f"[MONITORING PLAN] Extracting information using GPT-5")
-        extracted_data = openai_service.extract_monitoring_plan_info(temp_file_path, file_extension)
-        print(f"[MONITORING PLAN] Extraction completed")
+        # Create background task
+        task_id = str(uuid.uuid4())
+        monitoring_plan_tasks[task_id] = {
+            'status': 'queued',
+            'project_id': project_id,
+            'file_path': temp_file_path,
+            'file_extension': file_extension,
+            'error': None,
+            'result': None
+        }
 
-        # Save file and extracted data to project
-        file.seek(0)  # Reset file pointer
-        result = projects.handle_monitoring_plan_upload(
-            project_id,
-            g.user['uid'],
-            file,
-            extracted_data
-        )
+        def run_extraction(task_id_local: str):
+            try:
+                monitoring_plan_tasks[task_id_local]['status'] = 'running'
+                print(f"[MONITORING PLAN] Task {task_id_local} running for project {project_id}")
+                extracted_data = openai_service.extract_monitoring_plan_info(temp_file_path, file_extension)
+                # Persist to project document
+                projects.update_project(project_id, g.user['uid'], {
+                    'monitoring_plan': extracted_data,
+                    'monitoring_plan_status': {
+                        'status': 'done',
+                        'updated_at': datetime.utcnow().isoformat()
+                    }
+                })
+                monitoring_plan_tasks[task_id_local]['result'] = extracted_data
+                monitoring_plan_tasks[task_id_local]['status'] = 'done'
+                print(f"[MONITORING PLAN] Task {task_id_local} completed for project {project_id}")
+            except Exception as e:
+                print(f"[MONITORING PLAN ERROR] Task {task_id_local} failed: {e}")
+                monitoring_plan_tasks[task_id_local]['status'] = 'error'
+                monitoring_plan_tasks[task_id_local]['error'] = str(e)
+                # Update project status
+                projects.update_project(project_id, g.user['uid'], {
+                    'monitoring_plan_status': {
+                        'status': 'error',
+                        'message': str(e),
+                        'updated_at': datetime.utcnow().isoformat()
+                    }
+                })
+            finally:
+                try:
+                    if os.path.exists(temp_file_path):
+                        os.remove(temp_file_path)
+                except Exception:
+                    pass
 
-        # Clean up temp file
-        if os.path.exists(temp_file_path):
-            os.remove(temp_file_path)
+        executor.submit(run_extraction, task_id)
 
-        return jsonify({
-            'success': True,
-            'filename': result['filename'],
-            'extracted_data': result['extracted_data']
-        }), 200
+        # Update project status immediately
+        projects.update_project(project_id, g.user['uid'], {
+            'monitoring_plan_status': {
+                'status': 'queued',
+                'updated_at': datetime.utcnow().isoformat()
+            }
+        })
+
+        return jsonify({'success': True, 'task_id': task_id}), 202
 
     except Exception as e:
-        print(f"[MONITORING PLAN ERROR] Upload failed: {str(e)}")
+        print(f"[MONITORING PLAN ERROR] Enqueue failed: {str(e)}")
         print(f"[MONITORING PLAN ERROR] Traceback: {traceback.format_exc()}")
         return jsonify({'error': 'Upload failed', 'details': str(e)}), 500
+
+@app.route('/api/projects/<project_id>/monitoring-plan/status', methods=['GET'])
+@require_auth
+@limit_by_user("60 per minute")
+def monitoring_plan_status_route(project_id):
+    """Check async extraction status. Optionally pass task_id as query."""
+    if not validate_project_id(project_id):
+        return jsonify({'error': 'Invalid project ID'}), 400
+    task_id = request.args.get('task_id')
+    if task_id and task_id in monitoring_plan_tasks:
+        task = monitoring_plan_tasks[task_id]
+        if task.get('project_id') != project_id:
+            return jsonify({'error': 'Task not found for project'}), 404
+        resp = {'status': task['status']}
+        if task['status'] == 'done':
+            resp['extracted_data'] = task.get('result')
+        if task['status'] == 'error':
+            resp['error'] = task.get('error')
+        return jsonify(resp), 200
+
+    # Fallback to project-level status
+    project = projects.get_project_with_validation(project_id, g.user['uid'])
+    if not project:
+        return jsonify({'error': 'Project not found'}), 404
+    return jsonify({
+        'status': (project.get('monitoring_plan_status') or {}).get('status', 'unknown'),
+        'extracted_data': project.get('monitoring_plan')
+    }), 200
+
+@app.route('/api/projects/<project_id>/monitoring-plan', methods=['PUT'])
+@require_auth
+@limit_by_user("30 per hour")
+def put_monitoring_plan_route(project_id):
+    """Save user-edited monitoring plan data to Firestore."""
+    if not validate_project_id(project_id):
+        return jsonify({'error': 'Invalid project ID'}), 400
+    payload = request.get_json(silent=True) or {}
+    try:
+        updated = projects.update_project(project_id, g.user['uid'], {
+            'monitoring_plan': payload,
+            'monitoring_plan_status': {
+                'status': 'edited',
+                'updated_at': datetime.utcnow().isoformat()
+            }
+        })
+        if not updated:
+            return jsonify({'error': 'Not found or unauthorized'}), 404
+        return jsonify({'success': True}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 # ============================================================================
 # FILE UPLOAD

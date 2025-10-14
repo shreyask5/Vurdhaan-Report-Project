@@ -66,6 +66,10 @@ export const MonitoringPlanUpload: React.FC<MonitoringPlanUploadProps> = ({
         <p className="text-gray-600">
           Upload your monitoring plan document. We'll extract key information automatically.
         </p>
+        <p className="text-yellow-700 bg-yellow-50 border border-yellow-200 rounded mt-3 p-3 text-sm">
+          Note: Extraction may take up to 10 minutes. Please keep this tab open. If it takes
+          longer, try again later; your request continues processing in the background.
+        </p>
       </div>
 
       {/* File Upload Area */}
@@ -119,7 +123,7 @@ export const MonitoringPlanUpload: React.FC<MonitoringPlanUploadProps> = ({
                       : 'bg-success text-white hover:bg-success-dark'
                   }`}
                 >
-                  {isUploading ? 'Analyzing...' : 'Upload & Analyze'}
+                  {isUploading ? 'Analyzing...' : 'Upload & Analyze (up to 10 min)'}
                 </button>
               )}
             </div>
