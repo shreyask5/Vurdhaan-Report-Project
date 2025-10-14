@@ -2,19 +2,25 @@ import React, { useState, useCallback } from 'react';
 import { MonitoringPlanData } from '../../types/validation';
 
 interface MonitoringPlanUploadProps {
+  projectId: string;
   onUpload: (file: File) => Promise<void>;
   extractedData?: MonitoringPlanData | null;
   onBack: () => void;
+  onComplete?: () => void;
 }
 
 export const MonitoringPlanUpload: React.FC<MonitoringPlanUploadProps> = ({
+  projectId,
   onUpload,
   extractedData,
-  onBack
+  onBack,
+  onComplete
 }) => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [processingStatus, setProcessingStatus] = useState<'queued' | 'running' | 'done' | 'error' | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -46,14 +52,25 @@ export const MonitoringPlanUpload: React.FC<MonitoringPlanUploadProps> = ({
     if (!selectedFile) return;
 
     setIsUploading(true);
+    setProcessingStatus(null);
+    setErrorMessage(null);
+
     try {
       await onUpload(selectedFile);
+      setProcessingStatus('done');
     } catch (error) {
       console.error('Upload failed:', error);
-      alert('Failed to upload monitoring plan. Please try again.');
+      setProcessingStatus('error');
+      setErrorMessage(error instanceof Error ? error.message : 'Failed to upload monitoring plan');
     } finally {
       setIsUploading(false);
     }
+  };
+
+  const handleRetry = () => {
+    setProcessingStatus(null);
+    setErrorMessage(null);
+    setSelectedFile(null);
   };
 
   return (
@@ -67,13 +84,48 @@ export const MonitoringPlanUpload: React.FC<MonitoringPlanUploadProps> = ({
           Upload your monitoring plan document. We'll extract key information automatically.
         </p>
         <p className="text-yellow-700 bg-yellow-50 border border-yellow-200 rounded mt-3 p-3 text-sm">
-          Note: Extraction may take up to 10 minutes. Please keep this tab open. If it takes
-          longer, try again later; your request continues processing in the background.
+          ⚠️ Extraction may take up to 10 minutes. Please wait for processing to complete before proceeding.
         </p>
       </div>
 
+      {/* Processing Status */}
+      {isUploading && (
+        <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-6 text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-blue-500 mx-auto mb-4"></div>
+          <h3 className="text-xl font-semibold text-blue-700 mb-2">
+            Extracting monitoring plan data...
+          </h3>
+          <p className="text-sm text-blue-600">
+            This may take up to 10 minutes. Please don't close this window.
+          </p>
+          <div className="mt-4 space-y-2 text-sm text-blue-600">
+            <p>💡 Tip: We're analyzing your document using AI to extract key information</p>
+            <p>💡 Tip: Longer documents may take more time to process</p>
+          </div>
+        </div>
+      )}
+
+      {/* Error Status */}
+      {processingStatus === 'error' && (
+        <div className="bg-red-50 border-2 border-red-200 rounded-xl p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="text-4xl">❌</div>
+            <div>
+              <h3 className="text-xl font-semibold text-red-700">Extraction Failed</h3>
+              <p className="text-sm text-red-600">{errorMessage}</p>
+            </div>
+          </div>
+          <button
+            onClick={handleRetry}
+            className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition"
+          >
+            Try Again
+          </button>
+        </div>
+      )}
+
       {/* File Upload Area */}
-      {!extractedData && (
+      {!extractedData && !isUploading && processingStatus !== 'error' && (
         <div
           className={`relative border-2 border-dashed rounded-xl p-8 text-center transition-all ${
             dragActive
@@ -123,7 +175,7 @@ export const MonitoringPlanUpload: React.FC<MonitoringPlanUploadProps> = ({
                       : 'bg-success text-white hover:bg-success-dark'
                   }`}
                 >
-                  {isUploading ? 'Analyzing...' : 'Upload & Analyze (up to 10 min)'}
+                  {isUploading ? 'Processing...' : 'Upload & Process'}
                 </button>
               )}
             </div>
@@ -279,16 +331,21 @@ export const MonitoringPlanUpload: React.FC<MonitoringPlanUploadProps> = ({
       <div className="flex justify-between pt-4">
         <button
           onClick={onBack}
-          className="px-6 py-2 border-2 border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition"
+          disabled={isUploading}
+          className={`px-6 py-2 border-2 border-gray-300 rounded-lg transition ${
+            isUploading
+              ? 'text-gray-400 cursor-not-allowed'
+              : 'text-gray-700 hover:bg-gray-50'
+          }`}
         >
           Back to Scheme
         </button>
-        {extractedData && (
+        {extractedData && !isUploading && (
           <button
-            onClick={() => {}} // This will be handled by parent component
+            onClick={onComplete}
             className="px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition"
           >
-            Continue to CSV Upload
+            Continue to Parameters →
           </button>
         )}
       </div>

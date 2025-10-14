@@ -233,12 +233,12 @@ export const projectsApi = {
   },
 
   /**
-   * Upload monitoring plan file
+   * Upload monitoring plan file (returns task_id for async processing)
    */
   async uploadMonitoringPlan(
     projectId: string,
     file: File
-  ): Promise<{ success: boolean; filename: string; extracted_data: any }> {
+  ): Promise<{ success: boolean; filename: string; task_id: string; extracted_data?: any }> {
     const token = await getAuthToken();
     const formData = new FormData();
     formData.append('file', file);
@@ -257,6 +257,68 @@ export const projectsApi = {
     }
 
     return response.json();
+  },
+
+  /**
+   * Get monitoring plan extraction status
+   */
+  async getMonitoringPlanStatus(
+    projectId: string,
+    taskId?: string
+  ): Promise<{ status: 'queued' | 'running' | 'done' | 'error'; extracted_data?: any; error?: string }> {
+    const params = taskId ? `?task_id=${taskId}` : '';
+    return apiRequest(`/projects/${projectId}/monitoring-plan/status${params}`);
+  },
+
+  /**
+   * Poll monitoring plan status until completion
+   */
+  async pollMonitoringPlanStatus(
+    projectId: string,
+    taskId: string,
+    onProgress?: (status: string) => void
+  ): Promise<any> {
+    let attempts = 0;
+    const maxAttempts = 120; // 10 minutes max (with increasing intervals)
+
+    while (attempts < maxAttempts) {
+      await new Promise(resolve => {
+        // Start at 2s, increase to 5s after 30s (15 attempts)
+        const delay = attempts < 15 ? 2000 : 5000;
+        setTimeout(resolve, delay);
+      });
+
+      const result = await this.getMonitoringPlanStatus(projectId, taskId);
+
+      if (onProgress) {
+        onProgress(result.status);
+      }
+
+      if (result.status === 'done') {
+        return result.extracted_data;
+      }
+
+      if (result.status === 'error') {
+        throw new Error(result.error || 'Monitoring plan extraction failed');
+      }
+
+      attempts++;
+    }
+
+    throw new Error('Monitoring plan extraction timed out after 10 minutes');
+  },
+
+  /**
+   * Update monitoring plan (save user edits)
+   */
+  async updateMonitoringPlan(
+    projectId: string,
+    data: any
+  ): Promise<{ success: boolean }> {
+    return apiRequest(`/projects/${projectId}/monitoring-plan`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
   },
 
   /**

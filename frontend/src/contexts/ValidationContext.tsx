@@ -4,7 +4,7 @@ import { validationService } from '../services/validation';
 import { readCSVColumns } from '../utils/csv';
 import { projectsApi } from '../services/api';
 
-type ValidationStep = 'scheme' | 'monitoring_plan' | 'upload' | 'fuel_method' | 'mapping' | 'parameters' | 'validation' | 'success';
+type ValidationStep = 'scheme' | 'monitoring_plan' | 'parameters' | 'upload' | 'mapping' | 'validation' | 'success';
 
 interface ValidationContextType {
   // State
@@ -73,9 +73,25 @@ export const ValidationProvider: React.FC<{ children: ReactNode }> = ({ children
   const uploadMonitoringPlan = async (projectId: string, file: File) => {
     setIsLoading(true);
     try {
-      const result = await projectsApi.uploadMonitoringPlan(projectId, file);
-      setMonitoringPlanData(result.extracted_data);
-      setCurrentStep('upload');
+      // Upload file and get task_id
+      const uploadResult = await projectsApi.uploadMonitoringPlan(projectId, file);
+
+      // If extraction is immediate (202 response with task_id), poll for status
+      if (uploadResult.task_id) {
+        const extractedData = await projectsApi.pollMonitoringPlanStatus(
+          projectId,
+          uploadResult.task_id,
+          (status) => {
+            console.log('Monitoring plan extraction status:', status);
+          }
+        );
+        setMonitoringPlanData(extractedData);
+      } else {
+        // Fallback: if data is returned immediately
+        setMonitoringPlanData(uploadResult.extracted_data);
+      }
+
+      setCurrentStep('parameters');
     } finally {
       setIsLoading(false);
     }
@@ -85,17 +101,16 @@ export const ValidationProvider: React.FC<{ children: ReactNode }> = ({ children
     setSelectedFile(file);
     const columns = await readCSVColumns(file);
     setUploadedColumns(columns);
-    setCurrentStep('fuel_method');
+    setCurrentStep('mapping');
   };
 
   const setFuelMethod = (method: FuelMethod) => {
     setSelectedFuelMethod(method);
-    setCurrentStep('mapping');
   };
 
   const setColumnMapping = (mapping: ColumnMapping) => {
     setColumnMappingState(mapping);
-    setCurrentStep('parameters');
+    setCurrentStep('validation');
   };
 
   const uploadFile = async (projectId: string, params: ValidationFormData) => {
