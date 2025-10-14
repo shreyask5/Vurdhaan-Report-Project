@@ -114,7 +114,7 @@ class OpenAIService:
                     chunks.append(f"\n=== PAGE {i} START ===\n{page_text}\n=== PAGE {i} END ===")
         except Exception:
             # Fallback to PyPDF2
-        with open(file_path, 'rb') as file:
+            with open(file_path, 'rb') as file:
                 reader = PyPDF2.PdfReader(file)
                 for i, page in enumerate(reader.pages, start=1):
                     page_text = page.extract_text() or ""
@@ -141,7 +141,7 @@ class OpenAIService:
         try:
             df = pd.read_csv(file_path, encoding='utf-8', encoding_errors='replace')
         except Exception:
-        df = pd.read_csv(file_path)
+            df = pd.read_csv(file_path)
         try:
             df.columns = df.columns.str.strip()
         except Exception:
