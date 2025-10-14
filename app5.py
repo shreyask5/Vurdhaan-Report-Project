@@ -313,6 +313,8 @@ def upload_monitoring_plan_route(project_id):
 
         # Create background task
         task_id = str(uuid.uuid4())
+        user_uid = g.user['uid']  # Capture user_uid before background thread
+
         monitoring_plan_tasks[task_id] = {
             'status': 'queued',
             'project_id': project_id,
@@ -322,13 +324,13 @@ def upload_monitoring_plan_route(project_id):
             'result': None
         }
 
-        def run_extraction(task_id_local: str):
+        def run_extraction(task_id_local: str, user_uid_local: str, project_id_local: str, file_path_local: str, file_ext_local: str):
             try:
                 monitoring_plan_tasks[task_id_local]['status'] = 'running'
-                print(f"[MONITORING PLAN] Task {task_id_local} running for project {project_id}")
-                extracted_data = openai_service.extract_monitoring_plan_info(temp_file_path, file_extension)
+                print(f"[MONITORING PLAN] Task {task_id_local} running for project {project_id_local}")
+                extracted_data = openai_service.extract_monitoring_plan_info(file_path_local, file_ext_local)
                 # Persist to project document
-                projects.update_project(project_id, g.user['uid'], {
+                projects.update_project(project_id_local, user_uid_local, {
                     'monitoring_plan': extracted_data,
                     'monitoring_plan_status': {
                         'status': 'done',
@@ -337,13 +339,14 @@ def upload_monitoring_plan_route(project_id):
                 })
                 monitoring_plan_tasks[task_id_local]['result'] = extracted_data
                 monitoring_plan_tasks[task_id_local]['status'] = 'done'
-                print(f"[MONITORING PLAN] Task {task_id_local} completed for project {project_id}")
+                print(f"[MONITORING PLAN] Task {task_id_local} completed for project {project_id_local}")
             except Exception as e:
                 print(f"[MONITORING PLAN ERROR] Task {task_id_local} failed: {e}")
+                print(f"[MONITORING PLAN ERROR] Traceback: {traceback.format_exc()}")
                 monitoring_plan_tasks[task_id_local]['status'] = 'error'
                 monitoring_plan_tasks[task_id_local]['error'] = str(e)
                 # Update project status
-                projects.update_project(project_id, g.user['uid'], {
+                projects.update_project(project_id_local, user_uid_local, {
                     'monitoring_plan_status': {
                         'status': 'error',
                         'message': str(e),
@@ -352,12 +355,12 @@ def upload_monitoring_plan_route(project_id):
                 })
             finally:
                 try:
-                    if os.path.exists(temp_file_path):
-                        os.remove(temp_file_path)
+                    if os.path.exists(file_path_local):
+                        os.remove(file_path_local)
                 except Exception:
                     pass
 
-        executor.submit(run_extraction, task_id)
+        executor.submit(run_extraction, task_id, user_uid, project_id, temp_file_path, file_extension)
 
         # Update project status immediately
         projects.update_project(project_id, g.user['uid'], {
