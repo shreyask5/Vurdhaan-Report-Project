@@ -16,7 +16,7 @@ REGULATORY_DATA = {
                 "Afghanistan", "Albania", "Antigua and Barbuda", "Armenia", "Australia", "Austria", "Azerbaijan",
                 "Bahamas", "Bahrain", "Barbados", "Belgium", "Belize", "Benin", "Bosnia and Herzegovina",
                 "Botswana", "Bulgaria", "Burkina Faso", "Cambodia", "Cameroon", "Canada", "Cook Islands",
-                "Costa Rica", "C魌e d'Ivoire", "Croatia", "Cuba", "Cyprus", "Czechia",
+                "Costa Rica", "C么te d'Ivoire", "Croatia", "Cuba", "Cyprus", "Czechia",
                 "Democratic Republic of the Congo", "Denmark", "Dominican Republic", "Ecuador",
                 "El Salvador", "Equatorial Guinea", "Estonia", "Finland", "France", "Gabon", "Gambia",
                 "Georgia", "Germany", "Ghana", "Greece", "Grenada", "Guatemala", "Guyana", "Haiti",
@@ -30,7 +30,7 @@ REGULATORY_DATA = {
                 "Saint Vincent and the Grenadines", "Samoa", "San Marino", "Saudi Arabia", "Serbia",
                 "Seychelles", "Sierra Leone", "Singapore", "Slovakia", "Slovenia", "Solomon Islands",
                 "South Sudan", "Spain", "Suriname", "Sweden", "Switzerland", "Thailand", "Timor-Leste",
-                "Tonga", "Trinidad and Tobago", "T黵kiye", "Tuvalu", "Uganda", "Ukraine", "United Arab Emirates",
+                "Tonga", "Trinidad and Tobago", "T眉rkiye", "Tuvalu", "Uganda", "Ukraine", "United Arab Emirates",
                 "United Kingdom", "United Republic of Tanzania", "United States", "Uruguay", "Vanuatu",
                 "Zambia", "Zimbabwe"
             ]
@@ -40,7 +40,7 @@ REGULATORY_DATA = {
                 "Afghanistan", "Albania", "Antigua and Barbuda", "Armenia", "Australia", "Austria", "Azerbaijan",
                 "Bahamas", "Bahrain", "Barbados", "Belgium", "Belize", "Benin", "Bosnia and Herzegovina",
                 "Botswana", "Bulgaria", "Burkina Faso", "Cambodia", "Cameroon", "Canada", "Cook Islands",
-                "Costa Rica", "C魌e d'Ivoire", "Croatia", "Cuba", "Cyprus", "Czechia",
+                "Costa Rica", "C么te d'Ivoire", "Croatia", "Cuba", "Cyprus", "Czechia",
                 "Democratic Republic of the Congo", "Denmark", "Dominican Republic", "Ecuador",
                 "El Salvador", "Equatorial Guinea", "Estonia", "Finland", "France", "Gabon", "Gambia",
                 "Georgia", "Germany", "Ghana", "Greece", "Grenada", "Guatemala", "Guyana", "Haiti",
@@ -54,7 +54,7 @@ REGULATORY_DATA = {
                 "Saint Vincent and the Grenadines", "Samoa", "San Marino", "Saudi Arabia", "Serbia",
                 "Seychelles", "Sierra Leone", "Singapore", "Slovakia", "Slovenia", "Solomon Islands",
                 "South Sudan", "Spain", "Suriname", "Sweden", "Switzerland", "Thailand", "Timor-Leste",
-                "Tonga", "Trinidad and Tobago", "T黵kiye", "Tuvalu", "Uganda", "Ukraine", "United Arab Emirates",
+                "Tonga", "Trinidad and Tobago", "T眉rkiye", "Tuvalu", "Uganda", "Ukraine", "United Arab Emirates",
                 "United Kingdom", "United Republic of Tanzania", "United States", "Uruguay", "Vanuatu",
                 "Zambia", "Zimbabwe"
             ]
@@ -64,7 +64,7 @@ REGULATORY_DATA = {
                 "Afghanistan", "Albania", "Antigua and Barbuda", "Armenia", "Australia", "Austria", "Azerbaijan",
                 "Bahamas", "Bahrain", "Barbados", "Belgium", "Belize", "Benin", "Bosnia and Herzegovina",
                 "Botswana", "Bulgaria", "Burkina Faso", "Cambodia", "Cameroon", "Canada", "Cook Islands",
-                "Costa Rica", "C魌e d'Ivoire", "Croatia", "Cuba", "Cyprus", "Czechia",
+                "Costa Rica", "C么te d'Ivoire", "Croatia", "Cuba", "Cyprus", "Czechia",
                 "Democratic Republic of the Congo", "Denmark", "Dominican Republic", "Ecuador",
                 "El Salvador", "Equatorial Guinea", "Estonia", "Finland", "France", "Gabon", "Gambia",
                 "Georgia", "Germany", "Ghana", "Greece", "Grenada", "Guatemala", "Guyana", "Haiti",
@@ -78,7 +78,7 @@ REGULATORY_DATA = {
                 "Saint Vincent and the Grenadines", "Samoa", "San Marino", "Saudi Arabia", "Serbia",
                 "Seychelles", "Sierra Leone", "Singapore", "Slovakia", "Slovenia", "Solomon Islands",
                 "South Sudan", "Spain", "Suriname", "Sweden", "Switzerland", "Thailand", "Timor-Leste",
-                "Tonga", "Trinidad and Tobago", "T黵kiye", "Tuvalu", "Uganda", "Ukraine", "United Arab Emirates",
+                "Tonga", "Trinidad and Tobago", "T眉rkiye", "Tuvalu", "Uganda", "Ukraine", "United Arab Emirates",
                 "United Kingdom", "United Republic of Tanzania", "United States", "Uruguay", "Vanuatu",
                 "Zambia", "Zimbabwe"
             ]
@@ -88,7 +88,7 @@ REGULATORY_DATA = {
                 "Afghanistan", "Albania", "Antigua and Barbuda", "Armenia", "Australia", "Austria", "Azerbaijan",
                 "Bahamas", "Bahrain", "Barbados", "Belgium", "Belize", "Benin", "Bosnia and Herzegovina",
                 "Botswana", "Bulgaria", "Burkina Faso", "Cambodia", "Cameroon", "Canada", "Cook Islands",
-                "Costa Rica", "C魌e d'Ivoire", "Croatia", "Cuba", "Cyprus", "Czechia",
+                "Costa Rica", "C么te d'Ivoire", "Croatia", "Cuba", "Cyprus", "Czechia",
                 "Democratic Republic of the Congo", "Denmark", "Dominican Republic", "Ecuador",
                 "El Salvador", "Equatorial Guinea", "Estonia", "Finland", "France", "Gabon", "Gambia",
                 "Georgia", "Germany", "Ghana", "Greece", "Grenada", "Guatemala", "Guyana", "Haiti",
@@ -102,7 +102,7 @@ REGULATORY_DATA = {
                 "Saint Vincent and the Grenadines", "Samoa", "San Marino", "Saudi Arabia", "Serbia",
                 "Seychelles", "Sierra Leone", "Singapore", "Slovakia", "Slovenia", "Solomon Islands",
                 "South Sudan", "Spain", "Suriname", "Sweden", "Switzerland", "Thailand", "Timor-Leste",
-                "Tonga", "Trinidad and Tobago", "T黵kiye", "Tuvalu", "Uganda", "Ukraine", "United Arab Emirates",
+                "Tonga", "Trinidad and Tobago", "T眉rkiye", "Tuvalu", "Uganda", "Ukraine", "United Arab Emirates",
                 "United Kingdom", "United Republic of Tanzania", "United States", "Uruguay", "Vanuatu",
                 "Zambia", "Zimbabwe"
             ]
@@ -112,7 +112,7 @@ REGULATORY_DATA = {
                 "Afghanistan", "Albania", "Antigua and Barbuda", "Armenia", "Australia", "Austria", "Azerbaijan",
                 "Bahamas", "Bahrain", "Barbados", "Belgium", "Belize", "Benin", "Bosnia and Herzegovina",
                 "Botswana", "Bulgaria", "Burkina Faso", "Cambodia", "Cameroon", "Canada", "Cook Islands",
-                "Costa Rica", "C魌e d'Ivoire", "Croatia", "Cuba", "Cyprus", "Czechia",
+                "Costa Rica", "C么te d'Ivoire", "Croatia", "Cuba", "Cyprus", "Czechia",
                 "Democratic Republic of the Congo", "Denmark", "Dominican Republic", "Ecuador",
                 "El Salvador", "Equatorial Guinea", "Estonia", "Finland", "France", "Gabon", "Gambia",
                 "Georgia", "Germany", "Ghana", "Greece", "Grenada", "Guatemala", "Guyana", "Haiti",
@@ -126,7 +126,7 @@ REGULATORY_DATA = {
                 "Saint Vincent and the Grenadines", "Samoa", "San Marino", "Saudi Arabia", "Serbia",
                 "Seychelles", "Sierra Leone", "Singapore", "Slovakia", "Slovenia", "Solomon Islands",
                 "South Sudan", "Spain", "Suriname", "Sweden", "Switzerland", "Thailand", "Timor-Leste",
-                "Tonga", "Trinidad and Tobago", "T黵kiye", "Tuvalu", "Uganda", "Ukraine", "United Arab Emirates",
+                "Tonga", "Trinidad and Tobago", "T眉rkiye", "Tuvalu", "Uganda", "Ukraine", "United Arab Emirates",
                 "United Kingdom", "United Republic of Tanzania", "United States", "Uruguay", "Vanuatu",
                 "Zambia", "Zimbabwe"
             ]
@@ -136,7 +136,7 @@ REGULATORY_DATA = {
                 "Afghanistan", "Albania", "Antigua and Barbuda", "Armenia", "Australia", "Austria", "Azerbaijan",
                 "Bahamas", "Bahrain", "Barbados", "Belgium", "Belize", "Benin", "Bosnia and Herzegovina",
                 "Botswana", "Bulgaria", "Burkina Faso", "Cambodia", "Cameroon", "Canada", "Cook Islands",
-                "Costa Rica", "C魌e d'Ivoire", "Croatia", "Cuba", "Cyprus", "Czechia",
+                "Costa Rica", "C么te d'Ivoire", "Croatia", "Cuba", "Cyprus", "Czechia",
                 "Democratic Republic of the Congo", "Denmark", "Dominican Republic", "Ecuador",
                 "El Salvador", "Equatorial Guinea", "Estonia", "Finland", "France", "Gabon", "Gambia",
                 "Georgia", "Germany", "Ghana", "Greece", "Grenada", "Guatemala", "Guyana", "Haiti",
@@ -150,7 +150,7 @@ REGULATORY_DATA = {
                 "Saint Vincent and the Grenadines", "Samoa", "San Marino", "Saudi Arabia", "Serbia",
                 "Seychelles", "Sierra Leone", "Singapore", "Slovakia", "Slovenia", "Solomon Islands",
                 "South Sudan", "Spain", "Suriname", "Sweden", "Switzerland", "Thailand", "Timor-Leste",
-                "Tonga", "Trinidad and Tobago", "T黵kiye", "Tuvalu", "Uganda", "Ukraine", "United Arab Emirates",
+                "Tonga", "Trinidad and Tobago", "T眉rkiye", "Tuvalu", "Uganda", "Ukraine", "United Arab Emirates",
                 "United Kingdom", "United Republic of Tanzania", "United States", "Uruguay", "Vanuatu",
                 "Zambia", "Zimbabwe"
             ]
