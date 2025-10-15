@@ -48,8 +48,13 @@ class OpenAIService:
         prompt = self._build_extraction_prompt()
 
         try:
-            # Call GPT-5 with high reasoning effort
-            # Note: GPT-5 only supports default temperature (1), so we don't set it
+            # Build strict JSON Schema for structured outputs
+            schema_block = {
+                "type": "json_schema",
+                "json_schema": self._build_extraction_schema(),
+            }
+
+            # Call GPT-5 with strict schema enforcement
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
@@ -66,8 +71,8 @@ class OpenAIService:
                         "content": f"{prompt}\n\nSOURCE CONTENT (with markers for simple provenance):\n{content}"
                     }
                 ],
-                reasoning_effort="high",  # High reasoning as requested
-                response_format={"type": "json_object"}
+                reasoning_effort="high",
+                response_format=schema_block,
             )
 
             # Parse the response
@@ -213,56 +218,166 @@ class OpenAIService:
     def _build_extraction_prompt(self) -> str:
         """Build a flexible, hallucination-safe extraction prompt for GPT-5."""
         return (
-            "Return a SINGLE JSON object. Do not include explanations. Follow ALL rules strictly.\n"
-            "Rules: \n"
-            "- Extract ONLY what is explicitly supported by the source content (EMP/ER).\n"
-            "- Do NOT infer or invent.\n"
-            "- If a field is absent, use the literal string 'MISSING'.\n"
-            "- SI units only (t, kg, L).\n"
-            "- Keep values verbatim where possible; summarize numbers only if clearly stated.\n"
-            "- Keep overall length compact and targeted.\n\n"
-            "OUTPUT FORMAT (MUST be a valid JSON object):\n"
+            "Read the provided Monitoring Plan (EMP) and Emissions Report (ER). Extract ONLY what is explicitly supported by these documents. Do NOT infer or invent. If a field is unknown or absent, set the value to null and add the key name to missing_fields.\n\n"
+            "Return a SINGLE JSON object of flat key:value pairs (values are string|null, or short arrays where necessary), plus standard metadata. No explanations.\n\n"
+            "MUST-HAVE KEYS (values MUST be string|null unless noted):\n"
             "{\n"
-            "  \"metadata\": {\n"
-            "    \"document_name\": string,\n"
-            "    \"mime_type\": string,\n"
-            "    \"extracted_at\": string,\n"
-            "    \"generator_version\": string\n"
-            "  },\n"
-            "  \"bullets\": [\n"
-            "    // Array of 18–28 compact bullet strings in EXACT format '- **Label:** value'\n"
-            "    // No tables; one line per bullet; keep order below\n"
-            "  ],\n"
-            "  \"missing_fields\": [\n"
-            "    // Labels that are 'MISSING'\n"
-            "  ],\n"
-            "  \"provenance_index\": [\n"
-            "    { \"id\": string, \"location\": string, \"excerpt\": string }\n"
-            "  ]\n"
+            "  \"metadata\": { \"document_name\": string, \"mime_type\": string, \"extracted_at\": string, \"generator_version\": string },\n"
+            "  \"operator_name\": string|null,\n"
+            "  \"icao_designator\": string|null,\n"
+            "  \"aoc_id\": string|null,\n"
+            "  \"aoc_authority\": string|null,\n"
+            "  \"state_of_operator\": string|null,\n"
+            "  \"parent_subsidiary_status\": string|null,\n"
+            "  \"contacts_accountable_manager_name\": string|null,\n"
+            "  \"contacts_accountable_manager_title\": string|null,\n"
+            "  \"contacts_accountable_manager_email\": string|null,\n"
+            "  \"contacts_accountable_manager_phone\": string|null,\n"
+            "  \"contacts_corsia_focal_name\": string|null,\n"
+            "  \"contacts_corsia_focal_title\": string|null,\n"
+            "  \"contacts_corsia_focal_email\": string|null,\n"
+            "  \"contacts_corsia_focal_phone\": string|null,\n"
+            "  \"reporting_year\": string|null,\n"
+            "  \"coverage\": string|null,\n"
+            "  \"aggregation_level\": string|null,\n"
+            "  \"aircraft_types_and_counts\": string|null,\n"
+            "  \"fuel_types\": string|null,\n"
+            "  \"fuel_suppliers\": string|null,\n"
+            "  \"monitoring_methods_method_a\": string|null,\n"
+            "  \"monitoring_methods_method_b\": string|null,\n"
+            "  \"monitoring_methods_block_off_on\": string|null,\n"
+            "  \"monitoring_methods_fuel_uplift\": string|null,\n"
+            "  \"monitoring_methods_fuel_allocation_block_hour\": string|null,\n"
+            "  \"monitoring_methods_periods\": string|null,\n"
+            "  \"monitoring_methods_primary_data_sources\": string|null,\n"
+            "  \"fuel_density_values_and_sources\": string|null,\n"
+            "  \"cert_usage\": string|null,\n"
+            "  \"cert_inputs\": string|null,\n"
+            "  \"emission_factors\": string|null,\n"
+            "  \"data_flow\": string|null,\n"
+            "  \"controls\": string|null,\n"
+            "  \"error_handling\": string|null,\n"
+            "  \"change_control\": string|null,\n"
+            "  \"responsible_teams_roles\": string|null,\n"
+            "  \"records_storage_locations\": string|null,\n"
+            "  \"retention_time\": string|null,\n"
+            "  \"backup_archiving\": string|null,\n"
+            "  \"reporting_state_pairs\": string|null,\n"
+            "  \"major_aerodrome_pairs\": string|null,\n"
+            "  \"exclusions_special_cases\": string|null,\n"
+            "  \"data_gaps_occurred\": string|null,\n"
+            "  \"data_gaps_percent_affected\": string|null,\n"
+            "  \"data_gaps_replacement_methods\": string|null,\n"
+            "  \"data_gaps_justification\": string|null,\n"
+            "  \"emission_reductions_saf\": string|null,\n"
+            "  \"saf_book_and_claim\": string|null,\n"
+            "  \"documentation_required\": string|null,\n"
+            "  \"key_missing_items\": [string],\n"
+            "  \"provenance_index\": [{ \"id\": string, \"location\": string, \"excerpt\": string }],\n"
+            "  \"missing_fields\": [string]\n"
             "}\n\n"
-            "CONTENT AND ORDER (emit bullets in this order; use 'MISSING' when absent):\n"
-            "1) Operator & Regulatory: Operator name; ICAO designator; AOC ID & authority; State of the operator; parent–subsidiary status.\n"
-            "2) Contacts: Name(s), title(s), email(s), phone(s) for accountable manager and CORSIA focal(s).\n"
-            "3) Scope & Period: Reporting year; coverage (international only); aggregation level (state-pair / aerodrome-pair).\n"
-            "4) Fleet & Fuel: Aircraft types and counts used for reporting; fuel types; fuel suppliers if listed.\n"
-            "5) Monitoring Methods (by sub-fleet if applicable): Method A, Method B, Block-off/Block-on, Fuel Uplift, Fuel Allocation (Block Hour); periods of applicability (only 2021–2035); primary data sources (e.g., journey logs/NAVONE, fuel receipts, QAR/ACMS).\n"
-            "6) Calculation Inputs: Fuel density values and sources; CERT usage (yes/no); CERT inputs (e.g., GCD vs actual distances); emission factors if stated.\n"
-            "7) Data Flow & Controls (QA/QC): How data is captured, validated, reconciled, and approved; key controls; error handling; change control; responsible teams/roles.\n"
-            "8) Records & Retention: Where records are stored (systems/locations), retention time, backup/archiving.\n"
-            "9) Reporting Setup: List State pairs operated (high-level); note major Aerodrome pairs if included; any exclusions or special cases.\n"
-            "10) Data Gaps: Whether gaps occurred; % of data affected; replacement method(s) (e.g., QAR, CERT); justification.\n"
-            "11) Emission Reductions / SAF: Any SAF claims, book-and-claim, or emission reductions claimed; documentation required.\n"
-            "12) Key Missing Items: Short list of important fields not present in the docs.\n\n"
-            "FORMATTING OF 'bullets':\n"
-            "- Emit 18–28 bullets total (≈250–350 words).\n"
-            "- EXACT string format per bullet: '- **Label:** value' (keep the dashes and bold label).\n"
-            "- Keep each bullet short; no prose; no sub-bullets; no tables.\n"
-            "- Values must be from the documents; if not found, write 'MISSING'.\n\n"
-            "PROVENANCE:\n"
-            "- For any non-obvious bullet, add an entry in provenance_index with a simple identifier (e.g., PAGE 3 or SHEET Fleet, ROW 12) and a concise excerpt.\n"
-            "- Keep excerpts short.\n\n"
-            "Important: Return ONLY the JSON object described above."
+            "ADDITIONAL RULES:\n"
+            "- Use SI units only (t, kg, L).\n"
+            "- Values must match the docs verbatim where possible; summarize numbers only if clearly stated. When not present, use null and record the key in missing_fields.\n"
+            "- For \"monitoring_methods_periods\", include only years within 2021–2035 if specified.\n"
+            "- Keep strings concise; no paragraphs; no tables.\n"
+            "- Important: Return ONLY the JSON object described above."
         )
+
+    def _build_extraction_schema(self) -> Dict[str, Any]:
+        """Strict JSON Schema for structured outputs (string|null flat keys)."""
+        return {
+            "name": "corsia_monitoring_plan",
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "metadata": {
+                        "type": "object",
+                        "properties": {
+                            "document_name": {"type": "string"},
+                            "mime_type": {"type": "string"},
+                            "extracted_at": {"type": "string"},
+                            "generator_version": {"type": "string"}
+                        },
+                        "required": ["extracted_at", "generator_version"],
+                        "additionalProperties": True
+                    },
+                    "operator_name": {"type": ["string", "null"]},
+                    "icao_designator": {"type": ["string", "null"]},
+                    "aoc_id": {"type": ["string", "null"]},
+                    "aoc_authority": {"type": ["string", "null"]},
+                    "state_of_operator": {"type": ["string", "null"]},
+                    "parent_subsidiary_status": {"type": ["string", "null"]},
+                    "contacts_accountable_manager_name": {"type": ["string", "null"]},
+                    "contacts_accountable_manager_title": {"type": ["string", "null"]},
+                    "contacts_accountable_manager_email": {"type": ["string", "null"]},
+                    "contacts_accountable_manager_phone": {"type": ["string", "null"]},
+                    "contacts_corsia_focal_name": {"type": ["string", "null"]},
+                    "contacts_corsia_focal_title": {"type": ["string", "null"]},
+                    "contacts_corsia_focal_email": {"type": ["string", "null"]},
+                    "contacts_corsia_focal_phone": {"type": ["string", "null"]},
+                    "reporting_year": {"type": ["string", "null"]},
+                    "coverage": {"type": ["string", "null"]},
+                    "aggregation_level": {"type": ["string", "null"]},
+                    "aircraft_types_and_counts": {"type": ["string", "null"]},
+                    "fuel_types": {"type": ["string", "null"]},
+                    "fuel_suppliers": {"type": ["string", "null"]},
+                    "monitoring_methods_method_a": {"type": ["string", "null"]},
+                    "monitoring_methods_method_b": {"type": ["string", "null"]},
+                    "monitoring_methods_block_off_on": {"type": ["string", "null"]},
+                    "monitoring_methods_fuel_uplift": {"type": ["string", "null"]},
+                    "monitoring_methods_fuel_allocation_block_hour": {"type": ["string", "null"]},
+                    "monitoring_methods_periods": {"type": ["string", "null"]},
+                    "monitoring_methods_primary_data_sources": {"type": ["string", "null"]},
+                    "fuel_density_values_and_sources": {"type": ["string", "null"]},
+                    "cert_usage": {"type": ["string", "null"]},
+                    "cert_inputs": {"type": ["string", "null"]},
+                    "emission_factors": {"type": ["string", "null"]},
+                    "data_flow": {"type": ["string", "null"]},
+                    "controls": {"type": ["string", "null"]},
+                    "error_handling": {"type": ["string", "null"]},
+                    "change_control": {"type": ["string", "null"]},
+                    "responsible_teams_roles": {"type": ["string", "null"]},
+                    "records_storage_locations": {"type": ["string", "null"]},
+                    "retention_time": {"type": ["string", "null"]},
+                    "backup_archiving": {"type": ["string", "null"]},
+                    "reporting_state_pairs": {"type": ["string", "null"]},
+                    "major_aerodrome_pairs": {"type": ["string", "null"]},
+                    "exclusions_special_cases": {"type": ["string", "null"]},
+                    "data_gaps_occurred": {"type": ["string", "null"]},
+                    "data_gaps_percent_affected": {"type": ["string", "null"]},
+                    "data_gaps_replacement_methods": {"type": ["string", "null"]},
+                    "data_gaps_justification": {"type": ["string", "null"]},
+                    "emission_reductions_saf": {"type": ["string", "null"]},
+                    "saf_book_and_claim": {"type": ["string", "null"]},
+                    "documentation_required": {"type": ["string", "null"]},
+                    "key_missing_items": {
+                        "type": "array",
+                        "items": {"type": "string"}
+                    },
+                    "provenance_index": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id": {"type": "string"},
+                                "location": {"type": "string"},
+                                "excerpt": {"type": "string"}
+                            },
+                            "required": ["id", "location"],
+                            "additionalProperties": False
+                        }
+                    },
+                    "missing_fields": {
+                        "type": "array",
+                        "items": {"type": "string"}
+                    }
+                },
+                "required": ["metadata", "missing_fields"],
+                "additionalProperties": True
+            },
+            "strict": True
+        }
 
     def _process_extracted_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Attach extraction metadata and ensure minimal structure without enforcing rigid keys."""

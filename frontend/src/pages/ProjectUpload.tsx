@@ -63,6 +63,43 @@ const ProjectUpload: React.FC = () => {
     checkStatus();
   }, [projectId, navigate]);
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+  // TEMP: For testing, skip the Monitoring Plan step entirely
+  // NOTE: Remove this effect to re-enable the Monitoring Plan step
+  useEffect(() => {
+    if (currentStep === 'monitoring_plan') {
+      goToStep('parameters');
+    }
+  }, [currentStep, goToStep]);
+
+  // REMOVE THIS SECTION AFTER TESTING
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
   const handleSchemeSelect = async (scheme: SchemeType, airlineSize: AirlineSize) => {
     if (!projectId) return;
     await setScheme(projectId, scheme, airlineSize);
@@ -262,17 +299,47 @@ const ProjectUpload: React.FC = () => {
             </div>
           )}
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+          {/* TEMP: Monitoring Plan upload is disabled for testing. */}
           {currentStep === 'monitoring_plan' && (
-            <div className="bg-white rounded-2xl p-8 shadow-card">
-              <MonitoringPlanUpload
-                projectId={projectId!}
-                onUpload={handleMonitoringPlanUpload}
-                extractedData={monitoringPlanData}
-                onBack={() => goToStep('scheme')}
-                onComplete={() => goToStep('parameters')}
-              />
-            </div>
+            // TEMP: Monitoring Plan upload is disabled for testing.
+            // To re-enable, uncomment the block below.
+            // <div className="bg-white rounded-2xl p-8 shadow-card">
+            //   <MonitoringPlanUpload
+            //     projectId={projectId!}
+            //     onUpload={handleMonitoringPlanUpload}
+            //     extractedData={monitoringPlanData}
+            //     onBack={() => goToStep('scheme')}
+            //     onComplete={() => goToStep('parameters')}
+            //   />
+            // </div>
+            null
           )}
+
+
+
+
+
+
+
+
+
+
+
+
+
 
           {currentStep === 'parameters' && (
             <div className="bg-white rounded-2xl p-8 shadow-card space-y-8">
@@ -329,7 +396,8 @@ const ProjectUpload: React.FC = () => {
               {/* Navigation Buttons */}
               <div className="flex justify-between pt-6 border-t border-gray-200">
                 <button
-                  onClick={() => goToStep('monitoring_plan')}
+                  // TEMP: Monitoring Plan step skipped for testing; go back to Scheme instead
+                  onClick={() => goToStep('scheme')}
                   className="px-6 py-2 border-2 border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition"
                 >
                   ← Back to Monitoring Plan

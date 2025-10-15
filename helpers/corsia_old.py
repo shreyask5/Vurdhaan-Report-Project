@@ -3,7 +3,6 @@ import openpyxl
 from openpyxl.utils.cell import get_column_letter
 import os
 import time
-from helpers.config import get_corsia_states
 
 def process_and_insert_to_excel(main_csv_path):
     print("Starting data processing...")
@@ -19,9 +18,30 @@ def process_and_insert_to_excel(main_csv_path):
     # Check if the dataframe has the required columns
     if all(col in data_df.columns for col in required_summary_cols):
         processed_df = data_df.copy()
-
-        # Get CORSIA states list for 2024 from config
-        corsiaStates = get_corsia_states(2024)
+        
+        # Define CORSIA states list for 2024
+        corsiaStates = [
+            "Afghanistan", "Albania", "Antigua and Barbuda", "Armenia", "Australia", "Austria", "Azerbaijan",
+            "Bahamas", "Bahrain", "Barbados", "Belgium", "Belize", "Benin", "Bosnia and Herzegovina",
+            "Botswana", "Bulgaria", "Burkina Faso", "Cambodia", "Cameroon", "Canada", "Cook Islands",
+            "Costa Rica", "Côte d'Ivoire", "Croatia", "Cuba", "Cyprus", "Czechia", 
+            "Democratic Republic of the Congo", "Denmark", "Dominican Republic", "Ecuador", 
+            "El Salvador", "Equatorial Guinea", "Estonia", "Finland", "France", "Gabon", "Gambia",
+            "Georgia", "Germany", "Ghana", "Greece", "Grenada", "Guatemala", "Guyana", "Haiti", 
+            "Honduras", "Hungary", "Iceland", "Indonesia", "Iraq", "Ireland", "Israel", "Italy", 
+            "Jamaica", "Japan", "Kazakhstan", "Kenya", "Kiribati", "Kuwait", "Latvia", "Lithuania", 
+            "Luxembourg", "Madagascar", "Malawi", "Malaysia", "Maldives", "Mali", "Malta", 
+            "Marshall Islands", "Mauritius", "Mexico", "Micronesia (Federated States of)", "Monaco", 
+            "Montenegro", "Namibia", "Nauru", "Netherlands", "New Zealand", "Nigeria", "North Macedonia", 
+            "Norway", "Oman", "Palau", "Papua New Guinea", "Philippines", "Poland", "Portugal", 
+            "Qatar", "Republic of Korea", "Republic of Moldova", "Romania", "Rwanda", "Saint Kitts and Nevis", 
+            "Saint Vincent and the Grenadines", "Samoa", "San Marino", "Saudi Arabia", "Serbia", 
+            "Seychelles", "Sierra Leone", "Singapore", "Slovakia", "Slovenia", "Solomon Islands", 
+            "South Sudan", "Spain", "Suriname", "Sweden", "Switzerland", "Thailand", "Timor-Leste", 
+            "Tonga", "Trinidad and Tobago", "Türkiye", "Tuvalu", "Uganda", "Ukraine", "United Arab Emirates", 
+            "United Kingdom", "United Republic of Tanzania", "United States", "Uruguay", "Vanuatu", 
+            "Zambia", "Zimbabwe"
+        ]
         
         print("Filtering international flights...")
         # Filter for international flights only
@@ -281,56 +301,31 @@ def insert_icao_data(wb, icao_grouped):
         print(f"Error in insert_icao_data: {str(e)}")
 
 
-def filter_reportable_flights(df, flight_starts_with):
-    """
-    Filter out flights that are not reportable based on flight prefix criteria.
-
-    This function removes flights that don't match the specified flight prefix,
-    ensuring only reportable flights are included in the final dataset.
-
-    Parameters:
-    - df (DataFrame): Input dataframe containing flight data
-    - flight_starts_with (str): Flight prefix filter (e.g., "ABC" for flights starting with "ABC")
-
-    Returns:
-    - DataFrame: Filtered dataframe containing only reportable flights
-    """
-    print("Filtering reportable flights...")
-
-    # Make a copy to avoid modifying the original
-    filtered_df = df.copy()
-
-    # Track rows to delete
-    rows_to_delete = []
-
-    # Flight validation
-    if 'Flight' in filtered_df.columns and flight_starts_with:
-        print(f"Validating flight numbers against prefix: {flight_starts_with}")
-        for idx, row in filtered_df.iterrows():
-            if not pd.isna(row['Flight']):
-                flight_str = str(row['Flight'])
-                if not flight_str.startswith(flight_starts_with):
-                    # Mark for deletion
-                    if idx not in rows_to_delete:
-                        rows_to_delete.append(idx)
-
-    # Remove rows that don't match flight prefix criteria
-    if rows_to_delete:
-        print(f"Removing {len(rows_to_delete)} rows that don't match flight prefix criteria")
-        filtered_df = filtered_df.drop(rows_to_delete)
-        # Reset index to maintain sequential indices
-        filtered_df = filtered_df.reset_index(drop=True)
-    else:
-        print("All flights match the reportable criteria")
-
-    print(f"Reportable flights: {len(filtered_df)} rows")
-    return filtered_df
 
 
 def build_report(output_path,flight_starts_with):
     # Now load the processed file to add the Block fuel calculation and create summaries
     try:
         processed_df = pd.read_csv(output_path, encoding='utf-8')
+
+
+        rows_to_delete = [] # Rows that are needed to be deleted
+
+        # 6. FLIGHT VALIDATION
+        print("Validating flight numbers...")
+        if 'Flight' in processed_df.columns:
+            for idx, row in processed_df.iterrows():
+                if not pd.isna(row['Flight']):
+                    flight_str = str(row['Flight'])
+                    if flight_starts_with and not flight_str.startswith(flight_starts_with):
+                        # Mark for deletion instead of error
+                        if idx not in rows_to_delete:
+                            rows_to_delete.append(idx)
+
+        # Process the dataframe: remove rows marked for deletion
+        if rows_to_delete:
+            print(f"Removing {len(rows_to_delete)} rows that don't match flight prefix criteria")
+            processed_df = processed_df.drop(rows_to_delete)
 
         # Now add Block fuel calculation on the processed data
         if "Block off Fuel" in processed_df.columns and "Block on Fuel" in processed_df.columns:
