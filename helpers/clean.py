@@ -753,15 +753,6 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
 
 
 
-    # FILTER REPORTABLE FLIGHTS
-    # Apply flight prefix filtering to remove non-reportable flights
-    # This must be done before other validations to ensure only reportable flights are checked
-    if flight_starts_with:
-        result_df = filter_reportable_flights(result_df, flight_starts_with)
-        # Reset index after filtering to maintain sequential indices
-        result_df = result_df.reset_index(drop=True)
-
-
     # 1. CHECK FOR MISSING COLUMNS
     # Check if all required columns exist in the dataframe
     missing_columns = [col for col in all_required_columns if col not in result_df.columns]
@@ -783,14 +774,23 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
         # Return False to indicate the file is incomplete, and empty string for file path
         output_file_json = generate_error_report(result_df, folder_path)
         return False, "",result_df, output_file_json
-    
+
     # Sort the dataframe by Date, A/C Registration, and ATD
     result_df['Date'] = pd.to_datetime(result_df['Date'], dayfirst=True, errors='coerce')
     result_df.sort_values(by=['A/C Registration', 'Date', 'ATD (UTC) Block Off'], inplace=True)
-    
+
     # Reset index after sorting but keep original indices for error tracking
     result_df = result_df.reset_index(drop=False)
     # Now 'index' column contains original row numbers, and the new index is 0,1,2...
+
+    # FILTER REPORTABLE FLIGHTS
+    # Apply flight prefix filtering to remove non-reportable flights
+    # This is done after sorting and index creation but before other validations
+    if flight_starts_with:
+        result_df = filter_reportable_flights(result_df, flight_starts_with)
+        # filter_reportable_flights preserves the 'index' column for error tracking
+        # We just need to reset the pandas index (0,1,2...) after dropping rows
+        result_df = result_df.reset_index(drop=True)
     
     # 2. CENTRALIZED CHECK FOR MISSING VALUES IN ALL CELLS
     # This is a centralized check for all required columns

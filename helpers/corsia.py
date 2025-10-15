@@ -289,11 +289,11 @@ def filter_reportable_flights(df, flight_starts_with):
     ensuring only reportable flights are included in the final dataset.
 
     Parameters:
-    - df (DataFrame): Input dataframe containing flight data
+    - df (DataFrame): Input dataframe containing flight data (with 'index' column from reset_index)
     - flight_starts_with (str): Flight prefix filter (e.g., "ABC" for flights starting with "ABC")
 
     Returns:
-    - DataFrame: Filtered dataframe containing only reportable flights
+    - DataFrame: Filtered dataframe containing only reportable flights (preserves 'index' column)
     """
     print("Filtering reportable flights...")
 
@@ -303,12 +303,18 @@ def filter_reportable_flights(df, flight_starts_with):
     # Track rows to delete
     rows_to_delete = []
 
-    # Flight validation
-    if 'Flight' in filtered_df.columns and flight_starts_with:
+    # Flight validation - check both 'Flight No' and 'Flight' column names
+    flight_column = None
+    if 'Flight No' in filtered_df.columns:
+        flight_column = 'Flight No'
+    elif 'Flight' in filtered_df.columns:
+        flight_column = 'Flight'
+
+    if flight_column and flight_starts_with:
         print(f"Validating flight numbers against prefix: {flight_starts_with}")
         for idx, row in filtered_df.iterrows():
-            if not pd.isna(row['Flight']):
-                flight_str = str(row['Flight'])
+            if not pd.isna(row[flight_column]):
+                flight_str = str(row[flight_column])
                 if not flight_str.startswith(flight_starts_with):
                     # Mark for deletion
                     if idx not in rows_to_delete:
@@ -318,8 +324,7 @@ def filter_reportable_flights(df, flight_starts_with):
     if rows_to_delete:
         print(f"Removing {len(rows_to_delete)} rows that don't match flight prefix criteria")
         filtered_df = filtered_df.drop(rows_to_delete)
-        # Reset index to maintain sequential indices
-        filtered_df = filtered_df.reset_index(drop=True)
+        # DON'T reset index here - preserve the 'index' column for error tracking
     else:
         print("All flights match the reportable criteria")
 
