@@ -644,115 +644,6 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
     # Combine required columns
     all_required_columns = required_columns + required_fuel_columns
 
-
-
-    
-    """
-    Checks if the flight sequence for each aircraft is valid:
-    Destination ICAO of one flight should match Origin ICAO of next flight.
-    Ignores rows with date or time errors for sequence validation.
-    
-    Parameters:
-    - result_df: DataFrame with flight data
-    - mark_error: Function to mark errors in the error tracker
-    """
-    print("Checking flight sequence...")
-    
-    # Collect row indices that have Date or Time errors (to exclude from sequence validation)
-    date_time_error_rows = set()
-    
-    # Get Date error rows
-    for error in error_tracker.get("Date", []):
-        if error["row_idx"] is not None:
-            date_time_error_rows.add(int(error["row_idx"]))
-    
-    # Get Time error rows
-    for error in error_tracker.get("Time", []):
-        if error["row_idx"] is not None:
-            date_time_error_rows.add(int(error["row_idx"]))
-    
-    print(f"Excluding {len(date_time_error_rows)} rows with date/time errors from sequence validation")
-
-    # Group by aircraft registration
-    for ac_reg, group in result_df.groupby('A/C Registration'):
-        # Note: group already has 'index' column with original indices from earlier reset_index()
-        
-        # Filter out rows with date/time errors for sequence validation
-        # Keep track of original positions for error marking
-        valid_flights = []
-        original_positions = []
-        
-        for i, (pandas_idx, row) in enumerate(group.iterrows()):
-            original_idx = int(row['index'])
-            if original_idx not in date_time_error_rows:
-                valid_flights.append(row)
-                original_positions.append(i)  # Store original position in the group
-        
-        # Skip sequence validation if less than 2 valid flights
-        if len(valid_flights) < 2:
-            continue
-        
-        # Iterate through valid flights in sequence (excluding the last one)
-        for i in range(len(valid_flights) - 1):
-            current_flight = valid_flights[i]
-            next_flight = valid_flights[i + 1]
-            
-            # Get original dataframe indices for these rows (ensure they're integers)
-            current_idx = int(current_flight['index'])
-            next_idx = int(next_flight['index'])
-            
-            # Check if Destination ICAO of current flight matches Origin ICAO of next flight
-            if current_flight['Destination ICAO'] != next_flight['Origin ICAO']:
-                # Get sequence break details
-                dest_icao = current_flight['Destination ICAO']
-                next_origin_icao = next_flight['Origin ICAO']
-                
-                # Create error message
-                error_msg = f"{ac_reg}: Sequence Failed for Destination ICAO: {dest_icao} to Origin ICAO: {next_origin_icao}"
-                
-                # Mark error for flight before the current flight (if exists)
-                if i > 0:
-                    prev_flight = valid_flights[i - 1]
-                    prev_idx = int(prev_flight['index'])
-                    mark_error(
-                        f"{ac_reg} : {dest_icao} → {next_origin_icao}",
-                        error_msg,
-                        prev_idx,
-                        "Sequence",
-                        ["Origin ICAO", "Destination ICAO"]
-                    )
-
-                # Mark errors for current flight and next flight
-                mark_error(
-                    f"{ac_reg} : {dest_icao} → {next_origin_icao}",
-                    error_msg,
-                    current_idx,
-                    "Sequence",
-                    ["Origin ICAO", "Destination ICAO"]
-                )
-                
-                mark_error(
-                    f"{ac_reg} : {dest_icao} → {next_origin_icao}",
-                    error_msg,
-                    next_idx,
-                    "Sequence",
-                    ["Origin ICAO", "Destination ICAO"]
-                )
-                 
-                # Mark error for flight after the next flight (if exists)
-                if i + 2 < len(valid_flights):
-                    after_next_flight = valid_flights[i + 2]
-                    after_next_idx = int(after_next_flight['index'])
-                    mark_error(
-                        f"{ac_reg} : {dest_icao} → {next_origin_icao}",
-                        error_msg,
-                        after_next_idx,
-                        "Sequence",
-                        ["Origin ICAO", "Destination ICAO"]
-                    )
-
-
-
     # 1. CHECK FOR MISSING COLUMNS
     # Check if all required columns exist in the dataframe
     missing_columns = [col for col in all_required_columns if col not in result_df.columns]
@@ -783,16 +674,115 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
     result_df = result_df.reset_index(drop=False)
     # Now 'index' column contains original row numbers, and the new index is 0,1,2...
 
-    # FILTER REPORTABLE FLIGHTS
+    # 2. FLIGHT SEQUENCE VALIDATION
+    # Checks if the flight sequence for each aircraft is valid:
+    # Destination ICAO of one flight should match Origin ICAO of next flight.
+    # Ignores rows with date or time errors for sequence validation.
+    print("Checking flight sequence...")
+
+    # Collect row indices that have Date or Time errors (to exclude from sequence validation)
+    date_time_error_rows = set()
+
+    # Get Date error rows
+    for error in error_tracker.get("Date", []):
+        if error["row_idx"] is not None:
+            date_time_error_rows.add(int(error["row_idx"]))
+
+    # Get Time error rows
+    for error in error_tracker.get("Time", []):
+        if error["row_idx"] is not None:
+            date_time_error_rows.add(int(error["row_idx"]))
+
+    print(f"Excluding {len(date_time_error_rows)} rows with date/time errors from sequence validation")
+
+    # Group by aircraft registration
+    for ac_reg, group in result_df.groupby('A/C Registration'):
+        # Note: group already has 'index' column with original indices from earlier reset_index()
+
+        # Filter out rows with date/time errors for sequence validation
+        # Keep track of original positions for error marking
+        valid_flights = []
+        original_positions = []
+
+        for i, (pandas_idx, row) in enumerate(group.iterrows()):
+            original_idx = int(row['index'])
+            if original_idx not in date_time_error_rows:
+                valid_flights.append(row)
+                original_positions.append(i)  # Store original position in the group
+
+        # Skip sequence validation if less than 2 valid flights
+        if len(valid_flights) < 2:
+            continue
+
+        # Iterate through valid flights in sequence (excluding the last one)
+        for i in range(len(valid_flights) - 1):
+            current_flight = valid_flights[i]
+            next_flight = valid_flights[i + 1]
+
+            # Get original dataframe indices for these rows (ensure they're integers)
+            current_idx = int(current_flight['index'])
+            next_idx = int(next_flight['index'])
+
+            # Check if Destination ICAO of current flight matches Origin ICAO of next flight
+            if current_flight['Destination ICAO'] != next_flight['Origin ICAO']:
+                # Get sequence break details
+                dest_icao = current_flight['Destination ICAO']
+                next_origin_icao = next_flight['Origin ICAO']
+
+                # Create error message
+                error_msg = f"{ac_reg}: Sequence Failed for Destination ICAO: {dest_icao} to Origin ICAO: {next_origin_icao}"
+
+                # Mark error for flight before the current flight (if exists)
+                if i > 0:
+                    prev_flight = valid_flights[i - 1]
+                    prev_idx = int(prev_flight['index'])
+                    mark_error(
+                        f"{ac_reg} : {dest_icao} → {next_origin_icao}",
+                        error_msg,
+                        prev_idx,
+                        "Sequence",
+                        ["Origin ICAO", "Destination ICAO"]
+                    )
+
+                # Mark errors for current flight and next flight
+                mark_error(
+                    f"{ac_reg} : {dest_icao} → {next_origin_icao}",
+                    error_msg,
+                    current_idx,
+                    "Sequence",
+                    ["Origin ICAO", "Destination ICAO"]
+                )
+
+                mark_error(
+                    f"{ac_reg} : {dest_icao} → {next_origin_icao}",
+                    error_msg,
+                    next_idx,
+                    "Sequence",
+                    ["Origin ICAO", "Destination ICAO"]
+                )
+
+                # Mark error for flight after the next flight (if exists)
+                if i + 2 < len(valid_flights):
+                    after_next_flight = valid_flights[i + 2]
+                    after_next_idx = int(after_next_flight['index'])
+                    mark_error(
+                        f"{ac_reg} : {dest_icao} → {next_origin_icao}",
+                        error_msg,
+                        after_next_idx,
+                        "Sequence",
+                        ["Origin ICAO", "Destination ICAO"]
+                    )
+
+    # 3. FILTER REPORTABLE FLIGHTS
     # Apply flight prefix filtering to remove non-reportable flights
-    # This is done after sorting and index creation but before other validations
+    # This is done after sorting, index creation, and sequence validation
     if flight_starts_with:
         result_df = filter_reportable_flights(result_df, flight_starts_with)
         # filter_reportable_flights preserves the 'index' column for error tracking
         # We just need to reset the pandas index (0,1,2...) after dropping rows
         result_df = result_df.reset_index(drop=True)
-    
-    # 2. CENTRALIZED CHECK FOR MISSING VALUES IN ALL CELLS
+
+    # 4. CENTRALIZED CHECK FOR MISSING VALUES IN ALL CELLS
     # This is a centralized check for all required columns
     print("Checking for missing cell values...")
     for idx, row in result_df.iterrows():
@@ -1152,18 +1142,7 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
                     elif converted_time != time_value:
                         # Update the time value in the dataframe if it was converted
                         result_df.at[idx, col] = converted_time
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
+
     # PRINT ERROR SUMMARY
     total_errors = sum(len(errors) for errors in error_tracker.values())
     print(f"\n📊 VALIDATION SUMMARY:")
