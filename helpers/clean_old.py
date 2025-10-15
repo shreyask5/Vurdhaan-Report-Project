@@ -588,7 +588,7 @@ def mark_error(cell_data, reason, row_idx=None, category="Missing", column=None)
             
     return f"Error: {cell_data} : {reason}"
 
-def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", flight_starts_with="", start_date=None, end_date=None, fuel_method="Block Off - Block On",scheme=None):
+def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", flight_starts_with="", start_date=None, end_date=None, fuel_method="Block Off - Block On"):
     """
     Validates and processes the CSV file, checking for all required columns and data quality.
 
@@ -601,7 +601,6 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
     - start_date: Minimum allowed date
     - end_date: Maximum allowed date
     - fuel_method: Fuel calculation method ('Block Off - Block On' or 'Method B')
-    - scheme
 
     Returns:
     - is_valid: Boolean indicating if the file is valid
