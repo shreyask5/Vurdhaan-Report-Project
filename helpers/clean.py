@@ -680,18 +680,126 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
     # Ignores rows with date or time errors for sequence validation.
     print("Checking flight sequence...")
 
-    # Collect row indices that have Date or Time errors (to exclude from sequence validation)
+    # Perform inline date/time validation (without marking errors)
+    # This is needed because sequence validation runs before the main date/time validation
     date_time_error_rows = set()
 
-    # Get Date error rows
-    for error in error_tracker.get("Date", []):
-        if error["row_idx"] is not None:
-            date_time_error_rows.add(int(error["row_idx"]))
-
-    # Get Time error rows
-    for error in error_tracker.get("Time", []):
-        if error["row_idx"] is not None:
-            date_time_error_rows.add(int(error["row_idx"]))
+    for idx, row in result_df.iterrows():
+        original_idx = int(row['index'])
+        has_error = False
+        
+        # Check Date
+        if 'Date' in result_df.columns and not pd.isna(row['Date']):
+            original_date = row['Date']
+            date_str = str(original_date)
+            date_obj = None
+            
+            try:
+                # Handle pandas Timestamp objects
+                if isinstance(original_date, pd.Timestamp):
+                    date_obj = original_date.to_pydatetime()
+                # Handle ISO format with timestamp (YYYY-MM-DD HH:MM:SS)
+                elif ' ' in date_str and len(date_str) > 10:
+                    if date_str[4] == '-' and date_str[7] == '-':  # Check if it's YYYY-MM-DD format
+                        iso_date_part = date_str.split(' ')[0]
+                        date_obj = datetime.strptime(iso_date_part, "%Y-%m-%d")
+                else:
+                    # For standard date formats
+                    if date_format == "DMY":
+                        # Try DD-MM-YYYY format
+                        try:
+                            date_obj = datetime.strptime(date_str, "%d-%m-%Y")
+                        except ValueError:
+                            # Try DD/MM/YYYY format
+                            try:
+                                date_obj = datetime.strptime(date_str, "%d/%m/%Y")
+                            except ValueError:
+                                # Try YYYY-MM-DD format (ISO)
+                                date_obj = datetime.strptime(date_str, "%Y-%m-%d")
+                    else:  # MDY format
+                        # Try MM-DD-YYYY format
+                        try:
+                            date_obj = datetime.strptime(date_str, "%m-%d-%Y")
+                        except ValueError:
+                            # Try MM/DD/YYYY format
+                            try:
+                                date_obj = datetime.strptime(date_str, "%m/%d/%Y")
+                            except ValueError:
+                                # Try YYYY-MM-DD format (ISO)
+                                date_obj = datetime.strptime(date_str, "%Y-%m-%d")
+                
+                # Check if date is within specified range
+                if start_date and end_date and not (start_date <= date_obj <= end_date):
+                    has_error = True
+                    
+            except (ValueError, TypeError):
+                # Invalid date format
+                has_error = True
+        
+        # Check Time columns
+        time_columns = ['ATD (UTC) Block Off', 'ATA (UTC) Block On']
+        for col in time_columns:
+            if col in result_df.columns and not pd.isna(row[col]):
+                time_value = row[col]
+                
+                try:
+                    # If already in HH:MM format
+                    if isinstance(time_value, str) and re.match(r'^([01]\d|2[0-3]):([0-5]\d)$', time_value):
+                        continue
+                    
+                    # If it's a datetime object
+                    if isinstance(time_value, (datetime, datetime.time)):
+                        continue
+                    
+                    # Try parsing various string formats
+                    if isinstance(time_value, str):
+                        # Try 12-hour format (e.g., "2:30 PM")
+                        try:
+                            datetime.strptime(time_value, '%I:%M %p')
+                            continue
+                        except ValueError:
+                            pass
+                        
+                        # Try other common formats
+                        formats = [
+                            '%H.%M',        # 14.30
+                            '%H,%M',        # 14,30
+                            '%H %M',        # 14 30
+                            '%H-%M',        # 14-30
+                            '%I:%M%p',      # 2:30PM (no space)
+                            '%I:%M %p',     # 2:30 PM
+                            '%I.%M%p',      # 2.30PM
+                            '%I.%M %p',     # 2.30 PM
+                            '%I%M%p',       # 230PM
+                            '%I %M %p',     # 2 30 PM
+                            '%H%M',         # 1430 (military time)
+                        ]
+                        
+                        valid_format = False
+                        for fmt in formats:
+                            try:
+                                datetime.strptime(time_value, fmt)
+                                valid_format = True
+                                break
+                            except ValueError:
+                                continue
+                        
+                        if not valid_format:
+                            # If it's just a number (assume military time without colon)
+                            if time_value.isdigit() and len(time_value) == 4:
+                                hours = int(time_value[:2])
+                                minutes = int(time_value[2:])
+                                if 0 <= hours <= 23 and 0 <= minutes <= 59:
+                                    continue
+                        
+                        # If we get here, no valid format was found
+                        has_error = True
+                
+                except Exception:
+                    has_error = True
+        
+        if has_error:
+            date_time_error_rows.add(original_idx)
 
     print(f"Excluding {len(date_time_error_rows)} rows with date/time errors from sequence validation")
 
@@ -1144,7 +1252,14 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
                         result_df.at[idx, col] = converted_time
 
     # PRINT ERROR SUMMARY
-    total_errors = sum(len(errors) for errors in error_tracker.values())
+    # Adjust sequence error count (divide by 4 since 4 rows marked per break)
+    sequence_error_count = len(error_tracker["Sequence"]) // 4
+    
+    total_errors = sum(
+        len(errors) if category != "Sequence" else sequence_error_count 
+        for category, errors in error_tracker.items()
+    )
+    
     print(f"\n📊 VALIDATION SUMMARY:")
     print(f"Found {total_errors} errors affecting {len(error_rows)} rows.")
     
@@ -1153,7 +1268,8 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
         print("\nErrors by category:")
         for category in error_categories:
             if error_tracker[category]:
-                print(f"  {category}: {len(error_tracker[category])} errors")
+                count = len(error_tracker[category]) if category != "Sequence" else sequence_error_count
+                print(f"  {category}: {count} errors")
     else:
         print("✅ No validation errors found - all data appears to be valid according to current rules.")
         print("\nValidation rules checked:")
@@ -1264,12 +1380,26 @@ def generate_error_report(result_df, output_path, auto_generate_csvs=True):
     reverse_field_map = {v: k for k, v in field_map.items()}
     
     # Initialize the error report structure (original format)
-    total_errors = sum(len(errors) for errors in error_tracker.values())
+    # Adjust sequence error count (divide by 4 since 4 rows marked per break)
+    sequence_error_count = len(error_tracker["Sequence"]) // 4
+    
+    total_errors = sum(
+        len(errors) if category != "Sequence" else sequence_error_count 
+        for category, errors in error_tracker.items()
+    )
+    
+    # Create categories summary with adjusted sequence count
+    categories_summary = {}
+    for category, errors in error_tracker.items():
+        if len(errors) > 0:
+            count = len(errors) if category != "Sequence" else sequence_error_count
+            categories_summary[category] = count
+    
     error_report = {
         "summary": {
             "total_errors": total_errors,
             "error_rows": len(error_rows),
-            "categories": {category: len(errors) for category, errors in error_tracker.items() if len(errors) > 0}
+            "categories": categories_summary
         },
         "rows_data": {},  # Central place to store row data
         "categories": []
