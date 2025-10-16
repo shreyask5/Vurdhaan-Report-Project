@@ -285,7 +285,20 @@ class OpenAIService:
                                     "required": ["lines", "city", "region", "postal_code", "country"],
                                 "additionalProperties": False
                             },
-                            "contacts": {"type": "array", "items": {"type": "object"}},
+                            "contacts": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "name": {"type": ["string", "null"]},
+                                        "role": {"type": ["string", "null"]},
+                                        "email": {"type": ["string", "null"]},
+                                        "phone": {"type": ["string", "null"]}
+                                    },
+                                    "required": [],
+                                    "additionalProperties": False
+                                }
+                            },
                             "aoc": {
                                 "type": "object",
                                 "properties": {
@@ -296,7 +309,18 @@ class OpenAIService:
                                         "type": "object",
                                         "properties": {
                                             "name": {"type": ["string", "null"]},
-                                            "address": {"type": "object"}
+                                            "address": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "lines": {"type": "array", "items": {"type": "string"}},
+                                                    "city": {"type": ["string", "null"]},
+                                                    "region": {"type": ["string", "null"]},
+                                                    "postal_code": {"type": ["string", "null"]},
+                                                    "country": {"type": ["string", "null"]}
+                                                },
+                                                "required": [],
+                                                "additionalProperties": False
+                                            }
                                         },
                                             "required": ["name", "address"],
                                         "additionalProperties": False
@@ -377,11 +401,36 @@ class OpenAIService:
                     "methods": {
                         "type": "object",
                         "properties": {
-                            "fuel_use_method_a": {"type": "object"},
-                            "method_b": {"type": "object"},
-                            "block_off_on": {"type": "object"},
-                            "fuel_uplift": {"type": "object"},
-                            "allocation_block_hour": {"type": "object"},
+                            "fuel_use_method_a": {
+                                "type": "object",
+                                "properties": {},
+                                "required": [],
+                                "additionalProperties": False
+                            },
+                            "method_b": {
+                                "type": "object",
+                                "properties": {},
+                                "required": [],
+                                "additionalProperties": False
+                            },
+                            "block_off_on": {
+                                "type": "object",
+                                "properties": {},
+                                "required": [],
+                                "additionalProperties": False
+                            },
+                            "fuel_uplift": {
+                                "type": "object",
+                                "properties": {},
+                                "required": [],
+                                "additionalProperties": False
+                            },
+                            "allocation_block_hour": {
+                                "type": "object",
+                                "properties": {},
+                                "required": [],
+                                "additionalProperties": False
+                            },
                             "cert_usage": {
                                 "type": "object",
                                 "properties": {
