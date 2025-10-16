@@ -123,10 +123,10 @@ export default function EmailVerification() {
           <CardTitle className="text-2xl">Verify Your Email</CardTitle>
           <CardDescription className="text-base">
             We've sent a verification email to:
-            <div className="font-semibold text-foreground mt-2 break-all">
-              {firebaseUser.email}
-            </div>
           </CardDescription>
+          <div className="font-semibold text-foreground break-all">
+            {firebaseUser.email}
+          </div>
         </CardHeader>
 
         <CardContent className="space-y-6">

@@ -176,10 +176,11 @@ export function AuthModal({ open, onOpenChange, defaultTab = 'login' }: AuthModa
                 placeholder="you@example.com"
                 value={loginEmail}
                 onChange={(e) => setLoginEmail(e.target.value)}
+                autoComplete="email"
                 required
               />
             </div>
-            
+
             <div className="space-y-2">
               <Label htmlFor="login-password">Password</Label>
               <div className="relative">
@@ -189,6 +190,7 @@ export function AuthModal({ open, onOpenChange, defaultTab = 'login' }: AuthModa
                   placeholder="••••••••"
                   value={loginPassword}
                   onChange={(e) => setLoginPassword(e.target.value)}
+                  autoComplete="current-password"
                   required
                 />
                 <button
@@ -237,6 +239,7 @@ export function AuthModal({ open, onOpenChange, defaultTab = 'login' }: AuthModa
                 placeholder="John Doe"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
+                autoComplete="name"
                 required
               />
             </div>
@@ -251,13 +254,14 @@ export function AuthModal({ open, onOpenChange, defaultTab = 'login' }: AuthModa
                 placeholder="you@company.com"
                 value={signupEmail}
                 onChange={(e) => setSignupEmail(e.target.value)}
+                autoComplete="email"
                 required
               />
               <p className="text-xs text-muted-foreground">
                 Please use your work or business email address
               </p>
             </div>
-            
+
             <div className="space-y-2">
               <Label htmlFor="signup-password">Password</Label>
               <div className="relative">
@@ -267,6 +271,7 @@ export function AuthModal({ open, onOpenChange, defaultTab = 'login' }: AuthModa
                   placeholder="••••••••"
                   value={signupPassword}
                   onChange={(e) => setSignupPassword(e.target.value)}
+                  autoComplete="new-password"
                   required
                 />
                 <button
@@ -297,6 +302,7 @@ export function AuthModal({ open, onOpenChange, defaultTab = 'login' }: AuthModa
                   placeholder="••••••••"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
+                  autoComplete="new-password"
                   required
                 />
                 <button

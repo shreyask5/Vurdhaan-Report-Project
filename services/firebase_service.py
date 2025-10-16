@@ -291,6 +291,29 @@ class FirestoreService:
         doc = self.db.collection(self.users_collection).document(uid).get()
         return doc.to_dict() if doc.exists else None
 
+    def update_user(self, uid: str, updates: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Update user document with provided fields
+
+        Args:
+            uid: Firebase user ID
+            updates: Dictionary of fields to update
+
+        Returns:
+            Updated user data
+        """
+        # Add updated_at timestamp
+        updates['updated_at'] = datetime.now(timezone.utc)
+
+        # Update in Firestore
+        user_ref = self.db.collection(self.users_collection).document(uid)
+        user_ref.update(updates)
+
+        # Return updated document
+        updated_doc = user_ref.get()
+        print(f"✅ Updated user profile: {uid}")
+        return updated_doc.to_dict() if updated_doc.exists else None
+
     def increment_user_project_count(self, uid: str) -> None:
         """
         Increment user's project count
