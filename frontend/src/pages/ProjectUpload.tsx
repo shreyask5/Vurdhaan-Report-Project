@@ -77,15 +77,7 @@ const ProjectUpload: React.FC = () => {
 
 
 
-  // TEMP: For testing, skip the Monitoring Plan step entirely
-  // NOTE: Remove this effect to re-enable the Monitoring Plan step
-  useEffect(() => {
-    if (currentStep === 'monitoring_plan') {
-      goToStep('parameters');
-    }
-  }, [currentStep, goToStep]);
 
-  // REMOVE THIS SECTION AFTER TESTING
 
 
 
@@ -268,20 +260,17 @@ const ProjectUpload: React.FC = () => {
 
 
 
-          {/* TEMP: Monitoring Plan upload is disabled for testing. */}
+
           {currentStep === 'monitoring_plan' && (
-            // TEMP: Monitoring Plan upload is disabled for testing.
-            // To re-enable, uncomment the block below.
-            // <div className="bg-white rounded-2xl p-8 shadow-card">
-            //   <MonitoringPlanUpload
-            //     projectId={projectId!}
-            //     onUpload={handleMonitoringPlanUpload}
-            //     extractedData={monitoringPlanData}
-            //     onBack={() => goToStep('scheme')}
-            //     onComplete={() => goToStep('parameters')}
-            //   />
-            // </div>
-            null
+            <div className="bg-white rounded-2xl p-8 shadow-card">
+               <MonitoringPlanUpload
+                 projectId={projectId!}
+                 onUpload={handleMonitoringPlanUpload}
+                 extractedData={monitoringPlanData}
+                 onBack={() => goToStep('scheme')}
+                 onComplete={() => goToStep('parameters')}
+               />
+            </div>
           )}
 
 
