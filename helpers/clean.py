@@ -450,28 +450,105 @@ def extract_airport_data(icao_code):
         return {"error": f"An unexpected error occurred: {str(e)}","icao_code":icao_code}
 
 
+def safe_load_invalid_icao_codes(filepath):
+    """
+    Safely load invalid ICAO codes from JSON file with proper error handling.
+    Handles empty files, corrupted JSON, and race conditions.
+
+    Args:
+        filepath (str): Path to the invalid_icao_codes.json file
+
+    Returns:
+        set: Set of invalid ICAO codes (empty set if file doesn't exist or is invalid)
+    """
+    if not os.path.exists(filepath):
+        return set()
+
+    try:
+        # Check if file is empty (prevents JSON parse error on empty files)
+        if os.path.getsize(filepath) == 0:
+            # File is empty - initialize it with empty array
+            try:
+                with open(filepath, 'w', encoding='utf-8') as f:
+                    json.dump([], f, indent=2)
+            except Exception:
+                pass  # Ignore write errors during initialization
+            return set()
+
+        # File exists and has content - try to load it
+        with open(filepath, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            return set(data) if isinstance(data, list) else set()
+
+    except json.JSONDecodeError as e:
+        # JSON is corrupted - reinitialize the file
+        print(f"Warning: {filepath} is corrupted (JSON decode error: {e}). Reinitializing...")
+        try:
+            with open(filepath, 'w', encoding='utf-8') as f:
+                json.dump([], f, indent=2)
+        except Exception:
+            pass  # Ignore write errors during reinitialization
+        return set()
+
+    except Exception as e:
+        # Other errors (permissions, IO errors, etc.)
+        print(f"Warning: Could not read {filepath}: {e}")
+        return set()
+
+
+def safe_write_invalid_icao_codes(filepath, icao_codes_set):
+    """
+    Safely write invalid ICAO codes to JSON file using atomic write operation.
+    Writes to a temporary file first, then atomically renames to prevent race conditions.
+
+    Args:
+        filepath (str): Path to the invalid_icao_codes.json file
+        icao_codes_set (set): Set of invalid ICAO codes to write
+
+    Returns:
+        bool: True if write was successful, False otherwise
+    """
+    try:
+        # Convert set to sorted list for consistent JSON format
+        icao_codes_list = sorted(list(icao_codes_set))
+
+        # Write to temporary file first
+        temp_filepath = filepath + '.tmp'
+        with open(temp_filepath, 'w', encoding='utf-8') as f:
+            json.dump(icao_codes_list, f, indent=2)
+
+        # Atomically replace the original file (readers will never see empty file)
+        # On Windows, os.replace() atomically replaces the file
+        os.replace(temp_filepath, filepath)
+        return True
+
+    except Exception as e:
+        print(f"Error writing to {filepath}: {e}")
+        # Clean up temp file if it exists
+        try:
+            if os.path.exists(temp_filepath):
+                os.remove(temp_filepath)
+        except Exception:
+            pass
+        return False
+
+
 def validate_and_correct_icao(icao_code,icao_country_dict):
     """
     Validate and correct an ICAO code
-    
+
     Args:
         icao_code (str): The ICAO code to validate
-        
+
     Returns:
         tuple: (is_valid, country_name)
     """
     if not icao_code or pd.isna(icao_code):
         return False, None
-    
+
     # Check if the ICAO code is in the invalid_icao_codes.json file
     invalid_icao_file = "invalid_icao_codes.json"
-    invalid_icao_codes = set()
-    if os.path.exists(invalid_icao_file):
-        try:
-            with open(invalid_icao_file, 'r', encoding='utf-8') as f:
-                invalid_icao_codes = set(json.load(f))
-        except Exception:
-            invalid_icao_codes = set()
+    invalid_icao_codes = safe_load_invalid_icao_codes(invalid_icao_file)
     
     if icao_code in invalid_icao_codes:
         return False, None
@@ -483,27 +560,24 @@ def validate_and_correct_icao(icao_code,icao_country_dict):
     # If not in reference, try to get it from online source
     airport_data = extract_airport_data(icao_code)
     if "error" in airport_data:
-        # Add the invalid ICAO code to the file
-        try:
-            # Always reload to avoid race conditions
-            if os.path.exists(invalid_icao_file):
-                with open(invalid_icao_file, 'r', encoding='utf-8') as f:
-                    invalid_icao_codes = set(json.load(f))
-            else:
-                invalid_icao_codes = set()
-            # Append the code if not already present
-            if "icao_code" in airport_data:
-                code_to_add = airport_data["icao_code"]
-            elif "icao" in airport_data:
-                code_to_add = airport_data["icao"]
-            else:
-                code_to_add = icao_code
-            if code_to_add not in invalid_icao_codes:
-                invalid_icao_codes.add(code_to_add)
-                with open(invalid_icao_file, 'w', encoding='utf-8') as f:
-                    json.dump(sorted(list(invalid_icao_codes)), f, indent=2)
-        except Exception as e:
-            print(f"Error updating invalid_icao_codes.json: {e}")
+        # Add the invalid ICAO code to the file using atomic write
+        # Reload to get the latest data (handles concurrent access)
+        invalid_icao_codes = safe_load_invalid_icao_codes(invalid_icao_file)
+
+        # Determine which code to add
+        if "icao_code" in airport_data:
+            code_to_add = airport_data["icao_code"]
+        elif "icao" in airport_data:
+            code_to_add = airport_data["icao"]
+        else:
+            code_to_add = icao_code
+
+        # Add the code if not already present
+        if code_to_add not in invalid_icao_codes:
+            invalid_icao_codes.add(code_to_add)
+            # Use atomic write to prevent race conditions
+            safe_write_invalid_icao_codes(invalid_icao_file, invalid_icao_codes)
+
         return False, None
     
     if "error" not in airport_data and "country" in airport_data:
@@ -902,6 +976,14 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
         
         if has_error:
             date_time_error_rows.add(original_idx)
+            # Debug: summarize excluded row details for sequence pre-filtering
+            try:
+                date_val = row['Date'] if 'Date' in result_df.columns else None
+                atd_val = row['ATD (UTC) Block Off'] if 'ATD (UTC) Block Off' in result_df.columns else None
+                ata_val = row['ATA (UTC) Block On'] if 'ATA (UTC) Block On' in result_df.columns else None
+                print(f"[SEQ PREFILTER] Excluding row {original_idx} | Date='{date_val}' | ATD='{atd_val}' | ATA='{ata_val}'")
+            except Exception as e:
+                print(f"[SEQ PREFILTER] Excluding row {original_idx} | (error printing values: {e})")
 
     print(f"Excluding {len(date_time_error_rows)} rows with date/time errors from sequence validation")
     if len(date_time_error_rows) > 0:
