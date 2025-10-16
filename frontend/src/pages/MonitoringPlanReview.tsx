@@ -3,6 +3,14 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { MonitoringPlanEditor } from '../components/project/MonitoringPlanEditor';
 import { projectsApi } from '../services/api';
 
+// Ensure timestamps are interpreted as UTC (GMT) when timezone is missing
+const parseUtcMs = (isoString: string | null): number => {
+  if (!isoString) return Date.now();
+  const hasTimezone = /([zZ]|[+-]\d{2}:\d{2})$/.test(isoString);
+  const normalized = hasTimezone ? isoString : `${isoString}Z`;
+  return new Date(normalized).getTime();
+};
+
 const MonitoringPlanReview: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
@@ -26,7 +34,7 @@ const MonitoringPlanReview: React.FC = () => {
         const result = await projectsApi.getMonitoringPlanStatus(projectId);
 
         setStatus(result.status);
-        setStartedAt(result.started_at || null);
+        setStartedAt(((result as any).started_at) || null);
 
         if (result.status === 'done' && result.extracted_data) {
           setMonitoringPlan(result.extracted_data);
@@ -60,8 +68,8 @@ const MonitoringPlanReview: React.FC = () => {
     if (!startedAt || status === 'done' || status === 'error') return;
 
     const updateProgress = () => {
-      const started = new Date(startedAt).getTime();
-      const now = Date.now();
+      const started = parseUtcMs(startedAt);
+      const now = Date.now(); // UTC-based epoch ms
       const elapsed = now - started;
       const tenMinutes = 10 * 60 * 1000; // 10 minutes in ms
 

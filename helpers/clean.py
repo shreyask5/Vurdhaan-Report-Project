@@ -1262,6 +1262,7 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
                             result_df.at[idx, 'Date'] = date_obj.strftime("%d-%m-%Y")
                         else:  # MDY format
                             result_df.at[idx, 'Date'] = date_obj.strftime("%m-%d-%Y")
+                        print(f"[DATE CHECK] Row {original_idx}: pandas Timestamp -> {result_df.at[idx, 'Date']}")
                         continue
                     
                     # Handle ISO format with timestamp (YYYY-MM-DD HH:MM:SS)
@@ -1276,6 +1277,7 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
                                 result_df.at[idx, 'Date'] = date_obj.strftime("%d-%m-%Y")
                             else:  # MDY format
                                 result_df.at[idx, 'Date'] = date_obj.strftime("%m-%d-%Y")
+                            print(f"[DATE CHECK] Row {original_idx}: ISO datetime '{date_str}' -> {result_df.at[idx, 'Date']}")
                             continue
                     
                     # For standard date formats from the original code
@@ -1283,36 +1285,44 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
                         # Try DD-MM-YYYY format
                         try:
                             date_obj = datetime.strptime(date_str, "%d-%m-%Y")
+                            print(f"[DATE CHECK] Row {original_idx}: parsed DMY '{date_str}'")
                         except ValueError:
                             # Try DD/MM/YYYY format
                             try:
                                 date_obj = datetime.strptime(date_str, "%d/%m/%Y")
+                                print(f"[DATE CHECK] Row {original_idx}: parsed D/M/Y '{date_str}'")
                             except ValueError:
                                 # Try YYYY-MM-DD format (ISO)
                                 date_obj = datetime.strptime(date_str, "%Y-%m-%d")
                                 # Convert to preferred format in the dataframe
                                 result_df.at[idx, 'Date'] = date_obj.strftime("%d-%m-%Y")
+                                print(f"[DATE CHECK] Row {original_idx}: ISO date '{date_str}' -> {result_df.at[idx, 'Date']}")
                     else:  # MDY format
                         # Try MM-DD-YYYY format
                         try:
                             date_obj = datetime.strptime(date_str, "%m-%d-%Y")
+                            print(f"[DATE CHECK] Row {original_idx}: parsed MDY '{date_str}'")
                         except ValueError:
                             # Try MM/DD/YYYY format
                             try:
                                 date_obj = datetime.strptime(date_str, "%m/%d/%Y")
+                                print(f"[DATE CHECK] Row {original_idx}: parsed M/D/Y '{date_str}'")
                             except ValueError:
                                 # Try YYYY-MM-DD format (ISO)
                                 date_obj = datetime.strptime(date_str, "%Y-%m-%d")
                                 # Convert to preferred format in the dataframe
                                 result_df.at[idx, 'Date'] = date_obj.strftime("%m-%d-%Y")
+                                print(f"[DATE CHECK] Row {original_idx}: ISO date '{date_str}' -> {result_df.at[idx, 'Date']}")
                     
                     # Check if date is within specified range
                     if start_date and end_date and not (start_date <= date_obj <= end_date):
                         mark_error(date_str, f"Date not within range {start_date.date()} to {end_date.date()}", original_idx, "Date", "Date")
+                        print(f"[DATE CHECK] Row {original_idx}: out of range '{date_str}'")
                         
                 except (ValueError, TypeError) as e:
                     # Invalid date format
                     mark_error(date_str, f"Invalid date format: {e}", original_idx, "Date", "Date")
+                    print(f"[DATE CHECK] Row {original_idx}: invalid date '{date_str}' -> {e}")
     
     
     
@@ -1332,7 +1342,7 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
                 return time_str, True, None
             
             # If it's a datetime object
-            if isinstance(time_str, (datetime, datetime.time)):
+            if isinstance(time_str, (datetime, time)):
                 formatted_time = time_str.strftime('%H:%M')
                 return formatted_time, True, None
             
