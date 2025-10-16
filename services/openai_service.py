@@ -102,7 +102,8 @@ class OpenAIService:
                 return self._extract_from_docx(file_path)
             if ext in ['txt', 'text']:
                 return self._extract_from_txt(file_path)
-                raise ValueError(f"Unsupported file format: {file_extension}")
+            # If we get here, the format is unsupported
+            raise ValueError(f"Unsupported file format: {file_extension}")
 
         except Exception as e:
             print(f"[OPENAI SERVICE ERROR] Content extraction failed: {str(e)}")
@@ -221,7 +222,7 @@ class OpenAIService:
             "Extract all relevant information from the CORSIA Emissions Monitoring Plan (EMP). "
             "Return a SINGLE JSON object. Do not include explanations. Rules: "
             "1) Only extract what is explicitly present in the source. 2) If a field is unknown, set null and add a string to missing_fields. \n\n"
-            "JSON shape (keys optional; include only if content exists or explicitly null):\n"
+            "JSON shape (include ALL keys; if unknown use null):\n"
             "{\n"
             "  \"metadata\": { \"document_name\": string, \"mime_type\": string, \"extracted_at\": string, \"generator_version\": string },\n"
             "  \"operator\": { \"name\": {\"value\": string|null, \"__meta\": {\"provenance\": string, \"confidence\": number}}, \"address\": {\"lines\": [string], \"city\": string|null, \"region\": string|null, \"postal_code\": string|null, \"country\": string|null}, \"contacts\": [object], \"aoc\": {\"code\": string|null, \"issued_at\": string|null, \"expires_at\": string|null, \"authority\": {\"name\": string|null, \"address\": object}, \"scope\": [string]} , \"group_structure\": {\"parent_subsidiary_single_entity\": boolean|null, \"subsidiaries\": [{\"name\": string, \"aircraft_identification_method\": string}] } },\n"
@@ -295,7 +296,7 @@ class OpenAIService:
                                         "email": {"type": ["string", "null"]},
                                         "phone": {"type": ["string", "null"]}
                                     },
-                                    "required": [],
+                                "required": ["name","role","email","phone"],
                                     "additionalProperties": False
                                 }
                             },
@@ -318,7 +319,7 @@ class OpenAIService:
                                                     "postal_code": {"type": ["string", "null"]},
                                                     "country": {"type": ["string", "null"]}
                                                 },
-                                                "required": [],
+                                            "required": ["lines","city","region","postal_code","country"],
                                                 "additionalProperties": False
                                             }
                                         },
