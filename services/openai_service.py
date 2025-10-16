@@ -250,7 +250,7 @@ class OpenAIService:
                             "extracted_at": {"type": "string"},
                             "generator_version": {"type": "string"}
                         },
-                        "required": ["extracted_at", "generator_version"],
+                        "required": ["document_name", "mime_type", "extracted_at", "generator_version"],
                         "additionalProperties": False
                     },
                     "operator": {

@@ -666,6 +666,56 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
         output_file_json = generate_error_report(result_df, folder_path)
         return False, "",result_df, output_file_json
 
+    # 2. ICAO CODE VALIDATION
+    print("Validating ICAO codes...")
+    required_icao_columns = ['Origin ICAO', 'Destination ICAO']
+    
+    # Check if reference CSV has the required columns
+    if 'ICAO_Code' not in ref_df.columns or 'ICAO Member State' not in ref_df.columns:
+        print("Warning: Reference CSV is missing required 'ICAO_Code' or 'ICAO Member State' columns.")
+        print("Available columns:", ref_df.columns.tolist())
+        # Create an empty dictionary as fallback
+        icao_country_dict = {}
+    else:
+        # Create a dictionary for faster lookup
+        icao_country_dict = dict(zip(ref_df['ICAO_Code'], ref_df['ICAO Member State']))
+    
+    # Track ICAO error row indices for filter_reportable_flights
+    icao_error_rows = set()
+    
+    # Validate ICAO codes
+    for idx, row in result_df.iterrows():
+        # Use original row index for error tracking
+        original_idx = row['index']
+        
+        # Check Origin ICAO
+        if 'Origin ICAO' in result_df.columns:
+            origin_icao = row['Origin ICAO']
+            if not pd.isna(origin_icao):
+                # Validate the ICAO code
+                is_valid, expected_country = validate_and_correct_icao(origin_icao,icao_country_dict)
+                
+                if not is_valid:
+                    mark_error(str(origin_icao), "Invalid Origin ICAO", original_idx, "ICAO", "Origin ICAO")
+                    icao_error_rows.add(original_idx)
+                elif origin_icao not in icao_country_dict:
+                    # Add the newly discovered valid ICAO code to the dictionary
+                    icao_country_dict[origin_icao] = expected_country
+        
+        # Check Destination ICAO
+        if 'Destination ICAO' in result_df.columns:
+            dest_icao = row['Destination ICAO']
+            if not pd.isna(dest_icao):
+                # Validate the ICAO code
+                is_valid, expected_country = validate_and_correct_icao(dest_icao,icao_country_dict)
+                
+                if not is_valid:
+                    mark_error(str(dest_icao), "Invalid Destination ICAO", original_idx, "ICAO", "Destination ICAO")
+                    icao_error_rows.add(original_idx)
+                elif dest_icao not in icao_country_dict:
+                    # Add the newly discovered valid ICAO code to the dictionary
+                    icao_country_dict[dest_icao] = expected_country
+
     # Sort the dataframe by Date, A/C Registration, and ATD
     result_df['Date'] = pd.to_datetime(result_df['Date'], dayfirst=True, errors='coerce')
     result_df.sort_values(by=['A/C Registration', 'Date', 'ATD (UTC) Block Off'], inplace=True)
@@ -674,69 +724,76 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
     result_df = result_df.reset_index(drop=False)
     # Now 'index' column contains original row numbers, and the new index is 0,1,2...
 
-    # 2. FLIGHT SEQUENCE VALIDATION
+    # 3. FLIGHT SEQUENCE VALIDATION
     # Checks if the flight sequence for each aircraft is valid:
     # Destination ICAO of one flight should match Origin ICAO of next flight.
     # Ignores rows with date or time errors for sequence validation.
     print("Checking flight sequence...")
 
-    # Perform inline date/time validation (without marking errors)
+    # Perform minimal inline date/time validation (without marking errors)
     # This is needed because sequence validation runs before the main date/time validation
+    # Only exclude rows with clearly malformed data, not legitimate flight scenarios
     date_time_error_rows = set()
 
     for idx, row in result_df.iterrows():
         original_idx = int(row['index'])
         has_error = False
         
-        # Check Date
+        # Check Date - only flag if completely unparseable
         if 'Date' in result_df.columns and not pd.isna(row['Date']):
             original_date = row['Date']
             date_str = str(original_date)
-            date_obj = None
             
             try:
                 # Handle pandas Timestamp objects
                 if isinstance(original_date, pd.Timestamp):
-                    date_obj = original_date.to_pydatetime()
+                    continue  # Valid timestamp
                 # Handle ISO format with timestamp (YYYY-MM-DD HH:MM:SS)
                 elif ' ' in date_str and len(date_str) > 10:
                     if date_str[4] == '-' and date_str[7] == '-':  # Check if it's YYYY-MM-DD format
-                        iso_date_part = date_str.split(' ')[0]
-                        date_obj = datetime.strptime(iso_date_part, "%Y-%m-%d")
+                        continue  # Valid ISO format
                 else:
-                    # For standard date formats
+                    # For standard date formats - try basic parsing
                     if date_format == "DMY":
                         # Try DD-MM-YYYY format
                         try:
-                            date_obj = datetime.strptime(date_str, "%d-%m-%Y")
+                            datetime.strptime(date_str, "%d-%m-%Y")
+                            continue
                         except ValueError:
                             # Try DD/MM/YYYY format
                             try:
-                                date_obj = datetime.strptime(date_str, "%d/%m/%Y")
+                                datetime.strptime(date_str, "%d/%m/%Y")
+                                continue
                             except ValueError:
                                 # Try YYYY-MM-DD format (ISO)
-                                date_obj = datetime.strptime(date_str, "%Y-%m-%d")
+                                try:
+                                    datetime.strptime(date_str, "%Y-%m-%d")
+                                    continue
+                                except ValueError:
+                                    has_error = True
                     else:  # MDY format
                         # Try MM-DD-YYYY format
                         try:
-                            date_obj = datetime.strptime(date_str, "%m-%d-%Y")
+                            datetime.strptime(date_str, "%m-%d-%Y")
+                            continue
                         except ValueError:
                             # Try MM/DD/YYYY format
                             try:
-                                date_obj = datetime.strptime(date_str, "%m/%d/%Y")
+                                datetime.strptime(date_str, "%m/%d/%Y")
+                                continue
                             except ValueError:
                                 # Try YYYY-MM-DD format (ISO)
-                                date_obj = datetime.strptime(date_str, "%Y-%m-%d")
-                
-                # Check if date is within specified range
-                if start_date and end_date and not (start_date <= date_obj <= end_date):
-                    has_error = True
+                                try:
+                                    datetime.strptime(date_str, "%Y-%m-%d")
+                                    continue
+                                except ValueError:
+                                    has_error = True
                     
             except (ValueError, TypeError):
-                # Invalid date format
+                # Only flag if completely unparseable
                 has_error = True
         
-        # Check Time columns
+        # Check Time columns - only flag if completely unparseable
         time_columns = ['ATD (UTC) Block Off', 'ATA (UTC) Block On']
         for col in time_columns:
             if col in result_df.columns and not pd.isna(row[col]):
@@ -792,16 +849,23 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
                                 if 0 <= hours <= 23 and 0 <= minutes <= 59:
                                     continue
                         
-                        # If we get here, no valid format was found
-                        has_error = True
+                        # Only flag if completely unparseable
+                        if not valid_format and not (time_value.isdigit() and len(time_value) == 4):
+                            has_error = True
                 
                 except Exception:
+                    # Only flag if completely unparseable
                     has_error = True
         
         if has_error:
             date_time_error_rows.add(original_idx)
 
     print(f"Excluding {len(date_time_error_rows)} rows with date/time errors from sequence validation")
+    if len(date_time_error_rows) > 0:
+        print(f"Total rows in dataset: {len(result_df)}")
+        print(f"Percentage excluded: {(len(date_time_error_rows) / len(result_df)) * 100:.1f}%")
+        if len(date_time_error_rows) < 20:  # Only show first few if not too many
+            print(f"Excluded row indices: {sorted(list(date_time_error_rows))[:10]}")
 
     # Group by aircraft registration
     for ac_reg, group in result_df.groupby('A/C Registration'):
@@ -881,16 +945,16 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
                         ["Origin ICAO", "Destination ICAO"]
                     )
 
-    # 3. FILTER REPORTABLE FLIGHTS
-    # Apply flight prefix filtering to remove non-reportable flights
+    # 4. FILTER REPORTABLE FLIGHTS
+    # Apply flight prefix filtering to remove non-reportable flights and domestic flights
     # This is done after sorting, index creation, and sequence validation
     if flight_starts_with:
-        result_df = filter_reportable_flights(result_df, flight_starts_with)
+        result_df = filter_reportable_flights(result_df, flight_starts_with, icao_error_rows)
         # filter_reportable_flights preserves the 'index' column for error tracking
         # We just need to reset the pandas index (0,1,2...) after dropping rows
         result_df = result_df.reset_index(drop=True)
 
-    # 4. CENTRALIZED CHECK FOR MISSING VALUES IN ALL CELLS
+    # 5. CENTRALIZED CHECK FOR MISSING VALUES IN ALL CELLS
     # This is a centralized check for all required columns
     print("Checking for missing cell values...")
     for idx, row in result_df.iterrows():
@@ -927,7 +991,7 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
     #                     "Fuel Type"
     #                 )
     
-    # 4. FUEL CHECKING (Method-specific validation)
+    # 6. FUEL CHECKING (Method-specific validation)
     print(f"Validating fuel data using method: {fuel_method}...")
 
     # Check each required fuel column for valid numeric values
@@ -1051,7 +1115,7 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
                 except (ValueError, TypeError):
                     pass
     
-    # 5. DATE VALIDATION
+    # 7. DATE VALIDATION
     print("Validating dates...")
     if 'Date' in result_df.columns:
         for idx, row in result_df.iterrows():
@@ -1126,50 +1190,6 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
                     mark_error(date_str, f"Invalid date format: {e}", original_idx, "Date", "Date")
     
     
-    # 7. ICAO CODE VALIDATION
-    print("Validating ICAO codes...")
-    required_icao_columns = ['Origin ICAO', 'Destination ICAO']
-    
-    # Check if reference CSV has the required columns
-    if 'ICAO_Code' not in ref_df.columns or 'ICAO Member State' not in ref_df.columns:
-        print("Warning: Reference CSV is missing required 'ICAO_Code' or 'ICAO Member State' columns.")
-        print("Available columns:", ref_df.columns.tolist())
-        # Create an empty dictionary as fallback
-        icao_country_dict = {}
-    else:
-        # Create a dictionary for faster lookup
-        icao_country_dict = dict(zip(ref_df['ICAO_Code'], ref_df['ICAO Member State']))
-    
-    # Validate ICAO codes
-    for idx, row in result_df.iterrows():
-        # Use original row index for error tracking
-        original_idx = row['index']
-        
-        # Check Origin ICAO
-        if 'Origin ICAO' in result_df.columns:
-            origin_icao = row['Origin ICAO']
-            if not pd.isna(origin_icao):
-                # Validate the ICAO code
-                is_valid, expected_country = validate_and_correct_icao(origin_icao,icao_country_dict)
-                
-                if not is_valid:
-                    mark_error(str(origin_icao), "Invalid Origin ICAO", original_idx, "ICAO", "Origin ICAO")
-                elif origin_icao not in icao_country_dict:
-                    # Add the newly discovered valid ICAO code to the dictionary
-                    icao_country_dict[origin_icao] = expected_country
-        
-        # Check Destination ICAO
-        if 'Destination ICAO' in result_df.columns:
-            dest_icao = row['Destination ICAO']
-            if not pd.isna(dest_icao):
-                # Validate the ICAO code
-                is_valid, expected_country = validate_and_correct_icao(dest_icao,icao_country_dict)
-                
-                if not is_valid:
-                    mark_error(str(dest_icao), "Invalid Destination ICAO", original_idx, "ICAO", "Destination ICAO")
-                elif dest_icao not in icao_country_dict:
-                    # Add the newly discovered valid ICAO code to the dictionary
-                    icao_country_dict[dest_icao] = expected_country
     
     # 8. TIME FORMAT VALIDATION
     print("Validating time formats...")

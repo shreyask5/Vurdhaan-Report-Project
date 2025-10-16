@@ -281,24 +281,54 @@ def insert_icao_data(wb, icao_grouped):
         print(f"Error in insert_icao_data: {str(e)}")
 
 
-def filter_reportable_flights(df, flight_starts_with):
+def filter_reportable_flights(df, flight_starts_with, icao_error_rows=None):
     """
-    Filter out flights that are not reportable based on flight prefix criteria.
+    Filter out flights that are not reportable based on flight prefix criteria and remove domestic flights.
 
-    This function removes flights that don't match the specified flight prefix,
-    ensuring only reportable flights are included in the final dataset.
+    This function removes flights that don't match the specified flight prefix and domestic flights,
+    ensuring only international reportable flights are included in the final dataset.
 
     Parameters:
     - df (DataFrame): Input dataframe containing flight data (with 'index' column from reset_index)
     - flight_starts_with (str): Flight prefix filter (e.g., "ABC" for flights starting with "ABC")
+    - icao_error_rows (set): Set of row indices with ICAO errors that should be preserved
 
     Returns:
-    - DataFrame: Filtered dataframe containing only reportable flights (preserves 'index' column)
+    - DataFrame: Filtered dataframe containing only international reportable flights (preserves 'index' column)
     """
     print("Filtering reportable flights...")
 
     # Make a copy to avoid modifying the original
     filtered_df = df.copy()
+
+    # Add Departure Country and Arriving Country using airports.csv
+    try:
+        # Load the airports.csv file
+        airports_df = pd.read_csv('airports.csv', encoding='utf-8')
+        
+        # Create a mapping dictionary from ICAO_Code to ICAO Member State
+        icao_to_country = dict(zip(airports_df['ICAO_Code'], airports_df['ICAO Member State']))
+        
+        # Map Origin ICAO to Departure Country
+        if 'Origin ICAO' in filtered_df.columns:
+            filtered_df['Departure Country'] = filtered_df['Origin ICAO'].map(icao_to_country)
+            print("Added 'Departure Country' column based on Origin ICAO mapping")
+        else:
+            print("Warning: 'Origin ICAO' column not found in processed data")
+        
+        # Map Destination ICAO to Arriving Country
+        if 'Destination ICAO' in filtered_df.columns:
+            filtered_df['Arriving Country'] = filtered_df['Destination ICAO'].map(icao_to_country)
+            print("Added 'Arriving Country' column based on Destination ICAO mapping")
+        else:
+            print("Warning: 'Destination ICAO' column not found in processed data")
+            
+    except FileNotFoundError:
+        print("Warning: airports.csv file not found. Cannot add country information.")
+    except KeyError as e:
+        print(f"Warning: Required column missing in airports.csv: {e}")
+    except Exception as e:
+        print(f"Warning: Error processing airports data: {str(e)}")
 
     # Track rows to delete
     rows_to_delete = []
@@ -320,9 +350,26 @@ def filter_reportable_flights(df, flight_starts_with):
                     if idx not in rows_to_delete:
                         rows_to_delete.append(idx)
 
-    # Remove rows that don't match flight prefix criteria
+    # Remove domestic flights (where Departure Country == Arriving Country)
+    # Skip rows with ICAO errors as they will be fixed later
+    if 'Departure Country' in filtered_df.columns and 'Arriving Country' in filtered_df.columns:
+        print("Removing domestic flights...")
+        for idx, row in filtered_df.iterrows():
+            original_idx = row['index'] if 'index' in row else idx
+            
+            # Skip if this row has ICAO errors
+            if icao_error_rows and original_idx in icao_error_rows:
+                continue
+                
+            # Check if both countries exist and are the same
+            if (pd.notna(row['Departure Country']) and pd.notna(row['Arriving Country']) and
+                row['Departure Country'] == row['Arriving Country']):
+                if idx not in rows_to_delete:
+                    rows_to_delete.append(idx)
+
+    # Remove rows that don't match criteria
     if rows_to_delete:
-        print(f"Removing {len(rows_to_delete)} rows that don't match flight prefix criteria")
+        print(f"Removing {len(rows_to_delete)} rows that don't match reportable criteria")
         filtered_df = filtered_df.drop(rows_to_delete)
         # DON'T reset index here - preserve the 'index' column for error tracking
     else:
@@ -336,6 +383,22 @@ def build_report(output_path,flight_starts_with):
     # Now load the processed file to add the Block fuel calculation and create summaries
     try:
         processed_df = pd.read_csv(output_path, encoding='utf-8')
+        
+
+
+
+
+
+
+
+        """Importatnt note to create this process for all fuel method"""
+
+
+
+
+
+
+
 
         # Now add Block fuel calculation on the processed data
         if "Block off Fuel" in processed_df.columns and "Block on Fuel" in processed_df.columns:
@@ -349,34 +412,21 @@ def build_report(output_path,flight_starts_with):
         else:
             print("Warning: Could not create 'Block fuel' column - required columns missing")
         
-        # Add Departure Country and Arriving Country using airports.csv
-        try:
-            # Load the airports.csv file
-            airports_df = pd.read_csv('airports.csv', encoding='utf-8')
-            
-            # Create a mapping dictionary from ICAO_Code to ICAO Member State
-            icao_to_country = dict(zip(airports_df['ICAO_Code'], airports_df['ICAO Member State']))
-            
-            # Map Origin ICAO to Departure Country
-            if 'Origin ICAO' in processed_df.columns:
-                processed_df['Departure Country'] = processed_df['Origin ICAO'].map(icao_to_country)
-                print("Added 'Departure Country' column based on Origin ICAO mapping")
-            else:
-                print("Warning: 'Origin ICAO' column not found in processed data")
-            
-            # Map Destination ICAO to Arriving Country
-            if 'Destination ICAO' in processed_df.columns:
-                processed_df['Arriving Country'] = processed_df['Destination ICAO'].map(icao_to_country)
-                print("Added 'Arriving Country' column based on Destination ICAO mapping")
-            else:
-                print("Warning: 'Destination ICAO' column not found in processed data")
-                
-        except FileNotFoundError:
-            print("Warning: airports.csv file not found. Cannot add country information.")
-        except KeyError as e:
-            print(f"Warning: Required column missing in airports.csv: {e}")
-        except Exception as e:
-            print(f"Warning: Error processing airports data: {str(e)}")
+
+
+
+
+
+        
+        # Delete rows with missing Departure Country or Arriving Country
+        if 'Departure Country' in processed_df.columns and 'Arriving Country' in processed_df.columns:
+            initial_count = len(processed_df)
+            processed_df = processed_df.dropna(subset=['Departure Country', 'Arriving Country'])
+            final_count = len(processed_df)
+            if initial_count != final_count:
+                print(f"Removed {initial_count - final_count} rows with missing country information")
+        else:
+            print("Warning: Country columns not found - cannot remove rows with missing country data")
         
         # 4. Add International column
         if 'International' not in processed_df.columns:
