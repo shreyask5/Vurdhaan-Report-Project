@@ -834,59 +834,46 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
         original_idx = int(row['index'])
         has_error = False
         
-        # Check Date - only flag if completely unparseable
-        if 'Date' in result_df.columns and not pd.isna(row['Date']):
+        # Check Date - exclude NaT, unparseable, or out-of-range
+        date_obj = None
+        if 'Date' in result_df.columns:
             original_date = row['Date']
-            date_str = str(original_date)
-            
-            try:
-                # Handle pandas Timestamp objects
-                if isinstance(original_date, pd.Timestamp):
-                    continue  # Valid timestamp
-                # Handle ISO format with timestamp (YYYY-MM-DD HH:MM:SS)
-                elif ' ' in date_str and len(date_str) > 10:
-                    if date_str[4] == '-' and date_str[7] == '-':  # Check if it's YYYY-MM-DD format
-                        continue  # Valid ISO format
-                else:
-                    # For standard date formats - try basic parsing
-                    if date_format == "DMY":
-                        # Try DD-MM-YYYY format
-                        try:
-                            datetime.strptime(date_str, "%d-%m-%Y")
-                            continue
-                        except ValueError:
-                            # Try DD/MM/YYYY format
-                            try:
-                                datetime.strptime(date_str, "%d/%m/%Y")
-                                continue
-                            except ValueError:
-                                # Try YYYY-MM-DD format (ISO)
-                                try:
-                                    datetime.strptime(date_str, "%Y-%m-%d")
-                                    continue
-                                except ValueError:
-                                    has_error = True
-                    else:  # MDY format
-                        # Try MM-DD-YYYY format
-                        try:
-                            datetime.strptime(date_str, "%m-%d-%Y")
-                            continue
-                        except ValueError:
-                            # Try MM/DD/YYYY format
-                            try:
-                                datetime.strptime(date_str, "%m/%d/%Y")
-                                continue
-                            except ValueError:
-                                # Try YYYY-MM-DD format (ISO)
-                                try:
-                                    datetime.strptime(date_str, "%Y-%m-%d")
-                                    continue
-                                except ValueError:
-                                    has_error = True
-                    
-            except (ValueError, TypeError):
-                # Only flag if completely unparseable
+            if pd.isna(original_date):
                 has_error = True
+            else:
+                date_str = str(original_date)
+                try:
+                    # pandas Timestamp
+                    if isinstance(original_date, pd.Timestamp):
+                        date_obj = original_date.to_pydatetime()
+                    # ISO with timestamp (YYYY-MM-DD HH:MM:SS)
+                    elif isinstance(original_date, str) and ' ' in date_str and len(date_str) > 10 and date_str[4] == '-' and date_str[7] == '-':
+                        date_obj = datetime.strptime(date_str.split(' ')[0], "%Y-%m-%d")
+                    else:
+                        # Standard formats
+                        if date_format == "DMY":
+                            try:
+                                date_obj = datetime.strptime(date_str, "%d-%m-%Y")
+                            except ValueError:
+                                try:
+                                    date_obj = datetime.strptime(date_str, "%d/%m/%Y")
+                                except ValueError:
+                                    date_obj = datetime.strptime(date_str, "%Y-%m-%d")
+                        else:  # MDY
+                            try:
+                                date_obj = datetime.strptime(date_str, "%m-%d-%Y")
+                            except ValueError:
+                                try:
+                                    date_obj = datetime.strptime(date_str, "%m/%d/%Y")
+                                except ValueError:
+                                    date_obj = datetime.strptime(date_str, "%Y-%m-%d")
+                except (ValueError, TypeError):
+                    has_error = True
+                
+                # Range check (align with old flow) if parsed
+                if not has_error and date_obj is not None and start_date and end_date:
+                    if not (start_date <= date_obj <= end_date):
+                        has_error = True
         
         # Check Time columns - flag if missing or unparseable
         time_columns = ['ATD (UTC) Block Off', 'ATA (UTC) Block On']
