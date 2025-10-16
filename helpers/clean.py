@@ -826,6 +826,9 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
     # Perform strict inline date/time validation for sequence pre-filtering.
     # Exclude rows with any missing or invalid time values (ATD/ATA) from sequence checks.
     date_time_error_rows = set()
+    # Throttle debug printing to avoid excessive logs on large datasets
+    prefilter_debug_limit = 50
+    prefilter_debug_count = 0
 
     for idx, row in result_df.iterrows():
         original_idx = int(row['index'])
@@ -977,15 +980,20 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
         if has_error:
             date_time_error_rows.add(original_idx)
             # Debug: summarize excluded row details for sequence pre-filtering
-            try:
-                date_val = row['Date'] if 'Date' in result_df.columns else None
-                atd_val = row['ATD (UTC) Block Off'] if 'ATD (UTC) Block Off' in result_df.columns else None
-                ata_val = row['ATA (UTC) Block On'] if 'ATA (UTC) Block On' in result_df.columns else None
-                print(f"[SEQ PREFILTER] Excluding row {original_idx} | Date='{date_val}' | ATD='{atd_val}' | ATA='{ata_val}'")
-            except Exception as e:
-                print(f"[SEQ PREFILTER] Excluding row {original_idx} | (error printing values: {e})")
+            if prefilter_debug_count < prefilter_debug_limit:
+                try:
+                    date_val = row['Date'] if 'Date' in result_df.columns else None
+                    atd_val = row['ATD (UTC) Block Off'] if 'ATD (UTC) Block Off' in result_df.columns else None
+                    ata_val = row['ATA (UTC) Block On'] if 'ATA (UTC) Block On' in result_df.columns else None
+                    print(f"[SEQ PREFILTER] Excluding row {original_idx} | Date='{date_val}' | ATD='{atd_val}' | ATA='{ata_val}'")
+                except Exception as e:
+                    print(f"[SEQ PREFILTER] Excluding row {original_idx} | (error printing values: {e})")
+                finally:
+                    prefilter_debug_count += 1
 
     print(f"Excluding {len(date_time_error_rows)} rows with date/time errors from sequence validation")
+    if prefilter_debug_count >= prefilter_debug_limit and len(date_time_error_rows) > prefilter_debug_count:
+        print(f"[SEQ PREFILTER] ... suppressed {len(date_time_error_rows) - prefilter_debug_count} more rows")
     if len(date_time_error_rows) > 0:
         print(f"Total rows in dataset: {len(result_df)}")
         print(f"Percentage excluded: {(len(date_time_error_rows) / len(result_df)) * 100:.1f}%")
@@ -1242,6 +1250,9 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
     
     # 7. DATE VALIDATION
     print("Validating dates...")
+    # Throttle date debug prints
+    date_debug_limit = 50
+    date_debug_count = 0
     if 'Date' in result_df.columns:
         for idx, row in result_df.iterrows():
             # Use original row index for error tracking
@@ -1262,7 +1273,9 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
                             result_df.at[idx, 'Date'] = date_obj.strftime("%d-%m-%Y")
                         else:  # MDY format
                             result_df.at[idx, 'Date'] = date_obj.strftime("%m-%d-%Y")
-                        print(f"[DATE CHECK] Row {original_idx}: pandas Timestamp -> {result_df.at[idx, 'Date']}")
+                        if date_debug_count < date_debug_limit:
+                            print(f"[DATE CHECK] Row {original_idx}: pandas Timestamp -> {result_df.at[idx, 'Date']}")
+                            date_debug_count += 1
                         continue
                     
                     # Handle ISO format with timestamp (YYYY-MM-DD HH:MM:SS)
@@ -1277,7 +1290,9 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
                                 result_df.at[idx, 'Date'] = date_obj.strftime("%d-%m-%Y")
                             else:  # MDY format
                                 result_df.at[idx, 'Date'] = date_obj.strftime("%m-%d-%Y")
-                            print(f"[DATE CHECK] Row {original_idx}: ISO datetime '{date_str}' -> {result_df.at[idx, 'Date']}")
+                            if date_debug_count < date_debug_limit:
+                                print(f"[DATE CHECK] Row {original_idx}: ISO datetime '{date_str}' -> {result_df.at[idx, 'Date']}")
+                                date_debug_count += 1
                             continue
                     
                     # For standard date formats from the original code
@@ -1285,44 +1300,64 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
                         # Try DD-MM-YYYY format
                         try:
                             date_obj = datetime.strptime(date_str, "%d-%m-%Y")
-                            print(f"[DATE CHECK] Row {original_idx}: parsed DMY '{date_str}'")
+                            if date_debug_count < date_debug_limit:
+                                print(f"[DATE CHECK] Row {original_idx}: parsed DMY '{date_str}'")
+                                date_debug_count += 1
                         except ValueError:
                             # Try DD/MM/YYYY format
                             try:
                                 date_obj = datetime.strptime(date_str, "%d/%m/%Y")
-                                print(f"[DATE CHECK] Row {original_idx}: parsed D/M/Y '{date_str}'")
+                                if date_debug_count < date_debug_limit:
+                                    print(f"[DATE CHECK] Row {original_idx}: parsed D/M/Y '{date_str}'")
+                                    date_debug_count += 1
                             except ValueError:
                                 # Try YYYY-MM-DD format (ISO)
                                 date_obj = datetime.strptime(date_str, "%Y-%m-%d")
                                 # Convert to preferred format in the dataframe
                                 result_df.at[idx, 'Date'] = date_obj.strftime("%d-%m-%Y")
-                                print(f"[DATE CHECK] Row {original_idx}: ISO date '{date_str}' -> {result_df.at[idx, 'Date']}")
+                                if date_debug_count < date_debug_limit:
+                                    print(f"[DATE CHECK] Row {original_idx}: ISO date '{date_str}' -> {result_df.at[idx, 'Date']}")
+                                    date_debug_count += 1
                     else:  # MDY format
                         # Try MM-DD-YYYY format
                         try:
                             date_obj = datetime.strptime(date_str, "%m-%d-%Y")
-                            print(f"[DATE CHECK] Row {original_idx}: parsed MDY '{date_str}'")
+                            if date_debug_count < date_debug_limit:
+                                print(f"[DATE CHECK] Row {original_idx}: parsed MDY '{date_str}'")
+                                date_debug_count += 1
                         except ValueError:
                             # Try MM/DD/YYYY format
                             try:
                                 date_obj = datetime.strptime(date_str, "%m/%d/%Y")
-                                print(f"[DATE CHECK] Row {original_idx}: parsed M/D/Y '{date_str}'")
+                                if date_debug_count < date_debug_limit:
+                                    print(f"[DATE CHECK] Row {original_idx}: parsed M/D/Y '{date_str}'")
+                                    date_debug_count += 1
                             except ValueError:
                                 # Try YYYY-MM-DD format (ISO)
                                 date_obj = datetime.strptime(date_str, "%Y-%m-%d")
                                 # Convert to preferred format in the dataframe
                                 result_df.at[idx, 'Date'] = date_obj.strftime("%m-%d-%Y")
-                                print(f"[DATE CHECK] Row {original_idx}: ISO date '{date_str}' -> {result_df.at[idx, 'Date']}")
+                                if date_debug_count < date_debug_limit:
+                                    print(f"[DATE CHECK] Row {original_idx}: ISO date '{date_str}' -> {result_df.at[idx, 'Date']}")
+                                    date_debug_count += 1
                     
                     # Check if date is within specified range
                     if start_date and end_date and not (start_date <= date_obj <= end_date):
                         mark_error(date_str, f"Date not within range {start_date.date()} to {end_date.date()}", original_idx, "Date", "Date")
-                        print(f"[DATE CHECK] Row {original_idx}: out of range '{date_str}'")
+                        if date_debug_count < date_debug_limit:
+                            print(f"[DATE CHECK] Row {original_idx}: out of range '{date_str}'")
+                            date_debug_count += 1
                         
                 except (ValueError, TypeError) as e:
                     # Invalid date format
                     mark_error(date_str, f"Invalid date format: {e}", original_idx, "Date", "Date")
-                    print(f"[DATE CHECK] Row {original_idx}: invalid date '{date_str}' -> {e}")
+                    if date_debug_count < date_debug_limit:
+                        print(f"[DATE CHECK] Row {original_idx}: invalid date '{date_str}' -> {e}")
+                        date_debug_count += 1
+        if date_debug_count >= date_debug_limit:
+            remaining = len(result_df) - date_debug_count
+            if remaining > 0:
+                print(f"[DATE CHECK] ... suppressed additional logs for {remaining} rows")
     
     
     
