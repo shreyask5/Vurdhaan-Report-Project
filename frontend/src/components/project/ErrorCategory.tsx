@@ -34,8 +34,12 @@ export const ErrorCategory: React.FC<ErrorCategoryProps> = ({
   const [isExpanded, setIsExpanded] = useState(false);
 
   // Calculate total errors in this category
-  const totalErrors = category.errors.reduce((sum, errorGroup) =>
-    sum + errorGroup.rows.length, 0);
+  // For sequence errors, divide by 4 since each sequence error involves 4 rows
+  const isSequenceCategory = category.name.toLowerCase().includes('sequence');
+  const totalErrors = category.errors.reduce((sum, errorGroup) => {
+    const errorCount = errorGroup.rows.length;
+    return sum + (isSequenceCategory ? Math.ceil(errorCount / 4) : errorCount);
+  }, 0);
 
   const handleDownloadCategory = (e: React.MouseEvent) => {
     e.stopPropagation();
