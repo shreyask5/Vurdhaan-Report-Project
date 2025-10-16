@@ -112,7 +112,8 @@ export const ProjectErrorDisplay: React.FC = () => {
     try {
       setLoadingMessage('Ignoring errors...');
       await validationService.ignoreErrors(projectId);
-      navigate(`/projects/${projectId}`);
+      // Navigate to monitoring plan review after ignoring errors
+      navigate(`/projects/${projectId}/monitoring-plan-review`);
     } catch (error) {
       alert('Failed to ignore errors: ' + (error as Error).message);
     }
@@ -149,7 +150,7 @@ export const ProjectErrorDisplay: React.FC = () => {
 
   const handleStartOver = () => {
     if (!confirm('Are you sure you want to start over? All progress will be lost.')) return;
-    navigate(`/projects/${projectId}`);
+    navigate(`/projects/${projectId}/upload`);
   };
 
   const handleGenerateReport = async () => {
