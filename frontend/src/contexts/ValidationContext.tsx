@@ -1,10 +1,16 @@
 import React, { createContext, useContext, useState, ReactNode, useCallback } from 'react';
-import { ErrorData, Correction, ValidationFormData, ColumnMapping, FuelMethod, SchemeType, AirlineSize, MonitoringPlanData } from '../types/validation';
+import { ErrorData, Correction, ValidationFormData, ColumnMapping, FuelMethod, SchemeType, AirlineSize, MonitoringPlanData, DateFormat } from '../types/validation';
 import { validationService } from '../services/validation';
 import { readCSVColumns } from '../utils/csv';
 import { projectsApi } from '../services/api';
 
 type ValidationStep = 'scheme' | 'monitoring_plan' | 'parameters' | 'upload' | 'mapping' | 'validation' | 'success';
+
+interface ValidationParams {
+  monitoring_year: string;
+  date_format: DateFormat;
+  flight_starts_with: string;
+}
 
 interface ValidationContextType {
   // State
@@ -25,11 +31,15 @@ interface ValidationContextType {
   uploadedColumns: string[];
   columnMapping: ColumnMapping;
 
+  // Validation Parameters
+  validationParams: ValidationParams | null;
+
   // Actions
   setScheme: (projectId: string, scheme: SchemeType, airlineSize: AirlineSize) => Promise<void>;
   uploadMonitoringPlan: (projectId: string, file: File) => Promise<void>;
   setFile: (file: File) => Promise<void>;
   setFuelMethod: (method: FuelMethod) => void;
+  setValidationParams: (params: ValidationParams) => void;
   setColumnMapping: (mapping: ColumnMapping) => void;
   uploadFile: (projectId: string, params: ValidationFormData) => Promise<void>;
   fetchErrors: (projectId?: string) => Promise<void>;
@@ -58,6 +68,13 @@ export const ValidationProvider: React.FC<{ children: ReactNode }> = ({ children
   const [uploadedColumns, setUploadedColumns] = useState<string[]>([]);
   const [columnMapping, setColumnMappingState] = useState<ColumnMapping>({});
 
+  const currentYear = new Date().getFullYear();
+  const [validationParams, setValidationParamsState] = useState<ValidationParams | null>({
+    monitoring_year: currentYear.toString(),
+    date_format: 'DMY',
+    flight_starts_with: ''
+  });
+
   const setScheme = async (projectId: string, scheme: SchemeType, airlineSize: AirlineSize) => {
     setIsLoading(true);
     try {
@@ -73,28 +90,18 @@ export const ValidationProvider: React.FC<{ children: ReactNode }> = ({ children
   const uploadMonitoringPlan = async (projectId: string, file: File) => {
     setIsLoading(true);
     try {
-      // Upload file and get task_id
-      const uploadResult = await projectsApi.uploadMonitoringPlan(projectId, file);
-
-      // If extraction is immediate (202 response with task_id), poll for status
-      if (uploadResult.task_id) {
-        const extractedData = await projectsApi.pollMonitoringPlanStatus(
-          projectId,
-          uploadResult.task_id,
-          (status) => {
-            console.log('Monitoring plan extraction status:', status);
-          }
-        );
-        setMonitoringPlanData(extractedData);
-      } else {
-        // Fallback: if data is returned immediately
-        setMonitoringPlanData(uploadResult.extracted_data);
-      }
-
+      // Upload file - extraction happens in background
+      await projectsApi.uploadMonitoringPlan(projectId, file);
+      // Don't wait for extraction, let it run async
+      // User can proceed to parameters immediately
       setCurrentStep('parameters');
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const setValidationParams = (params: ValidationParams) => {
+    setValidationParamsState(params);
   };
 
   const setFile = async (file: File) => {
@@ -219,10 +226,12 @@ export const ValidationProvider: React.FC<{ children: ReactNode }> = ({ children
       selectedFuelMethod,
       uploadedColumns,
       columnMapping,
+      validationParams,
       setScheme,
       uploadMonitoringPlan,
       setFile,
       setFuelMethod,
+      setValidationParams,
       setColumnMapping,
       uploadFile,
       fetchErrors,

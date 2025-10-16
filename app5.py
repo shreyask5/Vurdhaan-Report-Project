@@ -366,6 +366,7 @@ def upload_monitoring_plan_route(project_id):
         projects.update_project(project_id, g.user['uid'], {
             'monitoring_plan_status': {
                 'status': 'queued',
+                'started_at': datetime.utcnow().isoformat(),
                 'updated_at': datetime.utcnow().isoformat()
             }
         })
@@ -400,8 +401,11 @@ def monitoring_plan_status_route(project_id):
     project = projects.get_project_with_validation(project_id, g.user['uid'])
     if not project:
         return jsonify({'error': 'Project not found'}), 404
+
+    mp_status = project.get('monitoring_plan_status') or {}
     return jsonify({
-        'status': (project.get('monitoring_plan_status') or {}).get('status', 'unknown'),
+        'status': mp_status.get('status', 'unknown'),
+        'started_at': mp_status.get('started_at'),
         'extracted_data': project.get('monitoring_plan')
     }), 200
 

@@ -1,9 +1,8 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useValidation } from '../contexts/ValidationContext';
 import { SchemeSelector } from '../components/project/SchemeSelector';
 import { MonitoringPlanUpload } from '../components/project/MonitoringPlanUpload';
-import { MonitoringPlanEditor } from '../components/project/MonitoringPlanEditor';
 import { FileUploadSection } from '../components/project/FileUploadSection';
 import { FuelMethodSelector } from '../components/project/FuelMethodSelector';
 import { ColumnMappingWizard } from '../components/project/ColumnMappingWizard';
@@ -25,11 +24,13 @@ const ProjectUpload: React.FC = () => {
     selectedFuelMethod,
     uploadedColumns,
     columnMapping,
+    validationParams,
     isLoading,
     setScheme,
     uploadMonitoringPlan,
     setFile,
     setFuelMethod,
+    setValidationParams,
     setColumnMapping,
     uploadFile,
     goToStep
@@ -147,51 +148,6 @@ const ProjectUpload: React.FC = () => {
     };
     fetchProjectDefaults();
   }, [projectId, currentStep, selectedFuelMethod, setFuelMethod]);
-
-  // Editable monitoring plan (parameters) state and save with debounce
-  const [editablePlan, setEditablePlan] = useState<any | null>(null);
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
-  const saveTimer = useRef<number | null>(null);
-
-  useEffect(() => {
-    if (currentStep === 'parameters' && monitoringPlanData) {
-      setEditablePlan(monitoringPlanData);
-    }
-  }, [currentStep, monitoringPlanData]);
-
-  const saveMonitoringPlan = useMemo(() => {
-    return async (plan: any) => {
-      if (!projectId) return;
-      setSaveStatus('saving');
-      try {
-        await projectsApi.updateMonitoringPlan(projectId, plan);
-        setSaveStatus('saved');
-        setTimeout(() => setSaveStatus('idle'), 2000);
-      } catch (e) {
-        console.error('Failed saving monitoring plan edits', e);
-        setSaveStatus('idle');
-      }
-    };
-  }, [projectId]);
-
-  const onEditPlanField = (path: string[], value: any) => {
-    setEditablePlan((prev: any) => {
-      const next = JSON.parse(JSON.stringify(prev || {})); // Deep clone
-      let cursor: any = next;
-      for (let i = 0; i < path.length - 1; i++) {
-        const key = path[i];
-        if (!cursor[key]) cursor[key] = {};
-        cursor = cursor[key];
-      }
-      cursor[path[path.length - 1]] = value;
-
-      // Debounced save
-      if (saveTimer.current) window.clearTimeout(saveTimer.current);
-      saveTimer.current = window.setTimeout(() => saveMonitoringPlan(next), 600);
-
-      return next;
-    });
-  };
 
   // Show loading while checking status
   if (isCheckingStatus) {
@@ -350,48 +306,87 @@ const ProjectUpload: React.FC = () => {
                 </p>
               </div>
 
-              {/* Save Status Indicator */}
-              {saveStatus !== 'idle' && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center gap-2">
-                  {saveStatus === 'saving' && (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-                      <span className="text-sm text-blue-700">Saving changes...</span>
-                    </>
-                  )}
-                  {saveStatus === 'saved' && (
-                    <>
-                      <span className="text-green-600">✓</span>
-                      <span className="text-sm text-green-700">Changes saved</span>
-                    </>
-                  )}
-                </div>
-              )}
-
               {/* Fuel Method Selector */}
               <div className="border-b border-gray-200 pb-6">
                 <h3 className="text-lg font-semibold mb-4 text-gray-700">Fuel Calculation Method</h3>
                 <FuelMethodSelector onSelect={setFuelMethod} selectedMethod={selectedFuelMethod} />
               </div>
 
-              {/* Monitoring Plan Editor */}
-              {editablePlan && (
-                <div>
-                  <h3 className="text-lg font-semibold mb-4 text-gray-700">Monitoring Plan Details</h3>
-                  <p className="text-sm text-gray-600 mb-4">
-                    Review and edit the extracted monitoring plan information. All changes are automatically saved.
-                  </p>
-                  <MonitoringPlanEditor data={editablePlan} onEdit={onEditPlanField} />
-                </div>
-              )}
+              {/* Validation Parameters */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-gray-700">Validation Parameters</h3>
 
-              {!editablePlan && (
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                  <p className="text-sm text-yellow-800">
-                    ⚠️ No monitoring plan data available. Please upload a monitoring plan in the previous step.
+                {/* Monitoring Year */}
+                <div>
+                  <label htmlFor="monitoring_year" className="block text-sm font-medium text-gray-700 mb-2">
+                    Monitoring Year *
+                  </label>
+                  <select
+                    id="monitoring_year"
+                    value={validationParams?.monitoring_year || new Date().getFullYear().toString()}
+                    onChange={(e) => setValidationParams({
+                      ...validationParams!,
+                      monitoring_year: e.target.value
+                    })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                  >
+                    {Array.from({ length: 6 }, (_, i) => {
+                      const year = new Date().getFullYear() - 5 + i;
+                      return (
+                        <option key={year} value={year}>
+                          {year}
+                        </option>
+                      );
+                    })}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Select the year for which you're monitoring flight data
                   </p>
                 </div>
-              )}
+
+                {/* Date Format */}
+                <div>
+                  <label htmlFor="date_format" className="block text-sm font-medium text-gray-700 mb-2">
+                    Date Format *
+                  </label>
+                  <select
+                    id="date_format"
+                    value={validationParams?.date_format || 'DMY'}
+                    onChange={(e) => setValidationParams({
+                      ...validationParams!,
+                      date_format: e.target.value as 'DMY' | 'MDY'
+                    })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                  >
+                    <option value="DMY">DD/MM/YYYY</option>
+                    <option value="MDY">MM/DD/YYYY</option>
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Choose the date format used in your CSV file
+                  </p>
+                </div>
+
+                {/* Flight Number Prefix */}
+                <div>
+                  <label htmlFor="flight_starts_with" className="block text-sm font-medium text-gray-700 mb-2">
+                    Flight Number Prefix
+                  </label>
+                  <input
+                    id="flight_starts_with"
+                    type="text"
+                    value={validationParams?.flight_starts_with || ''}
+                    onChange={(e) => setValidationParams({
+                      ...validationParams!,
+                      flight_starts_with: e.target.value
+                    })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                    placeholder="e.g., AI, BA, UA"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Optional: Enter the prefix that all flight numbers should start with
+                  </p>
+                </div>
+              </div>
 
               {/* Navigation Buttons */}
               <div className="flex justify-between pt-6 border-t border-gray-200">

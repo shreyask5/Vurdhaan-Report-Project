@@ -232,6 +232,17 @@ const ProjectValidation: React.FC = () => {
           </div>
         </div>
 
+        {/* Next Step Button */}
+        <div className="bg-white rounded-xl p-6 shadow-card mb-6 flex justify-end">
+          <button
+            onClick={() => navigate(`/projects/${projectId}/monitoring-plan-review`)}
+            disabled={isLoading}
+            className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed px-8 py-3"
+          >
+            Review Monitoring Plan →
+          </button>
+        </div>
+
         {/* Error Categories */}
         <div className="errors-container space-y-4">
           {errorData.categories.map((category, index) => (

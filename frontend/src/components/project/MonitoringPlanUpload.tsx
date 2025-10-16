@@ -57,7 +57,11 @@ export const MonitoringPlanUpload: React.FC<MonitoringPlanUploadProps> = ({
 
     try {
       await onUpload(selectedFile);
+      // Don't wait for extraction - it runs in background
       setProcessingStatus('done');
+      if (onComplete) {
+        onComplete(); // Allow user to proceed immediately
+      }
     } catch (error) {
       console.error('Upload failed:', error);
       setProcessingStatus('error');
@@ -81,10 +85,10 @@ export const MonitoringPlanUpload: React.FC<MonitoringPlanUploadProps> = ({
           Upload Monitoring Plan
         </h2>
         <p className="text-gray-600">
-          Upload your monitoring plan document. We'll extract key information automatically.
+          Upload your monitoring plan document. We'll extract key information automatically in the background.
         </p>
-        <p className="text-yellow-700 bg-yellow-50 border border-yellow-200 rounded mt-3 p-3 text-sm">
-          ⚠️ Extraction may take up to 10 minutes. Please wait for processing to complete before proceeding.
+        <p className="text-blue-700 bg-blue-50 border border-blue-200 rounded mt-3 p-3 text-sm">
+          ℹ️ Extraction runs in the background (up to 10 minutes). You can proceed to the next steps while it processes.
         </p>
       </div>
 
@@ -93,15 +97,11 @@ export const MonitoringPlanUpload: React.FC<MonitoringPlanUploadProps> = ({
         <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-6 text-center">
           <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-blue-500 mx-auto mb-4"></div>
           <h3 className="text-xl font-semibold text-blue-700 mb-2">
-            Extracting monitoring plan data...
+            Uploading monitoring plan...
           </h3>
           <p className="text-sm text-blue-600">
-            This may take up to 10 minutes. Please don't close this window.
+            Please wait a moment...
           </p>
-          <div className="mt-4 space-y-2 text-sm text-blue-600">
-            <p>💡 Tip: We're analyzing your document using AI to extract key information</p>
-            <p>💡 Tip: Longer documents may take more time to process</p>
-          </div>
         </div>
       )}
 
@@ -111,7 +111,7 @@ export const MonitoringPlanUpload: React.FC<MonitoringPlanUploadProps> = ({
           <div className="flex items-center gap-3 mb-4">
             <div className="text-4xl">❌</div>
             <div>
-              <h3 className="text-xl font-semibold text-red-700">Extraction Failed</h3>
+              <h3 className="text-xl font-semibold text-red-700">Upload Failed</h3>
               <p className="text-sm text-red-600">{errorMessage}</p>
             </div>
           </div>
@@ -124,8 +124,23 @@ export const MonitoringPlanUpload: React.FC<MonitoringPlanUploadProps> = ({
         </div>
       )}
 
+      {/* Success Message */}
+      {processingStatus === 'done' && (
+        <div className="bg-green-50 border-2 border-green-200 rounded-xl p-6">
+          <div className="flex items-center gap-3">
+            <div className="text-4xl">✅</div>
+            <div>
+              <h3 className="text-xl font-semibold text-green-700">Upload Successful!</h3>
+              <p className="text-sm text-green-600">
+                Your monitoring plan is being processed in the background. You can proceed to the next step.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* File Upload Area */}
-      {!extractedData && !isUploading && processingStatus !== 'error' && (
+      {!isUploading && processingStatus !== 'error' && processingStatus !== 'done' && (
         <div
           className={`relative border-2 border-dashed rounded-xl p-8 text-center transition-all ${
             dragActive
@@ -175,155 +190,11 @@ export const MonitoringPlanUpload: React.FC<MonitoringPlanUploadProps> = ({
                       : 'bg-success text-white hover:bg-success-dark'
                   }`}
                 >
-                  {isUploading ? 'Processing...' : 'Upload & Process'}
+                  {isUploading ? 'Uploading...' : 'Upload & Process'}
                 </button>
               )}
             </div>
           </div>
-        </div>
-      )}
-
-      {/* Extracted Data Display */}
-      {extractedData && (
-        <div className="bg-white rounded-xl border-2 border-success p-6 space-y-6">
-          <div className="flex items-center gap-3 pb-4 border-b">
-            <div className="text-4xl">✅</div>
-            <div>
-              <h3 className="text-xl font-semibold text-success">
-                Monitoring Plan Analyzed Successfully
-              </h3>
-              <p className="text-sm text-gray-600">
-                Key information has been extracted from your document
-              </p>
-            </div>
-          </div>
-
-          {/* Basic Info */}
-          {extractedData.basic_info && Object.keys(extractedData.basic_info).length > 0 && (
-            <div>
-              <h4 className="font-semibold text-gray-800 mb-2">📋 Basic Information</h4>
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                {extractedData.basic_info.airline_name && (
-                  <div>
-                    <span className="text-gray-600">Airline:</span>{' '}
-                    <span className="font-medium">{extractedData.basic_info.airline_name}</span>
-                  </div>
-                )}
-                {extractedData.basic_info.version && (
-                  <div>
-                    <span className="text-gray-600">Version:</span>{' '}
-                    <span className="font-medium">{extractedData.basic_info.version}</span>
-                  </div>
-                )}
-                {extractedData.basic_info.date && (
-                  <div>
-                    <span className="text-gray-600">Date:</span>{' '}
-                    <span className="font-medium">{extractedData.basic_info.date}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Fuel Data Collection */}
-          {extractedData.fuel_data_collection && (
-            <div>
-              <h4 className="font-semibold text-gray-800 mb-2">⛽ Fuel Data Collection</h4>
-              <div className="text-sm space-y-2">
-                {extractedData.fuel_data_collection.collection_method && (
-                  <div>
-                    <span className="text-gray-600">Method:</span>{' '}
-                    <span className="font-medium capitalize">
-                      {extractedData.fuel_data_collection.collection_method}
-                    </span>
-                  </div>
-                )}
-                {extractedData.primary_data_source?.is_automatic !== undefined && (
-                  <div>
-                    <span className="text-gray-600">Primary Source:</span>{' '}
-                    <span className="font-medium">
-                      {extractedData.primary_data_source.is_automatic ? 'Automatic' : 'Manual'}
-                    </span>
-                  </div>
-                )}
-                {extractedData.secondary_source?.uses_paper_logs !== undefined && (
-                  <div>
-                    <span className="text-gray-600">Paper Logs (Secondary):</span>{' '}
-                    <span className="font-medium">
-                      {extractedData.secondary_source.uses_paper_logs ? 'Yes' : 'No'}
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Geographical Presence */}
-          {extractedData.geographical_presence && (
-            <div>
-              <h4 className="font-semibold text-gray-800 mb-2">🌍 Geographical Presence</h4>
-              <div className="text-sm space-y-2">
-                {extractedData.geographical_presence.is_eu_based !== undefined && (
-                  <div>
-                    <span className="text-gray-600">EU-based:</span>{' '}
-                    <span className="font-medium">
-                      {extractedData.geographical_presence.is_eu_based ? 'Yes' : 'No'}
-                    </span>
-                  </div>
-                )}
-                {extractedData.geographical_presence.is_non_eu_based !== undefined && (
-                  <div>
-                    <span className="text-gray-600">Non-EU based:</span>{' '}
-                    <span className="font-medium">
-                      {extractedData.geographical_presence.is_non_eu_based ? 'Yes' : 'No'}
-                    </span>
-                  </div>
-                )}
-                {extractedData.geographical_presence.scheme_priority && (
-                  <div className="mt-3">
-                    <div className="text-gray-600 mb-2">Scheme Priority:</div>
-                    <div className="flex flex-wrap gap-2">
-                      {Object.entries(extractedData.geographical_presence.scheme_priority).map(
-                        ([scheme, priority]) => (
-                          <span
-                            key={scheme}
-                            className={`px-3 py-1 rounded-full text-xs font-medium ${
-                              priority === 'high'
-                                ? 'bg-red-100 text-red-700'
-                                : priority === 'standard'
-                                ? 'bg-blue-100 text-blue-700'
-                                : 'bg-gray-100 text-gray-700'
-                            }`}
-                          >
-                            {scheme}: {priority}
-                          </span>
-                        )
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Monitoring Plan Processes */}
-          {extractedData.monitoring_plan_processes &&
-           Object.keys(extractedData.monitoring_plan_processes).length > 0 && (
-            <div>
-              <h4 className="font-semibold text-gray-800 mb-2">📊 Monitoring Plan Processes</h4>
-              <div className="text-sm space-y-2">
-                {Object.entries(extractedData.monitoring_plan_processes).map(
-                  ([scheme, process]) =>
-                    process && (
-                      <div key={scheme} className="p-3 bg-gray-50 rounded">
-                        <div className="font-medium text-gray-700">{scheme}:</div>
-                        <div className="text-gray-600 mt-1">{process}</div>
-                      </div>
-                    )
-                )}
-              </div>
-            </div>
-          )}
         </div>
       )}
 
@@ -340,7 +211,7 @@ export const MonitoringPlanUpload: React.FC<MonitoringPlanUploadProps> = ({
         >
           Back to Scheme
         </button>
-        {extractedData && !isUploading && (
+        {processingStatus === 'done' && onComplete && (
           <button
             onClick={onComplete}
             className="px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition"

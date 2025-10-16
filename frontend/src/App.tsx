@@ -13,6 +13,7 @@ import Admin from "./pages/Admin";
 import ProjectUpload from "./pages/ProjectUpload";
 import { ProjectErrorDisplay } from "./pages/ProjectErrorDisplay";
 import ProjectValidation from "./pages/ProjectValidation";
+import MonitoringPlanReview from "./pages/MonitoringPlanReview";
 import ProjectChat from "./pages/ProjectChat";
 import NotFound from "./pages/NotFound";
 
@@ -45,6 +46,7 @@ const App = () => (
                 <ProjectValidation />
               </ValidationProvider>
             } />
+            <Route path="/projects/:projectId/monitoring-plan-review" element={<MonitoringPlanReview />} />
             <Route path="/projects/:projectId/chat" element={
               <ChatProvider>
                 <ProjectChat />
