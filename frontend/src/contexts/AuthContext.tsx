@@ -5,12 +5,12 @@ import {
   createUserWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
-  signInWithPopup,
-  GoogleAuthProvider,
+  sendEmailVerification,
   User as FirebaseUser,
 } from 'firebase/auth';
 import { auth } from '../services/firebase';
 import { authApi } from '../services/api';
+import { isBusinessEmail, getBusinessEmailError } from '../utils/emailValidation';
 
 type UserRole = 'user' | 'admin' | null;
 
@@ -27,8 +27,9 @@ interface AuthContextType {
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
   signup: (name: string, email: string, password: string) => Promise<void>;
-  loginWithGoogle: () => Promise<void>;
   logout: () => void;
+  resendVerificationEmail: () => Promise<void>;
+  checkEmailVerified: () => Promise<boolean>;
   isAuthenticated: boolean;
   isAdmin: boolean;
   firebaseUser: FirebaseUser | null;
@@ -119,12 +120,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signup = async (name: string, email: string, password: string) => {
     try {
+      // Validate business email before signup
+      if (!isBusinessEmail(email)) {
+        throw new Error(getBusinessEmailError(email));
+      }
+
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+
       // Update display name
       // Note: updateProfile is async but we don't await it to avoid delays
       import('firebase/auth').then(({ updateProfile }) => {
         updateProfile(userCredential.user, { displayName: name });
       });
+
+      // Send email verification
+      await sendEmailVerification(userCredential.user);
 
       // Verify with backend to create user record
       await authApi.verify();
@@ -148,28 +158,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const loginWithGoogle = async () => {
+  const resendVerificationEmail = async () => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      throw new Error('No user logged in');
+    }
+
     try {
-      const provider = new GoogleAuthProvider();
-      const userCredential = await signInWithPopup(auth, provider);
-
-      // Verify with backend to create/update user record
-      await authApi.verify();
-
-      console.log('Google login successful:', userCredential.user.email);
+      await sendEmailVerification(currentUser);
+      console.log('Verification email sent');
     } catch (error: any) {
-      console.error('Google login error:', error);
+      console.error('Resend verification error:', error);
 
-      // Provide helpful error messages
-      if (error.code === 'auth/operation-not-allowed') {
-        throw new Error('Google sign-in is not enabled. Please enable it in Firebase Console under Authentication > Sign-in method.');
-      } else if (error.code === 'auth/popup-blocked') {
-        throw new Error('Popup was blocked by browser. Please allow popups for this site.');
-      } else if (error.code === 'auth/popup-closed-by-user') {
-        throw new Error('Sign-in cancelled.');
+      if (error.code === 'auth/too-many-requests') {
+        throw new Error('Too many requests. Please wait a few minutes before trying again.');
       }
 
-      throw new Error(error.message || 'Failed to login with Google');
+      throw new Error(error.message || 'Failed to send verification email');
+    }
+  };
+
+  const checkEmailVerified = async (): Promise<boolean> => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      return false;
+    }
+
+    try {
+      await currentUser.reload();
+      return currentUser.emailVerified;
+    } catch (error) {
+      console.error('Error checking email verification:', error);
+      return false;
     }
   };
 
@@ -190,8 +210,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     isLoading,
     login,
     signup,
-    loginWithGoogle,
     logout,
+    resendVerificationEmail,
+    checkEmailVerified,
     isAuthenticated: !!user,
     isAdmin: user?.role === 'admin',
   };

@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ValidationProvider } from "@/contexts/ValidationContext";
 import { ChatProvider } from "@/contexts/ChatContext";
+import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import Index from "./pages/Index";
 import AdminLogin from "./pages/AdminLogin";
 import Dashboard from "./pages/Dashboard";
@@ -15,6 +16,8 @@ import { ProjectErrorDisplay } from "./pages/ProjectErrorDisplay";
 import ProjectValidation from "./pages/ProjectValidation";
 import MonitoringPlanReview from "./pages/MonitoringPlanReview";
 import ProjectChat from "./pages/ProjectChat";
+import EmailVerification from "./pages/EmailVerification";
+import Welcome from "./pages/Welcome";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -27,31 +30,61 @@ const App = () => (
       <AuthProvider>
         <BrowserRouter>
           <Routes>
+            {/* Public routes */}
             <Route path="/" element={<Index />} />
             <Route path="/admin/login" element={<AdminLogin />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/admin" element={<Admin />} />
+
+            {/* Email verification route (authenticated but not verified) */}
+            <Route path="/verification" element={<EmailVerification />} />
+
+            {/* Welcome route (verified but profile not completed) */}
+            <Route path="/welcome" element={<Welcome />} />
+
+            {/* Protected routes (require auth, verification, and completed profile) */}
+            <Route path="/dashboard" element={
+              <ProtectedRoute>
+                <Dashboard />
+              </ProtectedRoute>
+            } />
+            <Route path="/admin" element={
+              <ProtectedRoute>
+                <Admin />
+              </ProtectedRoute>
+            } />
             <Route path="/projects/:projectId/upload" element={
-              <ValidationProvider>
-                <ProjectUpload />
-              </ValidationProvider>
+              <ProtectedRoute>
+                <ValidationProvider>
+                  <ProjectUpload />
+                </ValidationProvider>
+              </ProtectedRoute>
             } />
             <Route path="/projects/:projectId/errors" element={
-              <ValidationProvider>
-                <ProjectErrorDisplay />
-              </ValidationProvider>
+              <ProtectedRoute>
+                <ValidationProvider>
+                  <ProjectErrorDisplay />
+                </ValidationProvider>
+              </ProtectedRoute>
             } />
             <Route path="/projects/:projectId/validation" element={
-              <ValidationProvider>
-                <ProjectValidation />
-              </ValidationProvider>
+              <ProtectedRoute>
+                <ValidationProvider>
+                  <ProjectValidation />
+                </ValidationProvider>
+              </ProtectedRoute>
             } />
-            <Route path="/projects/:projectId/monitoring-plan-review" element={<MonitoringPlanReview />} />
+            <Route path="/projects/:projectId/monitoring-plan-review" element={
+              <ProtectedRoute>
+                <MonitoringPlanReview />
+              </ProtectedRoute>
+            } />
             <Route path="/projects/:projectId/chat" element={
-              <ChatProvider>
-                <ProjectChat />
-              </ChatProvider>
+              <ProtectedRoute>
+                <ChatProvider>
+                  <ProjectChat />
+                </ChatProvider>
+              </ProtectedRoute>
             } />
+
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

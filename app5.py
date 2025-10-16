@@ -146,6 +146,57 @@ def get_me():
         'project_count': user.get('project_count', 0)
     }), 200
 
+@app.route('/api/auth/profile', methods=['GET'])
+@require_auth
+def get_profile():
+    """Get user profile including profile completion status"""
+    user = firestore.get_user(g.user['uid'])
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+
+    return jsonify({
+        'uid': user['uid'],
+        'email': user['email'],
+        'name': user.get('name'),
+        'designation': user.get('designation'),
+        'airline_name': user.get('airline_name'),
+        'airline_size': user.get('airline_size'),
+        'profile_completed': user.get('profile_completed', False)
+    }), 200
+
+@app.route('/api/auth/profile', methods=['PUT'])
+@require_auth
+@limit_by_user("30 per hour")
+def update_profile():
+    """Update user profile"""
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+
+    # Validate allowed fields
+    allowed_fields = ['designation', 'airline_name', 'airline_size', 'profile_completed']
+    update_data = {}
+
+    for field in allowed_fields:
+        if field in data:
+            update_data[field] = data[field]
+
+    # Validate airline_size if provided
+    if 'airline_size' in update_data:
+        if update_data['airline_size'] not in ['small', 'medium', 'large']:
+            return jsonify({'error': 'Invalid airline_size. Must be small, medium, or large'}), 400
+
+    if not update_data:
+        return jsonify({'error': 'No valid fields to update'}), 400
+
+    try:
+        # Update user document in Firestore
+        firestore.update_user(g.user['uid'], update_data)
+        return jsonify({'success': True}), 200
+    except Exception as e:
+        print(f"[PROFILE UPDATE ERROR] {str(e)}")
+        return jsonify({'error': 'Failed to update profile'}), 500
+
 # ============================================================================
 # PROJECTS
 # ============================================================================

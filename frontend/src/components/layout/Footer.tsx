@@ -1,11 +1,21 @@
 import { Link } from 'react-router-dom';
+import { useState } from 'react';
+import { AuthModal } from '@/components/auth/AuthModal';
 
 export const Footer = () => {
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [authModalTab, setAuthModalTab] = useState<'login' | 'signup'>('login');
+
   const scrollToSection = (id: string) => {
     const element = document.getElementById(id);
     if (element) {
       element.scrollIntoView({ behavior: 'smooth' });
     }
+  };
+
+  const handleSignUpClick = () => {
+    setAuthModalTab('signup');
+    setAuthModalOpen(true);
   };
 
   return (
@@ -154,6 +164,12 @@ export const Footer = () => {
           </div>
         </div>
       </div>
+
+      <AuthModal
+        open={authModalOpen}
+        onOpenChange={setAuthModalOpen}
+        defaultTab={authModalTab}
+      />
     </footer>
   );
 };

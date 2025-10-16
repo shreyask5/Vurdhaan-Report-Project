@@ -398,6 +398,36 @@ export const authApi = {
   async getMe(): Promise<any> {
     return apiRequest('/auth/me');
   },
+
+  /**
+   * Get user profile (including profile completion status)
+   */
+  async getProfile(): Promise<{
+    uid: string;
+    email: string;
+    name?: string;
+    designation?: string;
+    airline_name?: string;
+    airline_size?: 'small' | 'medium' | 'large';
+    profile_completed: boolean;
+  }> {
+    return apiRequest('/auth/profile');
+  },
+
+  /**
+   * Update user profile
+   */
+  async updateProfile(data: {
+    designation?: string;
+    airline_name?: string;
+    airline_size?: 'small' | 'medium' | 'large';
+    profile_completed?: boolean;
+  }): Promise<{ success: boolean }> {
+    return apiRequest('/auth/profile', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
 };
 
 export default {
