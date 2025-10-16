@@ -105,6 +105,8 @@ const ProjectValidation: React.FC = () => {
     if (confirmed) {
       try {
         await ignoreErrors(projectId);
+        // Navigate to monitoring plan review after ignoring errors
+        navigate(`/projects/${projectId}/monitoring-plan-review`);
       } catch (error) {
         alert('❌ Failed to ignore errors');
       }
