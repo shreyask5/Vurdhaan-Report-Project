@@ -6,7 +6,7 @@ import re
 from dotenv import load_dotenv
 from openai import OpenAI
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, time
 import chardet
 import csv
 import xlwings as xw
@@ -816,16 +816,38 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
         for col in time_columns:
             if col in result_df.columns and not pd.isna(row[col]):
                 time_value = row[col]
-                
+
                 try:
+                    # REJECT pandas Timestamp objects (these are full datetimes, not just time)
+                    if isinstance(time_value, pd.Timestamp):
+                        has_error = True
+                        continue
+
+                    # REJECT full datetime objects (not pure time objects)
+                    if isinstance(time_value, datetime):
+                        has_error = True
+                        continue
+
+                    # Check if string contains date patterns (YYYY-MM-DD or years)
+                    if isinstance(time_value, str):
+                        # REJECT if it contains 4-digit year pattern (19xx or 20xx)
+                        if re.search(r'\b(19|20)\d{2}\b', str(time_value)):
+                            has_error = True
+                            continue
+
+                        # REJECT if it has date separators with date-like patterns
+                        if re.search(r'\d{1,4}[-/]\d{1,2}[-/]\d{1,4}', str(time_value)):
+                            has_error = True
+                            continue
+
                     # If already in HH:MM format
                     if isinstance(time_value, str) and re.match(r'^([01]\d|2[0-3]):([0-5]\d)$', time_value):
                         continue
-                    
-                    # If it's a datetime object
-                    if isinstance(time_value, (datetime, datetime.time)):
+
+                    # If it's a pure time object (not datetime)
+                    if isinstance(time_value, time):
                         continue
-                    
+
                     # Try parsing various string formats
                     if isinstance(time_value, str):
                         # Try 12-hour format (e.g., "2:30 PM")
@@ -834,7 +856,7 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
                             continue
                         except ValueError:
                             pass
-                        
+
                         # Try other common formats
                         formats = [
                             '%H.%M',        # 14.30
@@ -849,7 +871,7 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
                             '%I %M %p',     # 2 30 PM
                             '%H%M',         # 1430 (military time)
                         ]
-                        
+
                         valid_format = False
                         for fmt in formats:
                             try:
@@ -858,7 +880,7 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
                                 break
                             except ValueError:
                                 continue
-                        
+
                         if not valid_format:
                             # If it's just a number (assume military time without colon)
                             if time_value.isdigit() and len(time_value) == 4:
@@ -866,11 +888,11 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
                                 minutes = int(time_value[2:])
                                 if 0 <= hours <= 23 and 0 <= minutes <= 59:
                                     continue
-                        
+
                         # Only flag if completely unparseable
                         if not valid_format and not (time_value.isdigit() and len(time_value) == 4):
                             has_error = True
-                
+
                 except Exception:
                     # Only flag if completely unparseable
                     has_error = True
