@@ -159,7 +159,7 @@ export default function Welcome() {
                     key={size.value}
                     type="button"
                     onClick={() => setFormData({ ...formData, airlineSize: size.value })}
-                    className={`p-6 rounded-lg border-2 text-center transition-all ${\
+                    className={`p-6 rounded-lg border-2 text-center transition-all ${
                       formData.airlineSize === size.value
                         ? 'border-primary bg-primary bg-opacity-10 shadow-md'
                         : 'border-gray-200 hover:border-primary hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800'
