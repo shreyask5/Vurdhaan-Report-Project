@@ -643,11 +643,7 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
 
     # Combine required columns
     all_required_columns = required_columns + required_fuel_columns
-
-    # Create 'index' column BEFORE step 1 (no dependency on required columns)
-    result_df = result_df.reset_index(drop=False)
-    # Now 'index' column contains original row numbers, and the new index is 0,1,2...
-
+    
 
     # 1. CHECK FOR MISSING COLUMNS
     # Check if all required columns exist in the dataframe
@@ -668,9 +664,34 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
             )
 
         # Return False to indicate the file is incomplete, and empty string for file path
-        output_file_json = generate_error_report(result_df, folder_path)
+        output_file_json = generate_error_report(original_csv_path_with_Index, folder_path)
         return False, "",result_df, output_file_json
     
+    # Ensure data is ordered before sequence validation (do not reset index here)
+    result_df['Date'] = pd.to_datetime(result_df['Date'], dayfirst=True, errors='coerce')
+    result_df.sort_values(by=['A/C Registration', 'Date', 'ATD (UTC) Block Off'], inplace=True)
+    # Create 'index' column BEFORE step 1 (no dependency on required columns)
+    result_df = result_df.reset_index(drop=False)
+    # Now 'index' column contains original row numbers, and the new index is 0,1,2...
+
+
+
+
+
+
+
+    # Persist a professionally ordered + indexed snapshot just before step 2
+    try:
+        project_dir = os.path.dirname(file_path)
+        original_csv_path_with_Index = os.path.join(project_dir, 'original_with_index.csv')
+        sorted_df = result_df.copy()
+        sorted_df['Date'] = pd.to_datetime(sorted_df['Date'], dayfirst=True, errors='coerce')
+        sorted_df = sorted_df.sort_values(by=['A/C Registration', 'Date', 'ATD (UTC) Block Off'])
+        sorted_df = sorted_df.reset_index(drop=False)
+        sorted_df.to_csv(original_csv_path_with_Index, index=False, encoding='utf-8')
+    except Exception as e:
+        print(f"Warning: Failed to persist original_with_index.csv: {e}")
+
     # 2. ICAO CODE VALIDATION
     print("Validating ICAO codes...")
     required_icao_columns = ['Origin ICAO', 'Destination ICAO']
@@ -722,20 +743,14 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
                     icao_country_dict[dest_icao] = expected_country
 
 
-
-    # Ensure data is ordered before sequence validation (do not reset index here)
-    result_df['Date'] = pd.to_datetime(result_df['Date'], dayfirst=True, errors='coerce')
-    result_df.sort_values(by=['A/C Registration', 'Date', 'ATD (UTC) Block Off'], inplace=True)
-
     # 3. FLIGHT SEQUENCE VALIDATION
     # Checks if the flight sequence for each aircraft is valid:
     # Destination ICAO of one flight should match Origin ICAO of next flight.
     # Ignores rows with date or time errors for sequence validation.
     print("Checking flight sequence...")
 
-    # Perform minimal inline date/time validation (without marking errors)
-    # This is needed because sequence validation runs before the main date/time validation
-    # Only exclude rows with clearly malformed data, not legitimate flight scenarios
+    # Perform strict inline date/time validation for sequence pre-filtering.
+    # Exclude rows with any missing or invalid time values (ATD/ATA) from sequence checks.
     date_time_error_rows = set()
 
     for idx, row in result_df.iterrows():
@@ -796,7 +811,7 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
                 # Only flag if completely unparseable
                 has_error = True
         
-        # Check Time columns - only flag if completely unparseable
+        # Check Time columns - flag if missing or unparseable
         time_columns = ['ATD (UTC) Block Off', 'ATA (UTC) Block On']
         for col in time_columns:
             if col in result_df.columns and not pd.isna(row[col]):
@@ -859,6 +874,9 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
                 except Exception:
                     # Only flag if completely unparseable
                     has_error = True
+            else:
+                # Missing time value
+                has_error = True
         
         if has_error:
             date_time_error_rows.add(original_idx)
@@ -1321,7 +1339,8 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
     # Generate output path
     if has_column_errors:
         # File has critical errors - don't save output
-        output_file_json = generate_error_report(result_df, folder_path)
+        output_file_json = generate_error_report(original_csv_path_with_Index, folder_path)
+        output_file_json = generate_error_report(original_csv_path_with_Index, folder_path)
         return False, "",result_df,output_file_json
     else:
         # Save file with validation results
@@ -1331,7 +1350,7 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
         print(f"File validated and saved to: {output_path}")
         
         # Return True if validation passed, but might have non-critical errors
-        output_file_json = generate_error_report(result_df, folder_path)
+        output_file_json = generate_error_report(original_csv_path_with_Index, folder_path)
         return True, output_path,result_df,output_file_json
 
 
@@ -1372,7 +1391,7 @@ def flatten_columns(columns):
     return flattened
 
 
-def generate_error_report(result_df, output_path, auto_generate_csvs=True):
+def generate_error_report(original_csv_path_with_Index, output_path, auto_generate_csvs=True):
     """
     Generates a JSON report of all errors, grouped by category and reason.
     Stores row data in a central place to avoid duplication.
@@ -1428,10 +1447,18 @@ def generate_error_report(result_df, output_path, auto_generate_csvs=True):
         "categories": []
     }
     
+    # Load the persisted sorted+indexed CSV, use as result_df for reporting
+    try:
+        result_df = pd.read_csv(original_csv_path_with_Index, encoding='utf-8', encoding_errors='replace')
+    except Exception as e:
+        print(f"Error loading original_csv_path_with_Index: {e}")
+        # Fallback: create minimal DataFrame to avoid crashing
+        result_df = pd.DataFrame()
+
     # Create mapping from original indices to current pandas indices
     original_to_pandas_idx = {}
     for pandas_idx, row in result_df.iterrows():
-        original_idx = row['index']
+        original_idx = row['index'] if 'index' in row else pandas_idx
         original_to_pandas_idx[original_idx] = pandas_idx
     
     # Store all row data in a central place, indexed by row_idx
@@ -1564,8 +1591,9 @@ def generate_error_report(result_df, output_path, auto_generate_csvs=True):
             # Create a DataFrame with original indices for CSV processing
             # We need to restore the original index mapping for the CSV function to work correctly
             csv_df = result_df.copy()
-            csv_df.index = csv_df['index']  # Set the index to original indices
-            csv_df = csv_df.drop('index', axis=1)  # Remove the 'index' column
+            if 'index' in csv_df.columns:
+                csv_df.index = csv_df['index']  # Set the index to original indices
+                csv_df = csv_df.drop('index', axis=1)  # Remove the 'index' column
             
             clean_csv_path, errors_csv_path = process_error_json_to_csvs(
                 json_file_path=output_file,

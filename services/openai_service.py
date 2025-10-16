@@ -266,9 +266,11 @@ class OpenAIService:
                                             "provenance": {"type": "string"},
                                             "confidence": {"type": "number"}
                                         },
+                                            "required": ["provenance", "confidence"],
                                         "additionalProperties": False
                                     }
                                 },
+                                    "required": ["value", "__meta"],
                                 "additionalProperties": False
                             },
                             "address": {
@@ -280,6 +282,7 @@ class OpenAIService:
                                     "postal_code": {"type": ["string", "null"]},
                                     "country": {"type": ["string", "null"]}
                                 },
+                                    "required": ["lines", "city", "region", "postal_code", "country"],
                                 "additionalProperties": False
                             },
                             "contacts": {"type": "array", "items": {"type": "object"}},
@@ -295,10 +298,12 @@ class OpenAIService:
                                             "name": {"type": ["string", "null"]},
                                             "address": {"type": "object"}
                                         },
+                                            "required": ["name", "address"],
                                         "additionalProperties": False
                                     },
                                     "scope": {"type": "array", "items": {"type": "string"}}
                                 },
+                                    "required": ["code", "issued_at", "expires_at", "authority", "scope"],
                                 "additionalProperties": False
                             },
                             "group_structure": {
@@ -318,9 +323,11 @@ class OpenAIService:
                                         }
                                     }
                                 },
+                                    "required": ["parent_subsidiary_single_entity", "subsidiaries"],
                                 "additionalProperties": False
                             }
                         },
+                            "required": ["name", "address", "contacts", "aoc", "group_structure"],
                         "additionalProperties": False
                     },
                     "flight_attribution": {
@@ -332,6 +339,7 @@ class OpenAIService:
                             "responsibility_under_corsia": {"type": ["string", "null"]},
                             "additional_info": {"type": ["string", "null"]}
                         },
+                            "required": ["icao_designator", "iata_code", "registration_marks", "responsibility_under_corsia", "additional_info"],
                         "additionalProperties": False
                     },
                     "activities": {
@@ -343,6 +351,7 @@ class OpenAIService:
                             "geographic_scope": {"type": "array", "items": {"type": "string"}},
                             "geographical_presence": {"type": ["string", "null"]}
                         },
+                            "required": ["description", "leasing_arrangements", "operation_types", "geographic_scope", "geographical_presence"],
                         "additionalProperties": False
                     },
                     "fleet": {
@@ -357,11 +366,12 @@ class OpenAIService:
                                         "type": {"type": ["string", "null"]},
                                         "notes": {"type": ["string", "null"]}
                                     },
-                                    "required": ["registration_mark"],
+                                    "required": ["registration_mark", "type", "notes"],
                                     "additionalProperties": False
                                 }
                             }
                         },
+                            "required": ["aircraft_list"],
                         "additionalProperties": False
                     },
                     "methods": {
@@ -378,6 +388,7 @@ class OpenAIService:
                                     "used": {"type": ["boolean", "null"]},
                                     "details": {"type": ["string", "null"]}
                                 },
+                                    "required": ["used", "details"],
                                 "additionalProperties": False
                             },
                             "primary_data_source_automatic": {"type": ["string", "null"]},
@@ -386,6 +397,19 @@ class OpenAIService:
                             "fuel_density_values": {"type": ["string", "null"]},
                             "fuel_types_used": {"type": ["string", "null"]}
                         },
+                            "required": [
+                                "fuel_use_method_a",
+                                "method_b",
+                                "block_off_on",
+                                "fuel_uplift",
+                                "allocation_block_hour",
+                                "cert_usage",
+                                "primary_data_source_automatic",
+                                "secondary_source_paper",
+                                "data_collection_method",
+                                "fuel_density_values",
+                                "fuel_types_used"
+                            ],
                         "additionalProperties": False
                     },
                     "data_management": {
@@ -399,6 +423,15 @@ class OpenAIService:
                             "data_validation_procedures": {"type": ["string", "null"]},
                             "change_control": {"type": ["string", "null"]}
                         },
+                            "required": [
+                                "data_flow",
+                                "controls",
+                                "risk_analysis",
+                                "data_gaps",
+                                "qa_qc_controls",
+                                "data_validation_procedures",
+                                "change_control"
+                            ],
                         "additionalProperties": False
                     },
                     "provenance_index": {
@@ -410,7 +443,7 @@ class OpenAIService:
                                 "location": {"type": "string"},
                                 "excerpt": {"type": "string"}
                             },
-                            "required": ["id", "location"],
+                            "required": ["id", "location", "excerpt"],
                             "additionalProperties": False
                         }
                     },
@@ -419,7 +452,17 @@ class OpenAIService:
                         "items": {"type": "string"}
                     }
                 },
-                "required": ["metadata", "missing_fields"],
+                "required": [
+                    "metadata",
+                    "operator",
+                    "flight_attribution",
+                    "activities",
+                    "fleet",
+                    "methods",
+                    "data_management",
+                    "provenance_index",
+                    "missing_fields"
+                ],
                 "additionalProperties": False
             },
             "strict": True
