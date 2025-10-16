@@ -218,74 +218,25 @@ class OpenAIService:
     def _build_extraction_prompt(self) -> str:
         """Build a flexible, hallucination-safe extraction prompt for GPT-5."""
         return (
-            "Read the provided Monitoring Plan (EMP) and Emissions Report (ER). Extract ONLY what is explicitly supported by these documents. Do NOT infer or invent. If a field is unknown or absent, set the value to null and add the key name to missing_fields.\n\n"
-            "Return a SINGLE JSON object of flat key:value pairs (values are string|null, or short arrays where necessary), plus standard metadata. No explanations.\n\n"
-            "MUST-HAVE KEYS (values MUST be string|null unless noted):\n"
+            "Extract all relevant information from the CORSIA Emissions Monitoring Plan (EMP). "
+            "Return a SINGLE JSON object. Do not include explanations. Rules: "
+            "1) Only extract what is explicitly present in the source. 2) If a field is unknown, set null and add a string to missing_fields. \n\n"
+            "JSON shape (keys optional; include only if content exists or explicitly null):\n"
             "{\n"
             "  \"metadata\": { \"document_name\": string, \"mime_type\": string, \"extracted_at\": string, \"generator_version\": string },\n"
-            "  \"operator_name\": string|null,\n"
-            "  \"icao_designator\": string|null,\n"
-            "  \"aoc_id\": string|null,\n"
-            "  \"aoc_authority\": string|null,\n"
-            "  \"state_of_operator\": string|null,\n"
-            "  \"parent_subsidiary_status\": string|null,\n"
-            "  \"contacts_accountable_manager_name\": string|null,\n"
-            "  \"contacts_accountable_manager_title\": string|null,\n"
-            "  \"contacts_accountable_manager_email\": string|null,\n"
-            "  \"contacts_accountable_manager_phone\": string|null,\n"
-            "  \"contacts_corsia_focal_name\": string|null,\n"
-            "  \"contacts_corsia_focal_title\": string|null,\n"
-            "  \"contacts_corsia_focal_email\": string|null,\n"
-            "  \"contacts_corsia_focal_phone\": string|null,\n"
-            "  \"reporting_year\": string|null,\n"
-            "  \"coverage\": string|null,\n"
-            "  \"aggregation_level\": string|null,\n"
-            "  \"aircraft_types_and_counts\": string|null,\n"
-            "  \"fuel_types\": string|null,\n"
-            "  \"fuel_suppliers\": string|null,\n"
-            "  \"monitoring_methods_method_a\": string|null,\n"
-            "  \"monitoring_methods_method_b\": string|null,\n"
-            "  \"monitoring_methods_block_off_on\": string|null,\n"
-            "  \"monitoring_methods_fuel_uplift\": string|null,\n"
-            "  \"monitoring_methods_fuel_allocation_block_hour\": string|null,\n"
-            "  \"monitoring_methods_periods\": string|null,\n"
-            "  \"monitoring_methods_primary_data_sources\": string|null,\n"
-            "  \"fuel_density_values_and_sources\": string|null,\n"
-            "  \"cert_usage\": string|null,\n"
-            "  \"cert_inputs\": string|null,\n"
-            "  \"emission_factors\": string|null,\n"
-            "  \"data_flow\": string|null,\n"
-            "  \"controls\": string|null,\n"
-            "  \"error_handling\": string|null,\n"
-            "  \"change_control\": string|null,\n"
-            "  \"responsible_teams_roles\": string|null,\n"
-            "  \"records_storage_locations\": string|null,\n"
-            "  \"retention_time\": string|null,\n"
-            "  \"backup_archiving\": string|null,\n"
-            "  \"reporting_state_pairs\": string|null,\n"
-            "  \"major_aerodrome_pairs\": string|null,\n"
-            "  \"exclusions_special_cases\": string|null,\n"
-            "  \"data_gaps_occurred\": string|null,\n"
-            "  \"data_gaps_percent_affected\": string|null,\n"
-            "  \"data_gaps_replacement_methods\": string|null,\n"
-            "  \"data_gaps_justification\": string|null,\n"
-            "  \"emission_reductions_saf\": string|null,\n"
-            "  \"saf_book_and_claim\": string|null,\n"
-            "  \"documentation_required\": string|null,\n"
-            "  \"key_missing_items\": [string],\n"
+            "  \"operator\": { \"name\": {\"value\": string|null, \"__meta\": {\"provenance\": string, \"confidence\": number}}, \"address\": {\"lines\": [string], \"city\": string|null, \"region\": string|null, \"postal_code\": string|null, \"country\": string|null}, \"contacts\": [object], \"aoc\": {\"code\": string|null, \"issued_at\": string|null, \"expires_at\": string|null, \"authority\": {\"name\": string|null, \"address\": object}, \"scope\": [string]} , \"group_structure\": {\"parent_subsidiary_single_entity\": boolean|null, \"subsidiaries\": [{\"name\": string, \"aircraft_identification_method\": string}] } },\n"
+            "  \"flight_attribution\": { \"icao_designator\": string|null, \"iata_code\": string|null, \"registration_marks\": [string], \"responsibility_under_corsia\": string|null, \"additional_info\": string|null },\n"
+            "  \"activities\": { \"description\": string|null, \"leasing_arrangements\": [string], \"operation_types\": [string], \"geographic_scope\": [string], \"geographical_presence\": string|null },\n"
+            "  \"fleet\": { \"aircraft_list\": [{\"registration_mark\": string, \"type\": string|null, \"notes\": string|null}] },\n"
+            "  \"methods\": { \"fuel_use_method_a\": object, \"method_b\": object, \"block_off_on\": object, \"fuel_uplift\": object, \"allocation_block_hour\": object, \"cert_usage\": {\"used\": boolean|null, \"details\": string|null}, \"primary_data_source_automatic\": string|null, \"secondary_source_paper\": string|null, \"data_collection_method\": string|null, \"fuel_density_values\": string|null, \"fuel_types_used\": string|null },\n"
+            "  \"data_management\": { \"data_flow\": string|null, \"controls\": string|null, \"risk_analysis\": string|null, \"data_gaps\": string|null, \"qa_qc_controls\": string|null, \"data_validation_procedures\": string|null, \"change_control\": string|null },\n"
             "  \"provenance_index\": [{ \"id\": string, \"location\": string, \"excerpt\": string }],\n"
             "  \"missing_fields\": [string]\n"
-            "}\n\n"
-            "ADDITIONAL RULES:\n"
-            "- Use SI units only (t, kg, L).\n"
-            "- Values must match the docs verbatim where possible; summarize numbers only if clearly stated. When not present, use null and record the key in missing_fields.\n"
-            "- For \"monitoring_methods_periods\", include only years within 2021–2035 if specified.\n"
-            "- Keep strings concise; no paragraphs; no tables.\n"
-            "- Important: Return ONLY the JSON object described above."
+            "}\n"
         )
 
     def _build_extraction_schema(self) -> Dict[str, Any]:
-        """Strict JSON Schema for structured outputs (string|null flat keys)."""
+        """Strict JSON Schema for structured outputs with nested CORSIA sections."""
         return {
             "name": "corsia_monitoring_plan",
             "schema": {
@@ -300,60 +251,155 @@ class OpenAIService:
                             "generator_version": {"type": "string"}
                         },
                         "required": ["extracted_at", "generator_version"],
-                        "additionalProperties": True
+                        "additionalProperties": False
                     },
-                    "operator_name": {"type": ["string", "null"]},
-                    "icao_designator": {"type": ["string", "null"]},
-                    "aoc_id": {"type": ["string", "null"]},
-                    "aoc_authority": {"type": ["string", "null"]},
-                    "state_of_operator": {"type": ["string", "null"]},
-                    "parent_subsidiary_status": {"type": ["string", "null"]},
-                    "contacts_accountable_manager_name": {"type": ["string", "null"]},
-                    "contacts_accountable_manager_title": {"type": ["string", "null"]},
-                    "contacts_accountable_manager_email": {"type": ["string", "null"]},
-                    "contacts_accountable_manager_phone": {"type": ["string", "null"]},
-                    "contacts_corsia_focal_name": {"type": ["string", "null"]},
-                    "contacts_corsia_focal_title": {"type": ["string", "null"]},
-                    "contacts_corsia_focal_email": {"type": ["string", "null"]},
-                    "contacts_corsia_focal_phone": {"type": ["string", "null"]},
-                    "reporting_year": {"type": ["string", "null"]},
-                    "coverage": {"type": ["string", "null"]},
-                    "aggregation_level": {"type": ["string", "null"]},
-                    "aircraft_types_and_counts": {"type": ["string", "null"]},
-                    "fuel_types": {"type": ["string", "null"]},
-                    "fuel_suppliers": {"type": ["string", "null"]},
-                    "monitoring_methods_method_a": {"type": ["string", "null"]},
-                    "monitoring_methods_method_b": {"type": ["string", "null"]},
-                    "monitoring_methods_block_off_on": {"type": ["string", "null"]},
-                    "monitoring_methods_fuel_uplift": {"type": ["string", "null"]},
-                    "monitoring_methods_fuel_allocation_block_hour": {"type": ["string", "null"]},
-                    "monitoring_methods_periods": {"type": ["string", "null"]},
-                    "monitoring_methods_primary_data_sources": {"type": ["string", "null"]},
-                    "fuel_density_values_and_sources": {"type": ["string", "null"]},
-                    "cert_usage": {"type": ["string", "null"]},
-                    "cert_inputs": {"type": ["string", "null"]},
-                    "emission_factors": {"type": ["string", "null"]},
-                    "data_flow": {"type": ["string", "null"]},
-                    "controls": {"type": ["string", "null"]},
-                    "error_handling": {"type": ["string", "null"]},
-                    "change_control": {"type": ["string", "null"]},
-                    "responsible_teams_roles": {"type": ["string", "null"]},
-                    "records_storage_locations": {"type": ["string", "null"]},
-                    "retention_time": {"type": ["string", "null"]},
-                    "backup_archiving": {"type": ["string", "null"]},
-                    "reporting_state_pairs": {"type": ["string", "null"]},
-                    "major_aerodrome_pairs": {"type": ["string", "null"]},
-                    "exclusions_special_cases": {"type": ["string", "null"]},
-                    "data_gaps_occurred": {"type": ["string", "null"]},
-                    "data_gaps_percent_affected": {"type": ["string", "null"]},
-                    "data_gaps_replacement_methods": {"type": ["string", "null"]},
-                    "data_gaps_justification": {"type": ["string", "null"]},
-                    "emission_reductions_saf": {"type": ["string", "null"]},
-                    "saf_book_and_claim": {"type": ["string", "null"]},
-                    "documentation_required": {"type": ["string", "null"]},
-                    "key_missing_items": {
-                        "type": "array",
-                        "items": {"type": "string"}
+                    "operator": {
+                        "type": "object",
+                        "properties": {
+                            "name": {
+                                "type": "object",
+                                "properties": {
+                                    "value": {"type": ["string", "null"]},
+                                    "__meta": {
+                                        "type": "object",
+                                        "properties": {
+                                            "provenance": {"type": "string"},
+                                            "confidence": {"type": "number"}
+                                        },
+                                        "additionalProperties": False
+                                    }
+                                },
+                                "additionalProperties": False
+                            },
+                            "address": {
+                                "type": "object",
+                                "properties": {
+                                    "lines": {"type": "array", "items": {"type": "string"}},
+                                    "city": {"type": ["string", "null"]},
+                                    "region": {"type": ["string", "null"]},
+                                    "postal_code": {"type": ["string", "null"]},
+                                    "country": {"type": ["string", "null"]}
+                                },
+                                "additionalProperties": False
+                            },
+                            "contacts": {"type": "array", "items": {"type": "object"}},
+                            "aoc": {
+                                "type": "object",
+                                "properties": {
+                                    "code": {"type": ["string", "null"]},
+                                    "issued_at": {"type": ["string", "null"]},
+                                    "expires_at": {"type": ["string", "null"]},
+                                    "authority": {
+                                        "type": "object",
+                                        "properties": {
+                                            "name": {"type": ["string", "null"]},
+                                            "address": {"type": "object"}
+                                        },
+                                        "additionalProperties": False
+                                    },
+                                    "scope": {"type": "array", "items": {"type": "string"}}
+                                },
+                                "additionalProperties": False
+                            },
+                            "group_structure": {
+                                "type": "object",
+                                "properties": {
+                                    "parent_subsidiary_single_entity": {"type": ["boolean", "null"]},
+                                    "subsidiaries": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "properties": {
+                                                "name": {"type": "string"},
+                                                "aircraft_identification_method": {"type": "string"}
+                                            },
+                                            "required": ["name", "aircraft_identification_method"],
+                                            "additionalProperties": False
+                                        }
+                                    }
+                                },
+                                "additionalProperties": False
+                            }
+                        },
+                        "additionalProperties": False
+                    },
+                    "flight_attribution": {
+                        "type": "object",
+                        "properties": {
+                            "icao_designator": {"type": ["string", "null"]},
+                            "iata_code": {"type": ["string", "null"]},
+                            "registration_marks": {"type": "array", "items": {"type": "string"}},
+                            "responsibility_under_corsia": {"type": ["string", "null"]},
+                            "additional_info": {"type": ["string", "null"]}
+                        },
+                        "additionalProperties": False
+                    },
+                    "activities": {
+                        "type": "object",
+                        "properties": {
+                            "description": {"type": ["string", "null"]},
+                            "leasing_arrangements": {"type": "array", "items": {"type": "string"}},
+                            "operation_types": {"type": "array", "items": {"type": "string"}},
+                            "geographic_scope": {"type": "array", "items": {"type": "string"}},
+                            "geographical_presence": {"type": ["string", "null"]}
+                        },
+                        "additionalProperties": False
+                    },
+                    "fleet": {
+                        "type": "object",
+                        "properties": {
+                            "aircraft_list": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "registration_mark": {"type": "string"},
+                                        "type": {"type": ["string", "null"]},
+                                        "notes": {"type": ["string", "null"]}
+                                    },
+                                    "required": ["registration_mark"],
+                                    "additionalProperties": False
+                                }
+                            }
+                        },
+                        "additionalProperties": False
+                    },
+                    "methods": {
+                        "type": "object",
+                        "properties": {
+                            "fuel_use_method_a": {"type": "object"},
+                            "method_b": {"type": "object"},
+                            "block_off_on": {"type": "object"},
+                            "fuel_uplift": {"type": "object"},
+                            "allocation_block_hour": {"type": "object"},
+                            "cert_usage": {
+                                "type": "object",
+                                "properties": {
+                                    "used": {"type": ["boolean", "null"]},
+                                    "details": {"type": ["string", "null"]}
+                                },
+                                "additionalProperties": False
+                            },
+                            "primary_data_source_automatic": {"type": ["string", "null"]},
+                            "secondary_source_paper": {"type": ["string", "null"]},
+                            "data_collection_method": {"type": ["string", "null"]},
+                            "fuel_density_values": {"type": ["string", "null"]},
+                            "fuel_types_used": {"type": ["string", "null"]}
+                        },
+                        "additionalProperties": False
+                    },
+                    "data_management": {
+                        "type": "object",
+                        "properties": {
+                            "data_flow": {"type": ["string", "null"]},
+                            "controls": {"type": ["string", "null"]},
+                            "risk_analysis": {"type": ["string", "null"]},
+                            "data_gaps": {"type": ["string", "null"]},
+                            "qa_qc_controls": {"type": ["string", "null"]},
+                            "data_validation_procedures": {"type": ["string", "null"]},
+                            "change_control": {"type": ["string", "null"]}
+                        },
+                        "additionalProperties": False
                     },
                     "provenance_index": {
                         "type": "array",
@@ -374,7 +420,7 @@ class OpenAIService:
                     }
                 },
                 "required": ["metadata", "missing_fields"],
-                "additionalProperties": True
+                "additionalProperties": False
             },
             "strict": True
         }
