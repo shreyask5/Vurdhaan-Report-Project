@@ -644,6 +644,11 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
     # Combine required columns
     all_required_columns = required_columns + required_fuel_columns
 
+    # Create 'index' column BEFORE step 1 (no dependency on required columns)
+    result_df = result_df.reset_index(drop=False)
+    # Now 'index' column contains original row numbers, and the new index is 0,1,2...
+
+
     # 1. CHECK FOR MISSING COLUMNS
     # Check if all required columns exist in the dataframe
     missing_columns = [col for col in all_required_columns if col not in result_df.columns]
@@ -665,7 +670,7 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
         # Return False to indicate the file is incomplete, and empty string for file path
         output_file_json = generate_error_report(result_df, folder_path)
         return False, "",result_df, output_file_json
-
+    
     # 2. ICAO CODE VALIDATION
     print("Validating ICAO codes...")
     required_icao_columns = ['Origin ICAO', 'Destination ICAO']
@@ -716,13 +721,11 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
                     # Add the newly discovered valid ICAO code to the dictionary
                     icao_country_dict[dest_icao] = expected_country
 
-    # Sort the dataframe by Date, A/C Registration, and ATD
+
+
+    # Ensure data is ordered before sequence validation (do not reset index here)
     result_df['Date'] = pd.to_datetime(result_df['Date'], dayfirst=True, errors='coerce')
     result_df.sort_values(by=['A/C Registration', 'Date', 'ATD (UTC) Block Off'], inplace=True)
-
-    # Reset index after sorting but keep original indices for error tracking
-    result_df = result_df.reset_index(drop=False)
-    # Now 'index' column contains original row numbers, and the new index is 0,1,2...
 
     # 3. FLIGHT SEQUENCE VALIDATION
     # Checks if the flight sequence for each aircraft is valid:
