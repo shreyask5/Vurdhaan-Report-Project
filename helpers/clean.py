@@ -872,7 +872,9 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
                 
                 # Range check (align with old flow) if parsed
                 if not has_error and date_obj is not None and start_date and end_date:
-                    if not (start_date <= date_obj <= end_date):
+                    # Convert date_obj to date for comparison if it's a datetime
+                    date_for_comparison = date_obj.date() if hasattr(date_obj, 'date') else date_obj
+                    if not (start_date <= date_for_comparison <= end_date):
                         has_error = True
         
         # Check Time columns - flag if missing or unparseable
@@ -1329,8 +1331,11 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
                                     date_debug_count += 1
                     
                     # Check if date is within specified range
-                    if start_date and end_date and not (start_date <= date_obj <= end_date):
-                        mark_error(date_str, f"Date not within range {start_date.date()} to {end_date.date()}", original_idx, "Date", "Date")
+                    if start_date and end_date:
+                        # Convert datetime to date for comparison if needed
+                        date_for_comparison = date_obj.date() if hasattr(date_obj, 'date') else date_obj
+                        if not (start_date <= date_for_comparison <= end_date):
+                            mark_error(date_str, f"Date not within range {start_date.date()} to {end_date.date()}", original_idx, "Date", "Date")
                         if date_debug_count < date_debug_limit:
                             print(f"[DATE CHECK] Row {original_idx}: out of range '{date_str}'")
                             date_debug_count += 1
