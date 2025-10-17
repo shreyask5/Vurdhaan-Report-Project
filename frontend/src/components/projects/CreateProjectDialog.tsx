@@ -9,13 +9,13 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Plus, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { projectsApi } from '@/services/api';
+import { SchemeSelector } from '@/components/project/SchemeSelector';
+import { SchemeType } from '@/types/validation';
 
 interface CreateProjectDialogProps {
   onProjectCreated?: () => void;
@@ -25,8 +25,7 @@ export function CreateProjectDialog({ onProjectCreated }: CreateProjectDialogPro
   const [open, setOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
-    name: '',
-    description: '',
+    scheme: '' as '' | SchemeType,
     ai_chat_enabled: true,
     save_files_on_server: false,
   });
@@ -34,22 +33,25 @@ export function CreateProjectDialog({ onProjectCreated }: CreateProjectDialogPro
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.name.trim()) {
-      toast.error('Project name is required');
+    if (!formData.scheme) {
+      toast.error('Please select a scheme');
       return;
     }
 
     setIsLoading(true);
     try {
-      await projectsApi.create(formData);
+      await projectsApi.create({
+        scheme: formData.scheme,
+        ai_chat_enabled: formData.ai_chat_enabled,
+        save_files_on_server: formData.save_files_on_server,
+      });
 
       toast.success('Project created successfully!');
       setOpen(false);
 
       // Reset form
       setFormData({
-        name: '',
-        description: '',
+        scheme: '',
         ai_chat_enabled: true,
         save_files_on_server: false,
       });
@@ -71,44 +73,25 @@ export function CreateProjectDialog({ onProjectCreated }: CreateProjectDialogPro
       <DialogTrigger asChild>
         <Button className="gap-2">
           <Plus className="h-4 w-4" />
-          Create Project
+          Create Report
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[500px]">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>Create New Project</DialogTitle>
+            <DialogTitle>Create New Report</DialogTitle>
             <DialogDescription>
-              Create a new flight data analysis project with customizable settings.
+              Create a new flight data analysis report with customizable settings.
             </DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4 py-4">
-            {/* Project Name */}
+            {/* Scheme Selector within dialog */}
             <div className="grid gap-2">
-              <Label htmlFor="name">
-                Project Name <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                id="name"
-                placeholder="e.g., Q3 2024 Flight Data"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                disabled={isLoading}
-                required
-              />
-            </div>
-
-            {/* Project Description */}
-            <div className="grid gap-2">
-              <Label htmlFor="description">Description (Optional)</Label>
-              <Textarea
-                id="description"
-                placeholder="Brief description of this project..."
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                disabled={isLoading}
-                rows={3}
+              <Label className="text-base">Scheme</Label>
+              <SchemeSelector
+                selectedScheme={formData.scheme as SchemeType}
+                onSelect={(scheme) => setFormData({ ...formData, scheme })}
               />
             </div>
 
@@ -169,7 +152,7 @@ export function CreateProjectDialog({ onProjectCreated }: CreateProjectDialogPro
                   Creating...
                 </>
               ) : (
-                'Create Project'
+                'Create Report'
               )}
             </Button>
           </DialogFooter>

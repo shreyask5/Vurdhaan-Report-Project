@@ -21,6 +21,7 @@ export interface Project {
   validation_status?: boolean;
   error_count?: number;
   upload_completed?: boolean;
+  scheme?: string;
   error_summary?: {
     total_errors: number;
     total_clean_rows: number;
@@ -39,8 +40,7 @@ export interface Project {
 }
 
 export interface CreateProjectData {
-  name: string;
-  description?: string;
+  scheme: string;
   ai_chat_enabled: boolean;
   save_files_on_server: boolean;
 }
@@ -100,7 +100,7 @@ export const projectsApi = {
   async list(status?: string): Promise<{ projects: Project[]; total: number }> {
     const params = status ? `?status=${status}` : '';
     console.log('[API DEBUG] Fetching projects list');
-    const result = await apiRequest(`/projects${params}`);
+    const result = await apiRequest<{ projects: Project[]; total: number }>(`/projects${params}`);
     console.log('[API DEBUG] Projects list response:', result);
     console.log('[API DEBUG] First project sample:', result.projects?.[0]);
     return result;
@@ -110,7 +110,7 @@ export const projectsApi = {
    * Create a new project
    */
   async create(data: CreateProjectData): Promise<{ success: boolean; project: Project }> {
-    return apiRequest('/projects', {
+    return apiRequest<{ success: boolean; project: Project }>('/projects', {
       method: 'POST',
       body: JSON.stringify(data),
     });
@@ -120,7 +120,7 @@ export const projectsApi = {
    * Get project details
    */
   async get(projectId: string): Promise<Project> {
-    return apiRequest(`/projects/${projectId}`);
+    return apiRequest<Project>(`/projects/${projectId}`);
   },
 
   /**
@@ -130,7 +130,7 @@ export const projectsApi = {
     projectId: string,
     data: Partial<CreateProjectData>
   ): Promise<{ success: boolean; project: Project }> {
-    return apiRequest(`/projects/${projectId}`, {
+    return apiRequest<{ success: boolean; project: Project }>(`/projects/${projectId}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     });
@@ -156,7 +156,13 @@ export const projectsApi = {
     validation_params: any;
   }> {
     console.log('[API DEBUG] getUploadStatus called for projectId:', projectId);
-    const result = await apiRequest(`/projects/${projectId}/upload-status`);
+    const result = await apiRequest<{
+      upload_completed: boolean;
+      validation_status: boolean | null;
+      has_errors: boolean;
+      error_summary: any;
+      validation_params: any;
+    }>(`/projects/${projectId}/upload-status`);
     console.log('[API DEBUG] getUploadStatus response:', result);
     return result;
   },

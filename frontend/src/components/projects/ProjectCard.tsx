@@ -237,7 +237,7 @@ export function ProjectCard({
               variant="default"
               size="sm"
               onClick={() => onGenerateReport?.(project.id)}
-              className="w-full col-span-2"
+              className="w-full"
             >
               <FileText className="mr-2 h-4 w-4" />
               Generate Report

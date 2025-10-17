@@ -47,39 +47,39 @@ export const SchemeSelector: React.FC<SchemeSelectorProps> = ({
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* Scheme Selection */}
       <div>
-        <h3 className="text-xl font-semibold text-gray-800 dark:text-gray-200 mb-4">
-          Select Emissions Trading Scheme
+        <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-2">
+          Select scheme
         </h3>
-        <p className="text-gray-600 dark:text-gray-400 mb-4">
-          Choose the emissions trading scheme that applies to your operations
+        <p className="text-gray-600 dark:text-gray-400 mb-3">
+          Choose the scheme that applies to your operations
         </p>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {SCHEMES.map((s) => (
             <button
               key={s.value}
               onClick={() => setScheme(s.value)}
-              className={`p-4 rounded-lg border-2 text-left transition-all ${
+              className={`p-3 rounded-md border text-left transition-all ${
                 scheme === s.value
-                  ? 'border-primary bg-primary bg-opacity-10'
+                  ? 'border-primary bg-primary/10'
                   : 'border-gray-200 hover:border-primary hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800'
               }`}
             >
-              <div className="font-semibold text-lg text-gray-800 dark:text-gray-200">{s.label}</div>
-              <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">{s.description}</div>
+              <div className="font-semibold text-base text-gray-800 dark:text-gray-200">{s.label}</div>
+              <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">{s.description}</div>
             </button>
           ))}
         </div>
       </div>
 
       {/* Submit Button */}
-      <div className="flex justify-end pt-4">
+      <div className="flex justify-end pt-3">
         <button
           onClick={handleSubmit}
           disabled={!scheme}
-          className={`px-8 py-3 rounded-lg font-semibold transition-all ${
+          className={`px-6 py-2 rounded-md font-semibold transition-all ${
             scheme
               ? 'bg-primary text-white hover:bg-primary-dark'
               : 'bg-gray-300 text-gray-500 cursor-not-allowed dark:bg-gray-700'

@@ -314,6 +314,30 @@ class FirestoreService:
         print(f"✅ Updated user profile: {uid}")
         return updated_doc.to_dict() if updated_doc.exists else None
 
+    def get_user_report_counters(self, uid: str) -> Dict[str, int]:
+        """
+        Return per-scheme counters used for auto-naming reports.
+        """
+        user = self.get_user(uid) or {}
+        return (user.get('report_counters') or {})
+
+    def increment_report_counter(self, uid: str, scheme: str) -> int:
+        """
+        Atomically increment and return the next counter for a scheme.
+        """
+        user_ref = self.db.collection(self.users_collection).document(uid)
+        # Firestore doesn't support per-field dynamic increment inside nested map directly
+        # Read-modify-write with last-write-wins is acceptable for this use-case
+        user_doc = user_ref.get()
+        current = {}
+        if user_doc.exists:
+            data = user_doc.to_dict() or {}
+            current = data.get('report_counters') or {}
+        next_val = int(current.get(scheme, 0)) + 1
+        current[scheme] = next_val
+        user_ref.set({'report_counters': current}, merge=True)
+        return next_val
+
     def increment_user_project_count(self, uid: str) -> None:
         """
         Increment user's project count

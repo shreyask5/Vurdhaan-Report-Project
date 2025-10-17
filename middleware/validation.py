@@ -17,15 +17,9 @@ import json
 
 class CreateProjectSchema(BaseModel):
     """Schema for creating a new project"""
-    name: str = Field(
-        min_length=1,
-        max_length=100,
-        description="Project name"
-    )
-    description: Optional[str] = Field(
-        None,
-        max_length=500,
-        description="Project description"
+    scheme: str = Field(
+        description="Scheme type",
+        pattern='^(CORSIA|EU ETS|UK ETS|CH ETS|ReFuelEU)$'
     )
     ai_chat_enabled: bool = Field(
         default=False,
@@ -35,12 +29,6 @@ class CreateProjectSchema(BaseModel):
         default=False,
         description="Save uploaded files on server"
     )
-
-    @validator('name')
-    def name_not_empty(cls, v):
-        if not v.strip():
-            raise ValueError('Name cannot be empty or whitespace only')
-        return v.strip()
 
     class Config:
         extra = 'forbid'  # Reject unknown fields

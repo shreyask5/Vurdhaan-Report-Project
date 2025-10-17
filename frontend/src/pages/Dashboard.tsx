@@ -175,12 +175,12 @@ export default function Dashboard() {
       <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
           <h1 className="text-3xl font-bold mb-2">Dashboard</h1>
-          <p className="text-muted-foreground">Manage your flight data analysis projects</p>
+          <p className="text-muted-foreground">Manage your flight data analysis reports</p>
         </div>
 
         <Tabs defaultValue="projects" className="space-y-6">
           <TabsList>
-            <TabsTrigger value="projects">Projects</TabsTrigger>
+            <TabsTrigger value="projects">Reports</TabsTrigger>
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="profile">Profile</TabsTrigger>
           </TabsList>
@@ -191,9 +191,9 @@ export default function Dashboard() {
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <div>
-                    <CardTitle>Your Projects</CardTitle>
+                    <CardTitle>Your Reports</CardTitle>
                     <CardDescription>
-                      Create and manage your flight data analysis projects
+                      Create and manage your flight data analysis reports
                     </CardDescription>
                   </div>
                   <div className="flex gap-2">
@@ -221,9 +221,9 @@ export default function Dashboard() {
                 ) : projects.length === 0 ? (
                   <div className="text-center py-12">
                     <FolderOpen className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                    <h3 className="text-lg font-semibold mb-2">No projects yet</h3>
+                    <h3 className="text-lg font-semibold mb-2">No reports yet</h3>
                     <p className="text-muted-foreground mb-4">
-                      Create your first project to get started
+                      Create your first report to get started
                     </p>
                     <CreateProjectDialog onProjectCreated={loadProjects} />
                   </div>
@@ -251,12 +251,12 @@ export default function Dashboard() {
             <div className="grid md:grid-cols-3 gap-6">
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Total Projects</CardTitle>
+                  <CardTitle className="text-sm font-medium">Total Reports</CardTitle>
                   <FolderOpen className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">{projects.length}</div>
-                  <p className="text-xs text-muted-foreground">Active projects</p>
+                  <p className="text-xs text-muted-foreground">Active reports</p>
                 </CardContent>
               </Card>
 
@@ -269,7 +269,7 @@ export default function Dashboard() {
                   <div className="text-2xl font-bold">
                     {projects.filter((p) => p.ai_chat_enabled).length}
                   </div>
-                  <p className="text-xs text-muted-foreground">Projects with AI chat</p>
+                  <p className="text-xs text-muted-foreground">Reports with AI chat</p>
                 </CardContent>
               </Card>
 
@@ -282,7 +282,7 @@ export default function Dashboard() {
                   <div className="text-2xl font-bold">
                     {projects.filter((p) => p.has_file).length}
                   </div>
-                  <p className="text-xs text-muted-foreground">Projects with data</p>
+                  <p className="text-xs text-muted-foreground">Reports with data</p>
                 </CardContent>
               </Card>
             </div>

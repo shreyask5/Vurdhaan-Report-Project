@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useValidation } from '../contexts/ValidationContext';
-import { SchemeSelector } from '../components/project/SchemeSelector';
 import { MonitoringPlanUpload } from '../components/project/MonitoringPlanUpload';
 import { FileUploadSection } from '../components/project/FileUploadSection';
 import { FuelMethodSelector } from '../components/project/FuelMethodSelector';
@@ -17,7 +16,6 @@ const ProjectUpload: React.FC = () => {
   const [isCheckingStatus, setIsCheckingStatus] = useState(true);
   const {
     currentStep,
-    selectedScheme,
     airlineSize,
     monitoringPlanData,
     selectedFile,
@@ -26,7 +24,7 @@ const ProjectUpload: React.FC = () => {
     columnMapping,
     validationParams,
     isLoading,
-    setScheme,
+    selectedScheme,
     uploadMonitoringPlan,
     setFile,
     setFuelMethod,
@@ -93,10 +91,7 @@ const ProjectUpload: React.FC = () => {
 
 
 
-  const handleSchemeSelect = async (scheme: SchemeType) => {
-    if (!projectId) return;
-    await setScheme(projectId, scheme);
-  };
+  // Scheme selection moved to CreateProjectDialog
 
   const handleMonitoringPlanUpload = async (file: File) => {
     if (!projectId) return;
@@ -194,8 +189,8 @@ const ProjectUpload: React.FC = () => {
         {/* Progress Indicator */}
         <div className="mb-8 bg-white rounded-xl p-6 shadow-card">
           <div className="flex items-center justify-between">
-            {['Scheme', 'Monitoring Plan', 'Parameters', 'Flight Data', 'Column Mapping'].map((step, index) => {
-              const stepKeys = ['scheme', 'monitoring_plan', 'parameters', 'upload', 'mapping'];
+            {['Monitoring Plan', 'Parameters', 'Flight Data', 'Column Mapping'].map((step, index) => {
+              const stepKeys = ['monitoring_plan', 'parameters', 'upload', 'mapping'];
               const currentIndex = stepKeys.indexOf(currentStep);
               const isActive = index === currentIndex;
               const isCompleted = index < currentIndex;
@@ -222,7 +217,7 @@ const ProjectUpload: React.FC = () => {
                       {step}
                     </span>
                   </div>
-                  {index < 4 && (
+                  {index < 3 && (
                     <div
                       className={`flex-1 h-1 mx-4 rounded ${
                         isCompleted ? 'bg-success' : 'bg-gray-200'
@@ -237,14 +232,7 @@ const ProjectUpload: React.FC = () => {
 
         {/* Step Content */}
         <div className="step-content">
-          {currentStep === 'scheme' && (
-            <div className="bg-white rounded-2xl p-8 shadow-card">
-              <SchemeSelector
-                onSelect={handleSchemeSelect}
-                selectedScheme={selectedScheme}
-              />
-            </div>
-          )}
+          {/* Scheme step removed; selection handled during report creation */}
 
 
 
@@ -379,8 +367,7 @@ const ProjectUpload: React.FC = () => {
               {/* Navigation Buttons */}
               <div className="flex justify-between pt-6 border-t border-gray-200">
                 <button
-                  // TEMP: Monitoring Plan step skipped for testing; go back to Scheme instead
-                  onClick={() => goToStep('scheme')}
+                  onClick={() => goToStep('monitoring_plan')}
                   className="px-6 py-2 border-2 border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition"
                 >
                   ← Back to Monitoring Plan

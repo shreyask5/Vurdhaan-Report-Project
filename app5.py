@@ -267,18 +267,28 @@ def list_projects_route():
 @validate_json(CreateProjectSchema)
 def create_project_route():
     data = g.validated_data
+    # Determine next version number for the selected scheme
+    scheme = data['scheme']
+    next_version = firestore.increment_report_counter(g.user['uid'], scheme)
+    name = f"{scheme} Version {next_version}"
+
     project = projects.create_project(
         owner_uid=g.user['uid'],
-        name=data['name'],
-        description=data.get('description'),
+        name=name,
+        description=None,
         ai_chat_enabled=data.get('ai_chat_enabled', False),
         save_files_on_server=data.get('save_files_on_server', False)
     )
+
+    # Persist scheme on the project
+    projects.update_project(project['id'], g.user['uid'], {'scheme': scheme})
+
     return jsonify({
         'success': True,
         'project': {
             'id': project['id'],
-            'name': project['name'],
+            'name': name,
+            'scheme': scheme,
             'ai_chat_enabled': project['ai_chat_enabled'],
             'save_files_on_server': project['save_files_on_server']
         }
