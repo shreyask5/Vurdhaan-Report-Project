@@ -102,8 +102,9 @@ class OpenAIService:
                 return self._extract_from_docx(file_path)
             if ext in ['txt', 'text']:
                 return self._extract_from_txt(file_path)
+            
             # If we get here, the format is unsupported
-                raise ValueError(f"Unsupported file format: {file_extension}")
+            raise ValueError(f"Unsupported file format: {file_extension}")
 
         except Exception as e:
             print(f"[OPENAI SERVICE ERROR] Content extraction failed: {str(e)}")
@@ -242,7 +243,7 @@ class OpenAIService:
             "  \"scope_period\": { \"reporting_year\": string|null, \"coverage\": string|null, \"aggregation_level\": string|null, \"international_only\": boolean|null },\n"
             "  \"activities\": { \"description\": string|null, \"leasing_arrangements\": [string], \"operation_types\": [string], \"geographic_scope\": [string], \"geographical_presence\": string|null },\n"
             "  \"fleet_fuel\": { \"aircraft_list\": [{\"registration_mark\": string, \"type\": string|null, \"count\": number|null, \"notes\": string|null}], \"fuel_types\": [string], \"fuel_suppliers\": [string] },\n"
-            "  \"monitoring_methods\": { \"method_a\": object, \"method_b\": object, \"block_off_on\": object, \"fuel_uplift\": object, \"fuel_allocation_block_hour\": object, \"periods_of_applicability\": [string], \"primary_data_sources\": [string], \"sub_fleet_applicability\": object },\n"
+            "  \"monitoring_methods\": { \"method_a\": {\"used\": boolean|null, \"details\": string|null, \"applicability\": [string]}, \"method_b\": {\"used\": boolean|null, \"details\": string|null, \"applicability\": [string]}, \"block_off_on\": {\"used\": boolean|null, \"details\": string|null}, \"fuel_uplift\": {\"used\": boolean|null, \"details\": string|null}, \"fuel_allocation_block_hour\": {\"used\": boolean|null, \"details\": string|null}, \"periods_of_applicability\": [string], \"primary_data_sources\": [string], \"sub_fleet_applicability\": {\"exists\": boolean|null, \"notes\": string|null} },\n"
             "  \"calculation_inputs\": { \"fuel_density_values\": string|null, \"fuel_density_sources\": string|null, \"cert_usage\": boolean|null, \"cert_inputs\": string|null, \"emission_factors\": string|null },\n"
             "  \"data_management\": { \"data_flow\": string|null, \"controls\": string|null, \"risk_analysis\": string|null, \"data_gaps\": string|null, \"qa_qc_controls\": string|null, \"data_validation_procedures\": string|null, \"change_control\": string|null, \"responsible_teams\": [string] },\n"
             "  \"records_retention\": { \"storage_systems\": [string], \"storage_locations\": [string], \"retention_time\": string|null, \"backup_archiving\": string|null },\n"
@@ -434,18 +435,77 @@ class OpenAIService:
                     "monitoring_methods": {
                         "type": "object",
                         "properties": {
-                            "method_a": {"type": "object"},
-                            "method_b": {"type": "object"},
-                            "block_off_on": {"type": "object"},
-                            "fuel_uplift": {"type": "object"},
-                            "fuel_allocation_block_hour": {"type": "object"},
-                            "periods_of_applicability": {"type": "array", "items": {"type": "string"}},
-                            "primary_data_sources": {"type": "array", "items": {"type": "string"}},
-                            "sub_fleet_applicability": {"type": "object"}
-                        },
-                        "required": ["method_a", "method_b", "block_off_on", "fuel_uplift", "fuel_allocation_block_hour", "periods_of_applicability", "primary_data_sources", "sub_fleet_applicability"],
+                            "method_a": {
+                                "type": "object",
+                                "properties": {
+                                    "used": {"type": ["boolean", "null"]},
+                                    "details": {"type": ["string", "null"]},
+                                    "applicability": {"type": "array", "items": {"type": "string"}}
+                                },
+                                "required": ["used", "details", "applicability"],
                                 "additionalProperties": False
                             },
+                            "method_b": {
+                                "type": "object",
+                                "properties": {
+                                    "used": {"type": ["boolean", "null"]},
+                                    "details": {"type": ["string", "null"]},
+                                    "applicability": {"type": "array", "items": {"type": "string"}}
+                                },
+                                "required": ["used", "details", "applicability"],
+                                "additionalProperties": False
+                            },
+                            "block_off_on": {
+                                "type": "object",
+                                "properties": {
+                                    "used": {"type": ["boolean", "null"]},
+                                    "details": {"type": ["string", "null"]}
+                                },
+                                "required": ["used", "details"],
+                                "additionalProperties": False
+                            },
+                            "fuel_uplift": {
+                                "type": "object",
+                                "properties": {
+                                    "used": {"type": ["boolean", "null"]},
+                                    "details": {"type": ["string", "null"]}
+                                },
+                                "required": ["used", "details"],
+                                "additionalProperties": False
+                            },
+                            "fuel_allocation_block_hour": {
+                                "type": "object",
+                                "properties": {
+                                    "used": {"type": ["boolean", "null"]},
+                                    "details": {"type": ["string", "null"]}
+                                },
+                                "required": ["used", "details"],
+                                "additionalProperties": False
+                            },
+                            "periods_of_applicability": {"type": "array", "items": {"type": "string"}},
+                            "primary_data_sources": {"type": "array", "items": {"type": "string"}},
+                            "sub_fleet_applicability": {
+                                "type": "object",
+                                "properties": {
+                                    "exists": {"type": ["boolean", "null"]},
+                                    "notes": {"type": ["string", "null"]}
+                                },
+                                "required": ["exists", "notes"],
+                                "additionalProperties": False
+                            }
+                        },
+                        "required": [
+                            "method_a",
+                            "method_b",
+                            "block_off_on",
+                            "fuel_uplift",
+                            "fuel_allocation_block_hour",
+                            "periods_of_applicability",
+                            "primary_data_sources",
+                            "sub_fleet_applicability"
+                        ],
+                        "additionalProperties": False
+                    },
                     "calculation_inputs": {
                         "type": "object",
                         "properties": {
