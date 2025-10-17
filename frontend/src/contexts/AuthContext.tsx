@@ -56,11 +56,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Get action code settings for custom email verification
   const getActionCodeSettings = (): ActionCodeSettings => {
-    const currentDomain = window.location.origin;
+    // Use the production domain or current domain
+    const domain = window.location.hostname === 'localhost'
+      ? window.location.origin
+      : 'https://tools.vurdhaan.com';
 
     return {
       // URL to redirect to after clicking email link
-      url: `${currentDomain}/email-verification`,
+      // Firebase will append ?mode=verifyEmail&oobCode=...
+      url: domain,
       // This must be true to handle the code in the app
       handleCodeInApp: true,
     };
