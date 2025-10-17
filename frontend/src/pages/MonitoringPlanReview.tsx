@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { MonitoringPlanEditor } from '../components/project/MonitoringPlanEditor';
 import { projectsApi } from '../services/api';
+import { ProjectHeader } from '../components/layout/ProjectHeader';
 
 // Ensure timestamps are interpreted as UTC (GMT) when timezone is missing
 const parseUtcMs = (isoString: string | null): number => {
@@ -131,15 +132,10 @@ const MonitoringPlanReview: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-radial">
+      <ProjectHeader />
       <div className="container mx-auto px-4 py-8 max-w-5xl">
         {/* Header */}
         <div className="mb-8">
-          <button
-            onClick={() => navigate(`/projects/${projectId}/errors`)}
-            className="text-primary hover:text-primary-dark mb-4 flex items-center gap-2"
-          >
-            ← Back to Errors
-          </button>
           <h1 className="text-3xl font-bold text-gray-800">Monitoring Plan Review</h1>
           <p className="text-gray-600 mt-2">
             Review and edit the extracted monitoring plan data before generating reports

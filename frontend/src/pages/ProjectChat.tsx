@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useChat } from '../contexts/ChatContext';
 import { ChatInterface } from '../components/project/ChatInterface';
+import { ProjectHeader } from '../components/layout/ProjectHeader';
 
 const ProjectChat: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -36,34 +37,7 @@ const ProjectChat: React.FC = () => {
 
   return (
     <div className="h-screen flex flex-col bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200 px-6 py-4 shadow-sm">
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-800">
-              ✈️ Flight Operations AI Assistant
-            </h1>
-            <p className="text-sm text-gray-600 mt-1">
-              Powered by Advanced AI Analytics
-            </p>
-          </div>
-          {sessionId && (
-            <div className="text-right">
-              <div className="text-xs text-gray-500 uppercase tracking-wide font-semibold">
-                Session Info
-              </div>
-              <div className="text-sm text-gray-700 font-mono mt-1">
-                {sessionId.substring(0, 20)}...
-              </div>
-              {calculateExpiresIn() && (
-                <div className="text-xs text-gray-500 mt-1">
-                  Expires in: {calculateExpiresIn()}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </header>
+      <ProjectHeader />
 
       {/* Chat Interface */}
       <div className="flex-1 overflow-hidden">

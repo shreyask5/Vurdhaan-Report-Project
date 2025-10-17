@@ -5,6 +5,7 @@ import { ErrorSummary } from '../components/project/ErrorSummary';
 import { ErrorCategory } from '../components/project/ErrorCategory';
 import { FUEL_METHOD_COLUMNS } from '../types/validation';
 import { validationService } from '../services/validation';
+import { ProjectHeader } from '../components/layout/ProjectHeader';
 
 const ProjectValidation: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
@@ -167,15 +168,10 @@ const ProjectValidation: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-radial">
+      <ProjectHeader />
       <div className="container mx-auto px-4 py-8 max-w-7xl">
         {/* Header */}
         <div className="mb-8">
-          <button
-            onClick={() => navigate('/dashboard')}
-            className="text-primary hover:text-primary-dark mb-4 flex items-center gap-2"
-          >
-            ← Back to Dashboard
-          </button>
           <h1 className="text-3xl font-bold text-gray-800">Validation Results</h1>
           <p className="text-gray-600 mt-2">
             Review and correct errors found in your CSV file

@@ -40,10 +40,9 @@ export const SchemeSelector: React.FC<SchemeSelectorProps> = ({
 }) => {
   const [scheme, setScheme] = useState<SchemeType | null>(selectedScheme || null);
 
-  const handleSubmit = () => {
-    if (scheme) {
-      onSelect(scheme);
-    }
+  const handleSchemeClick = (selectedScheme: SchemeType) => {
+    setScheme(selectedScheme);
+    onSelect(selectedScheme);
   };
 
   return (
@@ -60,7 +59,8 @@ export const SchemeSelector: React.FC<SchemeSelectorProps> = ({
           {SCHEMES.map((s) => (
             <button
               key={s.value}
-              onClick={() => setScheme(s.value)}
+              type="button"
+              onClick={() => handleSchemeClick(s.value)}
               className={`p-3 rounded-md border text-left transition-all ${
                 scheme === s.value
                   ? 'border-primary bg-primary/10'

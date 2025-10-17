@@ -12,6 +12,7 @@ import { SuccessSection } from '../components/project/SuccessSection';
 import { LoadingSection } from '../components/project/LoadingSection';
 import { createSequenceSummary, processSequenceGroups } from '../utils/errorProcessing';
 import { FUEL_METHOD_COLUMNS } from '../types/validation';
+import { ProjectHeader } from '../components/layout/ProjectHeader';
 
 export const ProjectErrorDisplay: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
@@ -188,6 +189,7 @@ export const ProjectErrorDisplay: React.FC = () => {
 
   return (
     <div className="project-error-display">
+      <ProjectHeader />
       <div className="container">
         <header>
           <h1>CSV Validation Results</h1>

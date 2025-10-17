@@ -8,6 +8,7 @@ import { ColumnMappingWizard } from '../components/project/ColumnMappingWizard';
 import { ValidationForm } from '../components/project/ValidationForm';
 import { ValidationParams, SchemeType, AirlineSize, FuelMethod } from '../types/validation';
 import { projectsApi } from '../services/api';
+import { ProjectHeader } from '../components/layout/ProjectHeader';
 
 const ProjectUpload: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
@@ -183,21 +184,8 @@ const ProjectUpload: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-radial">
+      <ProjectHeader />
       <div className="container mx-auto px-4 py-8 max-w-5xl">
-        {/* Header */}
-        <div className="mb-8">
-          <button
-            onClick={() => navigate('/dashboard')}
-            className="text-primary hover:text-primary-dark mb-4 flex items-center gap-2"
-          >
-            ← Back to Dashboard
-          </button>
-          <h1 className="text-3xl font-bold text-gray-800">CSV Upload & Validation</h1>
-          <p className="text-gray-600 mt-2">
-            Upload your flight data CSV file and validate it against CORSIA requirements
-          </p>
-        </div>
-
         {/* Progress Indicator */}
         <div className="mb-8 bg-white rounded-xl p-6 shadow-card">
           <div className="flex items-center justify-between">
