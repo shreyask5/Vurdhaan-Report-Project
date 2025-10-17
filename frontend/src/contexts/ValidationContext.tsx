@@ -36,6 +36,7 @@ interface ValidationContextType {
 
   // Actions
   setScheme: (projectId: string, scheme: SchemeType) => Promise<void>;
+  setSchemeLocal: (scheme: SchemeType) => void;
   uploadMonitoringPlan: (projectId: string, file: File) => Promise<void>;
   setFile: (file: File) => Promise<void>;
   setFuelMethod: (method: FuelMethod) => void;
@@ -57,7 +58,7 @@ export const ValidationProvider: React.FC<{ children: ReactNode }> = ({ children
   const [errorData, setErrorData] = useState<ErrorData | null>(null);
   const [corrections, setCorrections] = useState<Map<string, Correction>>(new Map());
   const [isLoading, setIsLoading] = useState(false);
-  const [currentStep, setCurrentStep] = useState<ValidationStep>('scheme');
+  const [currentStep, setCurrentStep] = useState<ValidationStep>('monitoring_plan');
 
   const [selectedScheme, setSelectedSchemeState] = useState<SchemeType | null>(null);
   const [airlineSize, setAirlineSizeState] = useState<AirlineSize | null>(null);
@@ -84,6 +85,10 @@ export const ValidationProvider: React.FC<{ children: ReactNode }> = ({ children
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const setSchemeLocal = (scheme: SchemeType) => {
+    setSelectedSchemeState(scheme);
   };
 
   const uploadMonitoringPlan = async (projectId: string, file: File) => {
@@ -204,7 +209,7 @@ export const ValidationProvider: React.FC<{ children: ReactNode }> = ({ children
     setSelectedFuelMethod(null);
     setUploadedColumns([]);
     setColumnMappingState({});
-    setCurrentStep('scheme');
+    setCurrentStep('monitoring_plan');
   };
 
   const goToStep = (step: ValidationStep) => {
@@ -227,6 +232,7 @@ export const ValidationProvider: React.FC<{ children: ReactNode }> = ({ children
       columnMapping,
       validationParams,
       setScheme,
+      setSchemeLocal,
       uploadMonitoringPlan,
       setFile,
       setFuelMethod,

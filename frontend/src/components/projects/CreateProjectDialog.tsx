@@ -40,7 +40,7 @@ export function CreateProjectDialog({ onProjectCreated }: CreateProjectDialogPro
 
     setIsLoading(true);
     try {
-      await projectsApi.create({
+      const response = await projectsApi.create({
         scheme: formData.scheme,
         ai_chat_enabled: formData.ai_chat_enabled,
         save_files_on_server: formData.save_files_on_server,

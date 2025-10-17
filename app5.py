@@ -310,6 +310,7 @@ def get_project_route(project_id):
         'name': project['name'],
         'description': project.get('description', ''),
         'status': project['status'],
+        'scheme': project.get('scheme'),
         'ai_chat_enabled': project.get('ai_chat_enabled'),
         'save_files_on_server': project.get('save_files_on_server'),
         'validation_status': project.get('validation_status'),

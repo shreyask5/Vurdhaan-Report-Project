@@ -31,16 +31,28 @@ const ProjectUpload: React.FC = () => {
     setValidationParams,
     setColumnMapping,
     uploadFile,
-    goToStep
+    goToStep,
+    setSchemeLocal
   } = useValidation();
 
-  // Check upload status on mount
+  // Check upload status and load project scheme on mount
   useEffect(() => {
     const checkStatus = async () => {
       console.log('[PROJECT UPLOAD DEBUG] Checking upload status for project:', projectId);
       if (!projectId) return;
 
       try {
+        // Fetch project details to get the scheme
+        const project = await projectsApi.get(projectId);
+        console.log('[PROJECT UPLOAD DEBUG] Project data:', project);
+
+        // Set the scheme in validation context if available
+        if (project.scheme && !selectedScheme) {
+          console.log('[PROJECT UPLOAD DEBUG] Loading scheme from project:', project.scheme);
+          // Just update the state directly without calling the API again (scheme already saved)
+          setSchemeLocal(project.scheme as SchemeType);
+        }
+
         const status = await projectsApi.getUploadStatus(projectId);
         console.log('[PROJECT UPLOAD DEBUG] Upload status received:', status);
         setUploadStatus(status);
@@ -254,7 +266,7 @@ const ProjectUpload: React.FC = () => {
                  projectId={projectId!}
                  onUpload={handleMonitoringPlanUpload}
                  extractedData={monitoringPlanData}
-                 onBack={() => goToStep('scheme')}
+                 onBack={() => navigate('/dashboard')}
                  onComplete={() => goToStep('parameters')}
                />
             </div>
