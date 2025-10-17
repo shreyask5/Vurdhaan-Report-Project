@@ -347,7 +347,7 @@ def delete_project_route(project_id):
 @limit_by_user("30 per hour")
 @validate_json(SchemeSelectionSchema)
 def update_scheme_route(project_id):
-    """Update project scheme and airline size"""
+    """Update project scheme"""
     if not validate_project_id(project_id):
         return jsonify({'error': 'Invalid project ID'}), 400
 
@@ -355,8 +355,7 @@ def update_scheme_route(project_id):
     updated = projects.update_scheme(
         project_id,
         g.user['uid'],
-        data['scheme'],
-        data['airline_size']
+        data['scheme']
     )
 
     if not updated:
@@ -364,8 +363,7 @@ def update_scheme_route(project_id):
 
     return jsonify({
         'success': True,
-        'scheme': data['scheme'],
-        'airline_size': data['airline_size']
+        'scheme': data['scheme']
     }), 200
 
 @app.route('/api/projects/<project_id>/monitoring-plan', methods=['POST'])

@@ -389,17 +389,15 @@ class ProjectService:
         self,
         project_id: str,
         owner_uid: str,
-        scheme: str,
-        airline_size: str
+        scheme: str
     ) -> Optional[Dict[str, Any]]:
         """
-        Update project scheme and airline size
+        Update project scheme
 
         Args:
             project_id: Project ID
             owner_uid: User UID (for ownership check)
             scheme: Scheme type (CORSIA, EU ETS, etc.)
-            airline_size: Airline size (small, medium, large)
 
         Returns:
             Updated project or None if not authorized
@@ -410,8 +408,7 @@ class ProjectService:
             return None
 
         updates = {
-            'scheme': scheme,
-            'airline_size': airline_size
+            'scheme': scheme
         }
 
         return self.firestore.update_project(project_id, updates)
