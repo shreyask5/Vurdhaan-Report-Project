@@ -219,16 +219,15 @@ export const projectsApi = {
   },
 
   /**
-   * Update project scheme and airline size
+   * Update project scheme
    */
   async updateScheme(
     projectId: string,
-    scheme: string,
-    airlineSize: string
-  ): Promise<{ success: boolean; scheme: string; airline_size: string }> {
+    scheme: string
+  ): Promise<{ success: boolean; scheme: string }> {
     return apiRequest(`/projects/${projectId}/scheme`, {
       method: 'PUT',
-      body: JSON.stringify({ scheme, airline_size: airlineSize }),
+      body: JSON.stringify({ scheme }),
     });
   },
 

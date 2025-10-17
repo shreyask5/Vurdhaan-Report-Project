@@ -93,9 +93,9 @@ const ProjectUpload: React.FC = () => {
 
 
 
-  const handleSchemeSelect = async (scheme: SchemeType, airlineSize: AirlineSize) => {
+  const handleSchemeSelect = async (scheme: SchemeType) => {
     if (!projectId) return;
-    await setScheme(projectId, scheme, airlineSize);
+    await setScheme(projectId, scheme);
   };
 
   const handleMonitoringPlanUpload = async (file: File) => {
@@ -242,7 +242,6 @@ const ProjectUpload: React.FC = () => {
               <SchemeSelector
                 onSelect={handleSchemeSelect}
                 selectedScheme={selectedScheme}
-                selectedAirlineSize={airlineSize}
               />
             </div>
           )}

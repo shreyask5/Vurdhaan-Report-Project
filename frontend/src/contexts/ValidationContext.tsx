@@ -35,7 +35,7 @@ interface ValidationContextType {
   validationParams: ValidationParams | null;
 
   // Actions
-  setScheme: (projectId: string, scheme: SchemeType, airlineSize: AirlineSize) => Promise<void>;
+  setScheme: (projectId: string, scheme: SchemeType) => Promise<void>;
   uploadMonitoringPlan: (projectId: string, file: File) => Promise<void>;
   setFile: (file: File) => Promise<void>;
   setFuelMethod: (method: FuelMethod) => void;
@@ -75,12 +75,11 @@ export const ValidationProvider: React.FC<{ children: ReactNode }> = ({ children
     flight_starts_with: ''
   });
 
-  const setScheme = async (projectId: string, scheme: SchemeType, airlineSize: AirlineSize) => {
+  const setScheme = async (projectId: string, scheme: SchemeType) => {
     setIsLoading(true);
     try {
-      await projectsApi.updateScheme(projectId, scheme, airlineSize);
+      await projectsApi.updateScheme(projectId, scheme);
       setSelectedSchemeState(scheme);
-      setAirlineSizeState(airlineSize);
       setCurrentStep('monitoring_plan');
     } finally {
       setIsLoading(false);

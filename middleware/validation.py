@@ -140,10 +140,6 @@ class SchemeSelectionSchema(BaseModel):
         description="Scheme type",
         pattern='^(CORSIA|EU ETS|UK ETS|CH ETS|ReFuelEU)$'
     )
-    airline_size: str = Field(
-        description="Airline size category",
-        pattern='^(small|medium|large)$'
-    )
 
     class Config:
         extra = 'forbid'
@@ -232,11 +228,15 @@ def validate_json(schema: BaseModel):
                 if hasattr(e, 'errors'):
                     # Pydantic V2 format
                     errors = e.errors()
+                    print(f"[VALIDATION ERROR] Pydantic validation failed: {errors}")
+                    print(f"[VALIDATION ERROR] Request data: {data}")
                     return jsonify({
                         'error': 'Validation failed',
                         'details': errors
                     }), 400
                 else:
+                    print(f"[VALIDATION ERROR] Validation failed: {str(e)}")
+                    print(f"[VALIDATION ERROR] Request data: {data}")
                     return jsonify({
                         'error': 'Validation failed',
                         'details': str(e)
