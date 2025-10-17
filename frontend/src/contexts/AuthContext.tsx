@@ -147,11 +147,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
 
-      // Update display name
-      // Note: updateProfile is async but we don't await it to avoid delays
-      import('firebase/auth').then(({ updateProfile }) => {
-        updateProfile(userCredential.user, { displayName: name });
-      });
+      // Update display name BEFORE sending verification email
+      // This ensures %DISPLAY_NAME% placeholder works in the email
+      const { updateProfile } = await import('firebase/auth');
+      await updateProfile(userCredential.user, { displayName: name });
 
       // Send email verification with custom action code settings
       await sendEmailVerification(userCredential.user, getActionCodeSettings());
