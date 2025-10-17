@@ -88,7 +88,6 @@ export function CreateProjectDialog({ onProjectCreated }: CreateProjectDialogPro
           <div className="grid gap-4 py-4">
             {/* Scheme Selector within dialog */}
             <div className="grid gap-2">
-              <Label className="text-base">Scheme</Label>
               <SchemeSelector
                 selectedScheme={formData.scheme as SchemeType}
                 onSelect={(scheme) => setFormData({ ...formData, scheme })}

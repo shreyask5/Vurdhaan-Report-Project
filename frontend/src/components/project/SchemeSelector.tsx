@@ -73,31 +73,6 @@ export const SchemeSelector: React.FC<SchemeSelectorProps> = ({
           ))}
         </div>
       </div>
-
-      {/* Submit Button */}
-      <div className="flex justify-end pt-3">
-        <button
-          onClick={handleSubmit}
-          disabled={!scheme}
-          className={`px-6 py-2 rounded-md font-semibold transition-all ${
-            scheme
-              ? 'bg-primary text-white hover:bg-primary-dark'
-              : 'bg-gray-300 text-gray-500 cursor-not-allowed dark:bg-gray-700'
-          }`}
-        >
-          Continue to Monitoring Plan
-        </button>
-      </div>
-
-      {/* Selection Summary */}
-      {scheme && (
-        <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
-          <h4 className="font-semibold text-blue-900 dark:text-blue-100 mb-2">Current Selection:</h4>
-          <p className="text-sm text-blue-800 dark:text-blue-200">
-            Scheme: <strong>{scheme}</strong>
-          </p>
-        </div>
-      )}
     </div>
   );
 };
