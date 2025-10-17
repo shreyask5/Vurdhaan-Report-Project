@@ -240,7 +240,7 @@ export function ProjectCard({
               className="w-full col-span-2"
             >
               <FileText className="mr-2 h-4 w-4" />
-              Generate CORSIA Report
+              Generate Report
             </Button>
           )}
         </div>
