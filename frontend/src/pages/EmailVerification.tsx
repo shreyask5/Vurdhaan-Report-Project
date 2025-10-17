@@ -75,8 +75,18 @@ export default function EmailVerification() {
     if (!firebaseUser || !canResend) return;
 
     try {
-      const { sendEmailVerification } = await import('firebase/auth');
-      await sendEmailVerification(firebaseUser);
+      // Import auth context to use the resendVerificationEmail function with custom settings
+      const { resendVerificationEmail } = await import('@/contexts/AuthContext').then(m => ({ resendVerificationEmail: async () => {
+        const { sendEmailVerification } = await import('firebase/auth');
+        const currentDomain = window.location.origin;
+        const actionCodeSettings = {
+          url: `${currentDomain}/email-verification`,
+          handleCodeInApp: true,
+        };
+        await sendEmailVerification(firebaseUser, actionCodeSettings);
+      }}));
+
+      await resendVerificationEmail();
 
       toast.success('Verification email sent!', {
         description: 'Please check your inbox and spam folder.',
@@ -135,19 +145,25 @@ export default function EmailVerification() {
             <div className="flex items-start space-x-2">
               <CheckCircle2 className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
               <p className="text-sm text-blue-900 dark:text-blue-100">
-                Click the verification link in the email
+                Click the verification link in your email
               </p>
             </div>
             <div className="flex items-start space-x-2">
               <CheckCircle2 className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
               <p className="text-sm text-blue-900 dark:text-blue-100">
-                Return to this page (it will auto-update)
+                You'll be automatically redirected to your dashboard
               </p>
             </div>
             <div className="flex items-start space-x-2">
               <AlertCircle className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
               <p className="text-sm text-blue-900 dark:text-blue-100">
                 Check your spam folder if you don't see the email
+              </p>
+            </div>
+            <div className="flex items-start space-x-2">
+              <AlertCircle className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+              <p className="text-sm text-blue-900 dark:text-blue-100">
+                Link expires in 24 hours
               </p>
             </div>
           </div>

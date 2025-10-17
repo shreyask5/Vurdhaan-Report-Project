@@ -7,10 +7,13 @@ import {
   onAuthStateChanged,
   sendEmailVerification,
   User as FirebaseUser,
+  signInWithCustomToken,
+  ActionCodeSettings,
 } from 'firebase/auth';
 import { auth } from '../services/firebase';
 import { authApi } from '../services/api';
 import { isBusinessEmail, getBusinessEmailError } from '../utils/emailValidation';
+import { verifyEmailWithCode, ActionCodeResult } from '../utils/firebaseActions';
 
 type UserRole = 'user' | 'admin' | null;
 
@@ -30,6 +33,7 @@ interface AuthContextType {
   logout: () => void;
   resendVerificationEmail: () => Promise<void>;
   checkEmailVerified: () => Promise<boolean>;
+  verifyEmailLink: (oobCode: string) => Promise<ActionCodeResult>;
   isAuthenticated: boolean;
   isAdmin: boolean;
   firebaseUser: FirebaseUser | null;
@@ -49,6 +53,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<AuthUser | null>(null);
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Get action code settings for custom email verification
+  const getActionCodeSettings = (): ActionCodeSettings => {
+    const currentDomain = window.location.origin;
+
+    return {
+      // URL to redirect to after clicking email link
+      url: `${currentDomain}/email-verification`,
+      // This must be true to handle the code in the app
+      handleCodeInApp: true,
+    };
+  };
 
   // Listen to Firebase auth state changes
   useEffect(() => {
@@ -133,8 +149,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updateProfile(userCredential.user, { displayName: name });
       });
 
-      // Send email verification
-      await sendEmailVerification(userCredential.user);
+      // Send email verification with custom action code settings
+      await sendEmailVerification(userCredential.user, getActionCodeSettings());
 
       // Verify with backend to create user record
       await authApi.verify();
@@ -165,8 +181,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     try {
-      await sendEmailVerification(currentUser);
-      console.log('Verification email sent');
+      await sendEmailVerification(currentUser, getActionCodeSettings());
+      console.log('Verification email sent with custom URL');
     } catch (error: any) {
       console.error('Resend verification error:', error);
 
@@ -193,6 +209,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const verifyEmailLink = async (oobCode: string): Promise<ActionCodeResult> => {
+    try {
+      // Verify the email using the action code
+      const result = await verifyEmailWithCode(oobCode);
+
+      if (result.success) {
+        // Reload the current user to get updated verification status
+        const currentUser = auth.currentUser;
+        if (currentUser) {
+          await currentUser.reload();
+
+          // Update local user state
+          setUser(prev => prev ? { ...prev, emailVerified: true } : null);
+          setFirebaseUser(currentUser);
+        }
+      }
+
+      return result;
+    } catch (error: any) {
+      console.error('Email link verification error:', error);
+      return {
+        success: false,
+        message: error.message || 'Failed to verify email',
+        error: error.code,
+      };
+    }
+  };
+
   const logout = async () => {
     try {
       await signOut(auth);
@@ -213,6 +257,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     logout,
     resendVerificationEmail,
     checkEmailVerified,
+    verifyEmailLink,
     isAuthenticated: !!user,
     isAdmin: user?.role === 'admin',
   };

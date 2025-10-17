@@ -17,6 +17,7 @@ import ProjectValidation from "./pages/ProjectValidation";
 import MonitoringPlanReview from "./pages/MonitoringPlanReview";
 import ProjectChat from "./pages/ProjectChat";
 import EmailVerification from "./pages/EmailVerification";
+import EmailVerificationHandler from "./pages/EmailVerificationHandler";
 import Welcome from "./pages/Welcome";
 import NotFound from "./pages/NotFound";
 
@@ -36,6 +37,9 @@ const App = () => (
 
             {/* Email verification route (authenticated but not verified) */}
             <Route path="/verification" element={<EmailVerification />} />
+
+            {/* Email verification handler (processes verification link) */}
+            <Route path="/email-verification" element={<EmailVerificationHandler />} />
 
             {/* Welcome route (verified but profile not completed) */}
             <Route path="/welcome" element={<Welcome />} />

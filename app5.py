@@ -197,6 +197,39 @@ def update_profile():
         print(f"[PROFILE UPDATE ERROR] {str(e)}")
         return jsonify({'error': 'Failed to update profile'}), 500
 
+@app.route('/api/auth/verify-email-action', methods=['POST'])
+@limit_by_user("10 per hour")
+def verify_email_action():
+    """
+    Optional backend endpoint to log email verification attempts
+    The actual verification is done client-side using Firebase action codes
+    This endpoint provides logging and monitoring capabilities
+    """
+    data = request.get_json()
+    if not data or 'oobCode' not in data:
+        return jsonify({'error': 'Missing action code'}), 400
+
+    oob_code = data['oobCode']
+
+    try:
+        print(f"[EMAIL VERIFICATION] Received verification request with code: {oob_code[:10]}...")
+
+        # Log the verification attempt
+        # In production, you might want to store this in a database for analytics
+
+        return jsonify({
+            'success': True,
+            'message': 'Action code received. Please apply it on the client side.'
+        }), 200
+
+    except Exception as e:
+        print(f"[EMAIL VERIFICATION ERROR] {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Failed to process action code',
+            'details': str(e)
+        }), 500
+
 # ============================================================================
 # PROJECTS
 # ============================================================================
