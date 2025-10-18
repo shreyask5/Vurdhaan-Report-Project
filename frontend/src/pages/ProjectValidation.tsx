@@ -1,11 +1,15 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useValidation } from '../contexts/ValidationContext';
 import { ErrorSummary } from '../components/project/ErrorSummary';
 import { ErrorCategory } from '../components/project/ErrorCategory';
+import { ActionButtons } from '../components/project/ActionButtons';
+import { SuccessSection } from '../components/project/SuccessSection';
+import { LoadingSection } from '../components/project/LoadingSection';
 import { FUEL_METHOD_COLUMNS } from '../types/validation';
 import { validationService } from '../services/validation';
 import { ProjectHeader } from '../components/layout/ProjectHeader';
+import { createSequenceSummary, processSequenceGroups } from '../utils/errorProcessing';
 
 const ProjectValidation: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
@@ -24,39 +28,77 @@ const ProjectValidation: React.FC = () => {
     reset
   } = useValidation();
 
-  useEffect(() => {
-    if (fileId && !errorData && currentStep === 'validation') {
-      fetchErrors();
-    }
-  }, [fileId, errorData, currentStep]);
+  const [loadingMessage, setLoadingMessage] = useState('Loading validation results...');
+  const [sequenceSummaryItems, setSequenceSummaryItems] = useState<any[]>([]);
+  const hasFetchedRef = React.useRef(false);
 
-  // Redirect if on success step
-  useEffect(() => {
-    if (currentStep === 'success') {
-      // Show success state instead
+  // Fetch errors when component mounts
+  React.useEffect(() => {
+    if (projectId && !hasFetchedRef.current) {
+      hasFetchedRef.current = true;
+      console.log('[PROJECT VALIDATION] Fetching errors for project:', projectId);
+      fetchErrors(projectId).catch(error => {
+        console.error('[PROJECT VALIDATION] Failed to fetch errors:', error);
+        setLoadingMessage('Failed to load validation results');
+      });
     }
-  }, [currentStep]);
+  }, [projectId]);
+
+  // Process sequence errors for final summary
+  useEffect(() => {
+    if (errorData && errorData.categories) {
+      const allSequenceErrors = new Map();
+      errorData.categories.forEach(category => {
+        category.errors.forEach(errorGroup => {
+          const { sequenceErrors } = processSequenceGroups(errorGroup);
+          sequenceErrors.forEach((value: any, key: string) => {
+            allSequenceErrors.set(key, value);
+          });
+        });
+      });
+      setSequenceSummaryItems(createSequenceSummary(allSequenceErrors));
+    }
+  }, [errorData]);
+
+  const handleSaveCorrections = async () => {
+    if (!projectId) return;
+    try {
+      setLoadingMessage('Saving corrections...');
+      await validationService.saveCorrections(projectId, Array.from(corrections.values()));
+      // Refresh error data
+      await fetchErrors(projectId);
+    } catch (error) {
+      alert('Failed to save corrections: ' + (error as Error).message);
+    }
+  };
+
+  const handleIgnoreErrors = async () => {
+    if (!projectId) return;
+    if (!confirm('Are you sure you want to ignore all remaining errors?')) return;
+    try {
+      setLoadingMessage('Ignoring errors...');
+      await validationService.ignoreErrors(projectId);
+      // Navigate to monitoring plan review after ignoring errors
+      navigate(`/projects/${projectId}/monitoring-plan-review`);
+    } catch (error) {
+      alert('Failed to ignore errors: ' + (error as Error).message);
+    }
+  };
 
   const handleOpenChat = async () => {
-    if (!fileId) return;
+    if (!projectId) return;
     try {
-      const { chat_url } = await validationService.openChatSession(fileId);
-      const popup = window.open(chat_url, '_blank', 'width=1200,height=800');
-
-      if (!popup || popup.closed || typeof popup.closed === 'undefined') {
-        const userChoice = confirm(
-          'Popup was blocked. Click OK to open chat in this tab, or Cancel to copy the URL.'
-        );
-        if (userChoice) {
-          window.location.href = chat_url;
-        } else {
-          navigator.clipboard.writeText(chat_url);
-          alert('Chat URL copied to clipboard!');
-        }
-      }
+      setLoadingMessage('Initializing AI chat...');
+      await validationService.initializeChatSession(projectId);
+      navigate(`/projects/${projectId}/chat`);
     } catch (error) {
-      alert('Failed to open chat session');
+      alert('Failed to initialize chat: ' + (error as Error).message);
     }
+  };
+
+  const handleStartOver = () => {
+    if (!confirm('Are you sure you want to start over? All progress will be lost.')) return;
+    navigate(`/projects/${projectId}/upload`);
   };
 
   const handleDownloadClean = async () => {
@@ -80,233 +122,208 @@ const ProjectValidation: React.FC = () => {
   const handleGenerateReport = async () => {
     if (!projectId) return;
     try {
+      setLoadingMessage('Generating CORSIA report...');
       await validationService.generateReport(projectId);
-      setTimeout(() => {
-        reset();
-        navigate('/dashboard');
-      }, 2000);
     } catch (error) {
-      alert('Failed to generate report');
+      alert('Failed to generate report: ' + (error as Error).message);
     }
   };
 
-  const handleSaveCorrections = async () => {
+  const handleRevalidate = async () => {
     if (!projectId) return;
     try {
-      await saveCorrections(projectId);
-      alert('✅ Corrections saved successfully!');
+      setLoadingMessage('Re-validating data...');
+      await validationService.revalidate(projectId);
+      // Refresh error data
+      await fetchErrors(projectId);
     } catch (error) {
-      alert('❌ Failed to save corrections');
+      alert('Failed to re-validate: ' + (error as Error).message);
     }
   };
 
-  const handleIgnoreErrors = async () => {
-    if (!projectId) return;
-    const confirmed = confirm('Are you sure you want to ignore all errors and proceed?');
-    if (confirmed) {
-      try {
-        await ignoreErrors(projectId);
-        // Navigate to monitoring plan review after ignoring errors
-        navigate(`/projects/${projectId}/monitoring-plan-review`);
-      } catch (error) {
-        alert('❌ Failed to ignore errors');
+  // Get column order from actual row data or fall back to fuel method
+  const columnOrder = React.useMemo(() => {
+    // Try to get column order from fuel method first
+    if (selectedFuelMethod && FUEL_METHOD_COLUMNS[selectedFuelMethod]) {
+      return FUEL_METHOD_COLUMNS[selectedFuelMethod];
+    }
+
+    // Fall back to extracting from first row in rows_data
+    if (errorData && errorData.rows_data) {
+      const rowKeys = Object.keys(errorData.rows_data);
+      if (rowKeys.length > 0) {
+        const firstRow = errorData.rows_data[parseInt(rowKeys[0])];
+        if (firstRow && typeof firstRow === 'object') {
+          const columns = Object.keys(firstRow).filter(key => key !== 'error' && key !== 'index');
+          return columns;
+        }
       }
     }
-  };
 
-  const handleReset = () => {
-    const confirmed = confirm('Are you sure you want to start over? All progress will be lost.');
-    if (confirmed) {
-      reset();
-      navigate(`/projects/${projectId}/upload`);
-    }
-  };
+    // Default fallback
+    return FUEL_METHOD_COLUMNS["Block Off - Block On"] || [];
+  }, [selectedFuelMethod, errorData]);
 
-  const columnOrder = selectedFuelMethod ? FUEL_METHOD_COLUMNS[selectedFuelMethod] : [];
-
-  // Success state
-  if (currentStep === 'success') {
-    return (
-      <div className="min-h-screen bg-gradient-radial flex items-center justify-center">
-        <div className="bg-white rounded-2xl p-12 shadow-xl text-center max-w-2xl">
-          <div className="text-6xl mb-6">✅</div>
-          <h1 className="text-3xl font-bold text-gray-800 mb-4">Validation Successful!</h1>
-          <p className="text-gray-600 mb-8">
-            Your CSV file has been validated and is ready for reporting.
-          </p>
-
-          <div className="flex flex-col gap-4">
-            <button onClick={handleGenerateReport} className="btn-primary py-4 text-lg">
-              Generate CORSIA Report
-            </button>
-            <button onClick={handleDownloadClean} className="btn-secondary">
-              Download Clean CSV
-            </button>
-            <button onClick={handleOpenChat} className="btn-success">
-              Open AI Chat Assistant
-            </button>
-            <button onClick={handleReset} className="btn-secondary">
-              Upload Another File
-            </button>
-          </div>
-        </div>
-      </div>
-    );
+  if (isLoading) {
+    return <LoadingSection message={loadingMessage} />;
   }
 
-  // Loading or no data state
-  if (isLoading || !errorData) {
-    return (
-      <div className="min-h-screen bg-gradient-radial flex items-center justify-center">
-        <div className="bg-white rounded-xl p-8 shadow-xl text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-primary mx-auto mb-4"></div>
-          <p className="text-lg font-semibold text-gray-700">Loading validation results...</p>
-        </div>
-      </div>
-    );
+  if (!errorData) {
+    return <LoadingSection message="No validation data available" />;
   }
+
+  // Check if there are errors
+  const hasErrors = errorData.summary && errorData.summary.total_errors > 0;
 
   return (
-    <div className="min-h-screen bg-gradient-radial">
+    <div className="project-error-display">
       <ProjectHeader />
-      <div className="container mx-auto px-4 py-8 max-w-7xl">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-800">Validation Results</h1>
-          <p className="text-gray-600 mt-2">
-            Review and correct errors found in your CSV file
-          </p>
-        </div>
+      <div className="container">
+        <header>
+          <h1>CSV Validation Results</h1>
+          <p>Review and correct validation errors or proceed with clean data</p>
+        </header>
 
-        {/* Error Summary */}
-        <ErrorSummary errorData={errorData} />
+        {hasErrors ? (
+          // Error Display Section
+          <div className="error-section">
+            <h2>Validation Errors</h2>
 
-        {/* Actions Bar */}
-        <div className="bg-white rounded-xl p-6 shadow-card mb-6">
-          <h3 className="font-semibold text-gray-700 mb-4">Actions</h3>
-          <div className="flex flex-wrap gap-3">
-            <button
-              onClick={handleSaveCorrections}
-              disabled={corrections.size === 0 || isLoading}
-              className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              💾 Save Corrections ({corrections.size})
-            </button>
-            <button
-              onClick={handleIgnoreErrors}
-              disabled={isLoading}
-              className="btn-warning disabled:opacity-50"
-            >
-              ⚠️ Ignore Errors & Continue
-            </button>
-            <button
-              onClick={handleDownloadClean}
-              disabled={isLoading}
-              className="btn-secondary disabled:opacity-50"
-            >
-              📥 Download Clean CSV
-            </button>
-            <button
-              onClick={handleDownloadErrors}
-              disabled={isLoading}
-              className="btn-secondary disabled:opacity-50"
-            >
-              📥 Download Errors CSV
-            </button>
-            <button
-              onClick={handleOpenChat}
-              disabled={isLoading}
-              className="btn-success disabled:opacity-50"
-            >
-              💬 Open AI Chat
-            </button>
-            <button
-              onClick={handleReset}
-              disabled={isLoading}
-              className="btn-secondary disabled:opacity-50"
-            >
-              🔄 Start Over
-            </button>
-          </div>
-        </div>
+            <ErrorSummary errorData={errorData} />
 
-        {/* Next Step Button */}
-        <div className="bg-white rounded-xl p-6 shadow-card mb-6 flex justify-end">
-          <button
-            onClick={() => navigate(`/projects/${projectId}/monitoring-plan-review`)}
-            disabled={isLoading}
-            className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed px-8 py-3"
-          >
-            Review Monitoring Plan →
-          </button>
-        </div>
-
-        {/* Error Categories */}
-        <div className="errors-container space-y-4">
-          {errorData.categories.map((category, index) => (
-            <ErrorCategory
-              key={`${category.name}-${index}`}
-              category={category}
-              columnOrder={columnOrder}
-              rowsData={errorData.rows_data}
-              onCorrection={addCorrection}
+            <ActionButtons
+              projectId={projectId || ''}
+              onSaveCorrections={handleSaveCorrections}
+              onIgnoreErrors={handleIgnoreErrors}
+              onDownloadClean={handleDownloadClean}
+              onDownloadErrors={handleDownloadErrors}
+              onOpenChat={handleOpenChat}
+              onStartOver={handleStartOver}
+              hasCorrections={corrections.size > 0}
             />
-          ))}
-        </div>
+
+            {/* Error Categories */}
+            <div className="error-categories-container">
+              {errorData.categories.map((category, index) => (
+                <ErrorCategory
+                  key={`${category.name}-${index}`}
+                  category={category}
+                  columnOrder={columnOrder}
+                  rowsData={errorData.rows_data}
+                  onCorrection={addCorrection}
+                />
+              ))}
+            </div>
+
+            {/* Final Sequence Error Summary */}
+            {sequenceSummaryItems.length > 0 && (
+              <div className="final-sequence-summary">
+                <h4>Sequence Error Summary</h4>
+                {sequenceSummaryItems.map((item) => (
+                  <div key={item.key} className="sequence-summary-item">
+                    <strong>Error:</strong> {item.errorCode}: Sequence Failed for Destination ICAO: {item.destinationICAO} to Origin ICAO: {item.originICAO}
+                    <br />
+                    <strong>Details:</strong> {item.errorCode} : {item.destinationICAO} → {item.originICAO}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          // Success Section
+          <SuccessSection
+            onGenerateReport={handleGenerateReport}
+            onDownloadClean={handleDownloadClean}
+            onRevalidate={handleRevalidate}
+          />
+        )}
       </div>
 
       <style jsx>{`
-        .btn-primary,
-        .btn-secondary,
-        .btn-success,
-        .btn-warning {
-          padding: 0.75rem 1.5rem;
-          border-radius: 0.5rem;
-          font-weight: 600;
-          font-size: 0.875rem;
-          cursor: pointer;
-          transition: all 0.2s ease;
-          border: none;
+        .project-error-display {
+          min-height: 100vh;
+          background: linear-gradient(135deg, #f5f7fa 0%, #e9ecef 100%);
+          background-attachment: fixed;
         }
 
-        .btn-primary {
+        .container {
+          max-width: 1400px;
+          margin: 0 auto;
+          padding: 20px;
+        }
+
+        header {
           background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
           color: white;
+          padding: 40px 30px;
+          border-radius: 16px;
+          margin-bottom: 30px;
+          box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+          text-align: center;
         }
 
-        .btn-primary:hover:not(:disabled) {
-          box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.3);
-          transform: translateY(-2px);
+        header h1 {
+          margin: 0;
+          font-size: 2rem;
+          font-weight: 700;
+          letter-spacing: -0.5px;
         }
 
-        .btn-secondary {
-          background: linear-gradient(135deg, #94a3b8 0%, #64748b 100%);
-          color: white;
+        header p {
+          margin: 0.5rem 0 0 0;
+          opacity: 0.9;
+          font-size: 1rem;
         }
 
-        .btn-secondary:hover:not(:disabled) {
-          box-shadow: 0 10px 15px -3px rgba(100, 116, 139, 0.3);
-          transform: translateY(-2px);
+        .error-section {
+          background: white;
+          border-radius: 1rem;
+          padding: 2rem;
+          box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
         }
 
-        .btn-success {
-          background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-          color: white;
+        .error-section h2 {
+          margin: 0 0 1.5rem 0;
+          font-size: 1.5rem;
+          font-weight: 700;
+          color: #1f2937;
         }
 
-        .btn-success:hover:not(:disabled) {
-          box-shadow: 0 10px 15px -3px rgba(16, 185, 129, 0.3);
-          transform: translateY(-2px);
+        .error-categories-container {
+          margin-top: 2rem;
         }
 
-        .btn-warning {
-          background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-          color: white;
+        .final-sequence-summary {
+          margin-top: 2rem;
+          padding: 1.5rem;
+          background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+          border: 2px solid #fbbf24;
+          border-radius: 0.75rem;
         }
 
-        .btn-warning:hover:not(:disabled) {
-          box-shadow: 0 10px 15px -3px rgba(245, 158, 11, 0.3);
-          transform: translateY(-2px);
+        .final-sequence-summary h4 {
+          margin: 0 0 1rem 0;
+          font-size: 1.125rem;
+          font-weight: 700;
+          color: #92400e;
+        }
+
+        .sequence-summary-item {
+          background: white;
+          padding: 1rem;
+          border-radius: 0.5rem;
+          margin-bottom: 0.75rem;
+          font-size: 0.875rem;
+          color: #1f2937;
+          line-height: 1.6;
+        }
+
+        .sequence-summary-item:last-child {
+          margin-bottom: 0;
+        }
+
+        .sequence-summary-item strong {
+          color: #991b1b;
         }
       `}</style>
     </div>

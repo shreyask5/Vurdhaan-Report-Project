@@ -183,12 +183,12 @@ export function ProjectCard({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => navigate(`/projects/${project.id}/errors`)}
+              onClick={() => navigate(`/projects/${project.id}/validation`)}
               className="w-full"
-              title="View validation errors"
+              title="View validation results"
             >
               <AlertCircle className="mr-2 h-4 w-4" />
-              View Errors
+              View Validation
             </Button>
           )}
 

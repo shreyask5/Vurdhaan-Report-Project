@@ -200,17 +200,6 @@ export const MonitoringPlanUpload: React.FC<MonitoringPlanUploadProps> = ({
 
       {/* Action Buttons */}
       <div className="flex justify-between pt-4">
-        <button
-          onClick={onBack}
-          disabled={isUploading}
-          className={`px-6 py-2 border-2 border-gray-300 rounded-lg transition ${
-            isUploading
-              ? 'text-gray-400 cursor-not-allowed'
-              : 'text-gray-700 hover:bg-gray-50'
-          }`}
-        >
-          Back to Scheme
-        </button>
         {processingStatus === 'done' && onComplete && (
           <button
             onClick={onComplete}

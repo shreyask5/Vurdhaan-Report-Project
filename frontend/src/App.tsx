@@ -12,7 +12,6 @@ import AdminLogin from "./pages/AdminLogin";
 import Dashboard from "./pages/Dashboard";
 import Admin from "./pages/Admin";
 import ProjectUpload from "./pages/ProjectUpload";
-import { ProjectErrorDisplay } from "./pages/ProjectErrorDisplay";
 import ProjectValidation from "./pages/ProjectValidation";
 import MonitoringPlanReview from "./pages/MonitoringPlanReview";
 import ProjectChat from "./pages/ProjectChat";
@@ -59,13 +58,6 @@ const App = () => (
               <ProtectedRoute>
                 <ValidationProvider>
                   <ProjectUpload />
-                </ValidationProvider>
-              </ProtectedRoute>
-            } />
-            <Route path="/projects/:projectId/errors" element={
-              <ProtectedRoute>
-                <ValidationProvider>
-                  <ProjectErrorDisplay />
                 </ValidationProvider>
               </ProtectedRoute>
             } />

@@ -127,7 +127,7 @@ const MonitoringPlanReview: React.FC = () => {
 
   const handleNext = () => {
     if (!projectId) return;
-    navigate(`/projects/${projectId}/errors`);
+    navigate(`/projects/${projectId}/validation`);
   };
 
   return (
@@ -204,10 +204,10 @@ const MonitoringPlanReview: React.FC = () => {
                   Upload New File
                 </button>
                 <button
-                  onClick={() => navigate(`/projects/${projectId}/errors`)}
+                  onClick={() => navigate(`/projects/${projectId}/validation`)}
                   className="px-6 py-2 border-2 border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition"
                 >
-                  Back to Errors
+                  Back to Validation
                 </button>
               </div>
             </div>
@@ -247,10 +247,10 @@ const MonitoringPlanReview: React.FC = () => {
             {/* Navigation */}
             <div className="flex justify-between pt-6 border-t">
               <button
-                onClick={() => navigate(`/projects/${projectId}/errors`)}
+                onClick={() => navigate(`/projects/${projectId}/validation`)}
                 className="px-6 py-2 border-2 border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition"
               >
-                ← Back to Errors
+                ← Back to Validation
               </button>
               <button
                 onClick={handleNext}

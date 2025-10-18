@@ -58,10 +58,10 @@ const ProjectUpload: React.FC = () => {
         console.log('[PROJECT UPLOAD DEBUG] Upload status received:', status);
         setUploadStatus(status);
 
-        // If already uploaded and validated, redirect to error display
+        // If already uploaded and validated, redirect to validation page
         if (status.upload_completed && status.validation_status !== null) {
-          console.log('[PROJECT UPLOAD DEBUG] File already uploaded, redirecting to errors page');
-          navigate(`/projects/${projectId}/errors`, { replace: true });
+          console.log('[PROJECT UPLOAD DEBUG] File already uploaded, redirecting to validation page');
+          navigate(`/projects/${projectId}/validation`, { replace: true });
         } else {
           console.log('[PROJECT UPLOAD DEBUG] Upload page allowed - upload_completed:', status.upload_completed);
         }

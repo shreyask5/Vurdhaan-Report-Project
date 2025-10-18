@@ -69,10 +69,10 @@ export default function Dashboard() {
       console.log('[DASHBOARD DEBUG] Upload status received:', status);
 
       if (status.upload_completed && status.validation_status !== null) {
-        // Already uploaded and validated - go to error display or success page
-        console.log('[DASHBOARD DEBUG] File already uploaded, navigating to errors page');
+        // Already uploaded and validated - go to validation page
+        console.log('[DASHBOARD DEBUG] File already uploaded, navigating to validation page');
         toast.info('File already uploaded. Navigating to results...');
-        navigate(`/projects/${projectId}/errors`);
+        navigate(`/projects/${projectId}/validation`);
       } else {
         // Not uploaded yet - go to upload page
         console.log('[DASHBOARD DEBUG] File not uploaded, navigating to upload page');
