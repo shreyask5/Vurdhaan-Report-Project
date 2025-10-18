@@ -176,156 +176,99 @@ const ProjectValidation: React.FC = () => {
   const hasErrors = errorData.summary && errorData.summary.total_errors > 0;
 
   return (
-    <div className="project-error-display">
+    <div className="min-h-screen bg-gradient-radial">
       <ProjectHeader />
-      <div className="container">
-        <header>
-          <h1>CSV Validation Results</h1>
-          <p>Review and correct validation errors or proceed with clean data</p>
-        </header>
+      <div className="container mx-auto px-4 py-8 max-w-7xl">
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-800 animate-fade-in-up">
+            CSV Validation Results
+          </h1>
+          <p className="text-muted-foreground mt-2">
+            Review and correct validation errors or proceed with clean data
+          </p>
+        </div>
 
         {hasErrors ? (
           // Error Display Section
-          <div className="error-section">
-            <h2>Validation Errors</h2>
+          <>
+            {/* Error Summary */}
+            <div className="animate-fade-in mb-6">
+              <ErrorSummary errorData={errorData} />
+            </div>
 
-            <ErrorSummary errorData={errorData} />
-
-            <ActionButtons
-              projectId={projectId || ''}
-              onSaveCorrections={handleSaveCorrections}
-              onIgnoreErrors={handleIgnoreErrors}
-              onDownloadClean={handleDownloadClean}
-              onDownloadErrors={handleDownloadErrors}
-              onOpenChat={handleOpenChat}
-              onStartOver={handleStartOver}
-              hasCorrections={corrections.size > 0}
-            />
+            {/* Action Buttons */}
+            <div className="bg-white rounded-xl p-6 shadow-card mb-6 animate-scale-in">
+              <h3 className="font-semibold text-gray-700 mb-4">Quick Actions</h3>
+              <ActionButtons
+                projectId={projectId || ''}
+                onSaveCorrections={handleSaveCorrections}
+                onIgnoreErrors={handleIgnoreErrors}
+                onDownloadClean={handleDownloadClean}
+                onDownloadErrors={handleDownloadErrors}
+                onOpenChat={handleOpenChat}
+                onStartOver={handleStartOver}
+                hasCorrections={corrections.size > 0}
+              />
+            </div>
 
             {/* Error Categories */}
-            <div className="error-categories-container">
+            <div className="space-y-4">
               {errorData.categories.map((category, index) => (
-                <ErrorCategory
+                <div
                   key={`${category.name}-${index}`}
-                  category={category}
-                  columnOrder={columnOrder}
-                  rowsData={errorData.rows_data}
-                  onCorrection={addCorrection}
-                />
+                  className="animate-fade-in-up"
+                  style={{ animationDelay: `${index * 0.1}s`, animationFillMode: 'both' }}
+                >
+                  <ErrorCategory
+                    category={category}
+                    columnOrder={columnOrder}
+                    rowsData={errorData.rows_data}
+                    onCorrection={addCorrection}
+                  />
+                </div>
               ))}
             </div>
 
             {/* Final Sequence Error Summary */}
             {sequenceSummaryItems.length > 0 && (
-              <div className="final-sequence-summary">
-                <h4>Sequence Error Summary</h4>
-                {sequenceSummaryItems.map((item) => (
-                  <div key={item.key} className="sequence-summary-item">
-                    <strong>Error:</strong> {item.errorCode}: Sequence Failed for Destination ICAO: {item.destinationICAO} to Origin ICAO: {item.originICAO}
-                    <br />
-                    <strong>Details:</strong> {item.errorCode} : {item.destinationICAO} → {item.originICAO}
-                  </div>
-                ))}
+              <div className="mt-6 bg-white rounded-xl p-6 border-l-4 border-warning shadow-card animate-scale-in">
+                <h4 className="text-lg font-semibold text-warning mb-4 flex items-center gap-2">
+                  <span>⚠️</span> Sequence Error Summary
+                </h4>
+                <div className="space-y-3">
+                  {sequenceSummaryItems.map((item) => (
+                    <div key={item.key} className="bg-muted/30 p-4 rounded-lg">
+                      <div className="text-sm text-gray-700">
+                        <strong className="text-error">Error:</strong> {item.errorCode}: Sequence Failed for Destination ICAO: {item.destinationICAO} to Origin ICAO: {item.originICAO}
+                      </div>
+                      <div className="text-sm text-gray-600 mt-1">
+                        <strong>Details:</strong> {item.errorCode} : {item.destinationICAO} → {item.originICAO}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
-          </div>
+          </>
         ) : (
-          // Success Section
-          <SuccessSection
-            onGenerateReport={handleGenerateReport}
-            onDownloadClean={handleDownloadClean}
-            onRevalidate={handleRevalidate}
-          />
+          // Success Section with Decorative Elements
+          <div className="relative">
+            {/* Decorative background */}
+            <div className="absolute inset-0 overflow-hidden pointer-events-none">
+              <div className="absolute top-10 left-10 w-72 h-72 bg-success/10 rounded-full blur-3xl animate-glow" />
+              <div className="absolute bottom-10 right-10 w-96 h-96 bg-primary/5 rounded-full blur-3xl" />
+            </div>
+            <div className="relative">
+              <SuccessSection
+                onGenerateReport={handleGenerateReport}
+                onDownloadClean={handleDownloadClean}
+                onRevalidate={handleRevalidate}
+              />
+            </div>
+          </div>
         )}
       </div>
-
-      <style jsx>{`
-        .project-error-display {
-          min-height: 100vh;
-          background: linear-gradient(135deg, #f5f7fa 0%, #e9ecef 100%);
-          background-attachment: fixed;
-        }
-
-        .container {
-          max-width: 1400px;
-          margin: 0 auto;
-          padding: 20px;
-        }
-
-        header {
-          background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
-          color: white;
-          padding: 40px 30px;
-          border-radius: 16px;
-          margin-bottom: 30px;
-          box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
-          text-align: center;
-        }
-
-        header h1 {
-          margin: 0;
-          font-size: 2rem;
-          font-weight: 700;
-          letter-spacing: -0.5px;
-        }
-
-        header p {
-          margin: 0.5rem 0 0 0;
-          opacity: 0.9;
-          font-size: 1rem;
-        }
-
-        .error-section {
-          background: white;
-          border-radius: 1rem;
-          padding: 2rem;
-          box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-        }
-
-        .error-section h2 {
-          margin: 0 0 1.5rem 0;
-          font-size: 1.5rem;
-          font-weight: 700;
-          color: #1f2937;
-        }
-
-        .error-categories-container {
-          margin-top: 2rem;
-        }
-
-        .final-sequence-summary {
-          margin-top: 2rem;
-          padding: 1.5rem;
-          background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
-          border: 2px solid #fbbf24;
-          border-radius: 0.75rem;
-        }
-
-        .final-sequence-summary h4 {
-          margin: 0 0 1rem 0;
-          font-size: 1.125rem;
-          font-weight: 700;
-          color: #92400e;
-        }
-
-        .sequence-summary-item {
-          background: white;
-          padding: 1rem;
-          border-radius: 0.5rem;
-          margin-bottom: 0.75rem;
-          font-size: 0.875rem;
-          color: #1f2937;
-          line-height: 1.6;
-        }
-
-        .sequence-summary-item:last-child {
-          margin-bottom: 0;
-        }
-
-        .sequence-summary-item strong {
-          color: #991b1b;
-        }
-      `}</style>
     </div>
   );
 };
