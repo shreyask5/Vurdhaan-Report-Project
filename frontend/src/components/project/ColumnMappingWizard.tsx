@@ -130,7 +130,12 @@ export const ColumnMappingWizard: React.FC<ColumnMappingWizardProps> = ({
           <div className="column-grid">
             {uploadedColumns.map((column) => {
               const isSelected = mapping[currentRequiredColumn] === column;
-              const isAlreadyMapped = mappedColumns.includes(column) && !isSelected;
+              // A column is "already mapped" only if it's mapped to a DIFFERENT required field
+              // This allows users to re-select when going back to change their mapping
+              const isAlreadyMapped = Object.entries(mapping).some(
+                ([requiredCol, csvCol]) =>
+                  csvCol === column && requiredCol !== currentRequiredColumn
+              );
 
               return (
                 <button

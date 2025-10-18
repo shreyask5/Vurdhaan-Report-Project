@@ -63,11 +63,18 @@ const ProjectValidation: React.FC = () => {
   const handleSaveCorrections = async () => {
     if (!projectId) return;
     try {
-      setLoadingMessage('Saving corrections...');
+      setLoadingMessage('Saving corrections and reprocessing data...');
+      // Save corrections - backend automatically reprocesses via validate_and_process_file
       await validationService.saveCorrections(projectId, Array.from(corrections.values()));
-      // Refresh error data
+
+      setLoadingMessage('Refreshing validation results...');
+      // Refresh error data to get updated results
       await fetchErrors(projectId);
+
+      // Show success message
+      alert('Corrections saved and data reprocessed successfully!');
     } catch (error) {
+      console.error('Failed to save corrections:', error);
       alert('Failed to save corrections: ' + (error as Error).message);
     }
   };
@@ -98,7 +105,7 @@ const ProjectValidation: React.FC = () => {
 
   const handleStartOver = () => {
     if (!confirm('Are you sure you want to start over? All progress will be lost.')) return;
-    navigate(`/projects/${projectId}/upload`);
+    navigate('/dashboard');
   };
 
   const handleDownloadClean = async () => {
@@ -181,7 +188,7 @@ const ProjectValidation: React.FC = () => {
       <div className="container mx-auto px-4 py-8 max-w-7xl">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-800 animate-fade-in-up">
+          <h1 className="text-3xl font-bold text-foreground animate-fade-in-up">
             CSV Validation Results
           </h1>
           <p className="text-muted-foreground mt-2">
@@ -198,8 +205,8 @@ const ProjectValidation: React.FC = () => {
             </div>
 
             {/* Action Buttons */}
-            <div className="bg-white rounded-xl p-6 shadow-card mb-6 animate-scale-in">
-              <h3 className="font-semibold text-gray-700 mb-4">Quick Actions</h3>
+            <div className="bg-card rounded-xl p-6 shadow-card mb-6 animate-scale-in">
+              <h3 className="font-semibold text-foreground/90 mb-4">Quick Actions</h3>
               <ActionButtons
                 projectId={projectId || ''}
                 onSaveCorrections={handleSaveCorrections}
@@ -232,17 +239,17 @@ const ProjectValidation: React.FC = () => {
 
             {/* Final Sequence Error Summary */}
             {sequenceSummaryItems.length > 0 && (
-              <div className="mt-6 bg-white rounded-xl p-6 border-l-4 border-warning shadow-card animate-scale-in">
+              <div className="mt-6 bg-card rounded-xl p-6 border-l-4 border-warning shadow-card animate-scale-in">
                 <h4 className="text-lg font-semibold text-warning mb-4 flex items-center gap-2">
                   <span>⚠️</span> Sequence Error Summary
                 </h4>
                 <div className="space-y-3">
                   {sequenceSummaryItems.map((item) => (
                     <div key={item.key} className="bg-muted/30 p-4 rounded-lg">
-                      <div className="text-sm text-gray-700">
+                      <div className="text-sm text-foreground/90">
                         <strong className="text-error">Error:</strong> {item.errorCode}: Sequence Failed for Destination ICAO: {item.destinationICAO} to Origin ICAO: {item.originICAO}
                       </div>
-                      <div className="text-sm text-gray-600 mt-1">
+                      <div className="text-sm text-muted-foreground mt-1">
                         <strong>Details:</strong> {item.errorCode} : {item.destinationICAO} → {item.originICAO}
                       </div>
                     </div>

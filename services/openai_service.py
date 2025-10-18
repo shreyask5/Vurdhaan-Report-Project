@@ -607,10 +607,5 @@ class OpenAIService:
         meta.setdefault('extracted_at', pd.Timestamp.now().isoformat())
         meta.setdefault('generator_version', 'v1-flex')
         data['metadata'] = meta
-
-        data['extraction_metadata'] = {
-            'model': self.model,
-            'reasoning_effort': 'high'
-        }
-
+        
         return data
