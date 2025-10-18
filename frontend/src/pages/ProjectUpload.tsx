@@ -5,7 +5,6 @@ import { MonitoringPlanUpload } from '../components/project/MonitoringPlanUpload
 import { FileUploadSection } from '../components/project/FileUploadSection';
 import { FuelMethodSelector } from '../components/project/FuelMethodSelector';
 import { ColumnMappingWizard } from '../components/project/ColumnMappingWizard';
-import { ValidationForm } from '../components/project/ValidationForm';
 import { ValidationParams, SchemeType, AirlineSize, FuelMethod } from '../types/validation';
 import { projectsApi } from '../services/api';
 import { ProjectHeader } from '../components/layout/ProjectHeader';
@@ -413,13 +412,12 @@ const ProjectUpload: React.FC = () => {
               fuelMethod={selectedFuelMethod}
               onComplete={setColumnMapping}
               onBack={() => goToStep('upload')}
-            />
-          )}
-
-          {currentStep === 'validation' && (
-            <ValidationForm
-              onSubmit={handleValidationSubmit}
-              onBack={() => goToStep('mapping')}
+              onSubmit={async () => {
+                if (!validationParams) return;
+                await handleValidationSubmit(validationParams);
+              }}
+              projectId={projectId}
+              validationParams={validationParams}
             />
           )}
         </div>

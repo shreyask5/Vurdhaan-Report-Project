@@ -2,20 +2,26 @@
 // Based on index4.html:1784-1955, 1821-1866
 
 import React, { useState, useEffect } from 'react';
-import { FuelMethod, ColumnMapping, FUEL_METHOD_COLUMNS } from '../../types/validation';
+import { FuelMethod, ColumnMapping, FUEL_METHOD_COLUMNS, ValidationParams } from '../../types/validation';
 
 interface ColumnMappingWizardProps {
   uploadedColumns: string[];
   fuelMethod: FuelMethod;
   onComplete: (mapping: ColumnMapping) => void;
   onBack?: () => void;
+  onSubmit?: () => Promise<void>;
+  projectId?: string;
+  validationParams?: ValidationParams | null;
 }
 
 export const ColumnMappingWizard: React.FC<ColumnMappingWizardProps> = ({
   uploadedColumns,
   fuelMethod,
   onComplete,
-  onBack
+  onBack,
+  onSubmit,
+  projectId,
+  validationParams
 }) => {
   const [currentStep, setCurrentStep] = useState(0);
   const [mapping, setMapping] = useState<ColumnMapping>({});
@@ -47,6 +53,9 @@ export const ColumnMappingWizard: React.FC<ColumnMappingWizardProps> = ({
   const handlePrevious = () => {
     if (currentStep > 0) {
       setCurrentStep(currentStep - 1);
+    } else if (onBack) {
+      // First step and onBack is provided - go back to previous page
+      onBack();
     }
   };
 
@@ -56,7 +65,21 @@ export const ColumnMappingWizard: React.FC<ColumnMappingWizardProps> = ({
     }
   };
 
+  const handleFinalSubmit = async () => {
+    if (!canComplete) return;
+
+    // Complete the mapping first
+    onComplete(mapping);
+
+    // If onSubmit is provided, trigger final submission
+    if (onSubmit) {
+      await onSubmit();
+    }
+  };
+
   const canComplete = Object.keys(mapping).length === totalSteps;
+  const isOnFirstStep = currentStep === 0;
+  const isOnLastStep = currentStep === totalSteps - 1;
 
   return (
     <div className="column-mapping-wizard">
@@ -131,15 +154,15 @@ export const ColumnMappingWizard: React.FC<ColumnMappingWizardProps> = ({
         {/* Navigation Buttons - From index4.html:1881-1908 */}
         <div className="wizard-navigation">
           <button
-            onClick={onBack || handlePrevious}
-            disabled={currentStep === 0 && !onBack}
+            onClick={handlePrevious}
+            disabled={isOnFirstStep && !onBack}
             className="btn-secondary"
             type="button"
           >
-            ← {currentStep === 0 ? 'Back' : 'Previous'}
+            ← {isOnFirstStep ? 'Back to Upload' : 'Previous'}
           </button>
 
-          {currentStep < totalSteps - 1 ? (
+          {!isOnLastStep ? (
             <button
               onClick={handleNext}
               disabled={!mapping[currentRequiredColumn]}
@@ -147,6 +170,15 @@ export const ColumnMappingWizard: React.FC<ColumnMappingWizardProps> = ({
               type="button"
             >
               Next →
+            </button>
+          ) : onSubmit ? (
+            <button
+              onClick={handleFinalSubmit}
+              disabled={!canComplete}
+              className="btn-success"
+              type="button"
+            >
+              Submit & Validate
             </button>
           ) : (
             <button

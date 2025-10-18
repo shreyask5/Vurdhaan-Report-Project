@@ -4,7 +4,7 @@ import { validationService } from '../services/validation';
 import { readCSVColumns } from '../utils/csv';
 import { projectsApi } from '../services/api';
 
-type ValidationStep = 'scheme' | 'monitoring_plan' | 'parameters' | 'upload' | 'mapping' | 'validation' | 'success';
+type ValidationStep = 'scheme' | 'monitoring_plan' | 'parameters' | 'upload' | 'mapping' | 'success';
 
 interface ValidationParams {
   monitoring_year: string;
@@ -121,7 +121,7 @@ export const ValidationProvider: React.FC<{ children: ReactNode }> = ({ children
 
   const setColumnMapping = (mapping: ColumnMapping) => {
     setColumnMappingState(mapping);
-    setCurrentStep('validation');
+    // Don't auto-advance step - user stays on mapping screen until they submit
   };
 
   const uploadFile = async (projectId: string, params: ValidationFormData) => {
@@ -136,11 +136,8 @@ export const ValidationProvider: React.FC<{ children: ReactNode }> = ({ children
       const errors = await validationService.fetchErrors(projectId);
       setErrorData(errors);
 
-      if (errors && errors.summary && errors.summary.total_errors > 0) {
-        setCurrentStep('validation');
-      } else {
-        setCurrentStep('success');
-      }
+      // Navigation is handled by ProjectUpload (navigates to /validation page)
+      // No need to set currentStep here
     } finally {
       setIsLoading(false);
     }
