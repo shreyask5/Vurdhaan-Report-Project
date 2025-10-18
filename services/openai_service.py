@@ -224,6 +224,7 @@ class OpenAIService:
             "Return a SINGLE JSON object. Do not include explanations. Rules: "
             "1) Only extract what is explicitly present in the source. 2) If a field is unknown, set null and add a string to missing_fields. \n\n"
             "Extract the following key information:\n"
+            "Metadata: Document identification, file type, extraction timestamp, and generator version information.\n"
             "Operator & Regulatory: Operator name; ICAO designator; AOC ID & authority; State of the operator; parent–subsidiary status.\n"
             "Contacts: Name(s), title(s), email(s), phone(s) for accountable manager and CORSIA focal(s).\n"
             "Scope & Period: Reporting year; coverage (international only); aggregation level (state-pair / aerodrome-pair).\n"
@@ -250,7 +251,6 @@ class OpenAIService:
             "  \"reporting_setup\": { \"state_pairs_operated\": [string], \"aerodrome_pairs\": [string], \"exclusions\": [string], \"special_cases\": [string] },\n"
             "  \"data_gaps\": { \"gaps_occurred\": boolean|null, \"data_affected_percentage\": number|null, \"replacement_methods\": [string], \"justification\": string|null },\n"
             "  \"emission_reductions_saf\": { \"saf_claims\": [string], \"book_and_claim\": boolean|null, \"emission_reductions_claimed\": [string], \"documentation_required\": [string] },\n"
-            "  \"provenance_index\": [{ \"id\": string, \"location\": string, \"excerpt\": string }]\n"
             "}\n"
         )
 
@@ -576,19 +576,6 @@ class OpenAIService:
                         },
                         "required": ["saf_claims", "book_and_claim", "emission_reductions_claimed", "documentation_required"],
                         "additionalProperties": False
-                    },
-                    "provenance_index": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "id": {"type": "string"},
-                                "location": {"type": "string"},
-                                "excerpt": {"type": "string"}
-                            },
-                            "required": ["id", "location", "excerpt"],
-                            "additionalProperties": False
-                        }
                     }
                 },
                 "required": [
@@ -604,8 +591,7 @@ class OpenAIService:
                     "records_retention",
                     "reporting_setup",
                     "data_gaps",
-                    "emission_reductions_saf",
-                    "provenance_index"
+                    "emission_reductions_saf"
                 ],
                 "additionalProperties": False
             },
