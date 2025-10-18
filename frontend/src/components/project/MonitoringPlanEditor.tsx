@@ -191,6 +191,9 @@ export const MonitoringPlanEditor: React.FC<MonitoringPlanEditorProps> = ({ data
     );
   }
 
+  // Fields to exclude from user view (internal/system fields)
+  const EXCLUDED_FIELDS = ['metadata'];
+
   // Define the order of sections to display
   const prioritySections = [
     'operator',
@@ -207,8 +210,10 @@ export const MonitoringPlanEditor: React.FC<MonitoringPlanEditorProps> = ({ data
     'monitoring_plan_processes',
   ];
 
-  // Separate priority sections from other fields
-  const remainingKeys = Object.keys(data).filter((key) => !prioritySections.includes(key));
+  // Separate priority sections from other fields, excluding system fields
+  const remainingKeys = Object.keys(data).filter(
+    (key) => !prioritySections.includes(key) && !EXCLUDED_FIELDS.includes(key)
+  );
 
   return (
     <div className="space-y-4">
@@ -220,7 +225,7 @@ export const MonitoringPlanEditor: React.FC<MonitoringPlanEditorProps> = ({ data
 
       {/* Priority sections in order */}
       {prioritySections.map((key) => {
-        if (data[key]) {
+        if (data[key] && !EXCLUDED_FIELDS.includes(key)) {
           return renderSection(key, data[key], formatLabel(key));
         }
         return null;
