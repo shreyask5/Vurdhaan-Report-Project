@@ -186,16 +186,6 @@ const ProjectValidation: React.FC = () => {
     <div className="min-h-screen bg-gradient-radial">
       <ProjectHeader />
       <div className="container mx-auto px-4 py-8 max-w-7xl">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-foreground animate-fade-in-up">
-            CSV Validation Results
-          </h1>
-          <p className="text-muted-foreground mt-2">
-            Review and correct validation errors or proceed with clean data
-          </p>
-        </div>
-
         {hasErrors ? (
           // Error Display Section
           <>
