@@ -85,8 +85,35 @@ export default function Dashboard() {
     }
   };
 
-  const handleOpenChat = (projectId: string) => {
-    navigate(`/projects/${projectId}/chat`);
+  const handleOpenChat = async (projectId: string) => {
+    console.log('[DASHBOARD] Opening chat for project:', projectId);
+
+    try {
+      // Check if project has uploaded data
+      const project = projects.find(p => p.id === projectId);
+      if (!project) {
+        toast.error('Project not found');
+        return;
+      }
+
+      if (!project.upload_completed) {
+        toast.error('Please upload data before starting chat');
+        navigate(`/projects/${projectId}/upload`);
+        return;
+      }
+
+      // Check if AI chat is enabled
+      if (!project.ai_chat_enabled) {
+        toast.error('AI Chat is not enabled for this project. Please enable it in project settings.');
+        return;
+      }
+
+      // Navigate to chat page - it will auto-initialize from projectId
+      navigate(`/projects/${projectId}/chat`);
+    } catch (error) {
+      console.error('[DASHBOARD] Failed to open chat:', error);
+      toast.error('Failed to open chat');
+    }
   };
 
   const handleDownload = async (projectId: string, type: 'clean' | 'errors') => {

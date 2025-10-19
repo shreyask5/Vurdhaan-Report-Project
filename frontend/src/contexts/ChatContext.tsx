@@ -1,15 +1,18 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 import { ChatMessage, ChatSession } from '../types/chat';
 import { chatService } from '../services/chat';
+import { projectChatService } from '../services/projectChat';
 
 interface ChatContextType {
   sessionId: string | null;
+  projectId: string | null;
   messages: ChatMessage[];
   isInitialized: boolean;
   isLoading: boolean;
   databaseInfo?: ChatSession['database_info'];
 
   initializeSession: (cleanFile: File, errorFile: File) => Promise<void>;
+  initializeFromProject: (projectId: string) => Promise<void>;
   autoInitialize: (sessionId: string) => Promise<void>;
   sendMessage: (query: string) => Promise<void>;
   reset: () => void;
@@ -19,6 +22,7 @@ export const ChatContext = createContext<ChatContextType | undefined>(undefined)
 
 export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [projectId, setProjectId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isInitialized, setIsInitialized] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -43,6 +47,31 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setIsInitialized(true);
 
       chatService.logDebug('Session initialized', { session_id: newSessionId });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const initializeFromProject = async (pid: string) => {
+    setIsLoading(true);
+    try {
+      const session = await projectChatService.initializeFromProject(pid);
+
+      setSessionId(session.sessionId);
+      setProjectId(pid);
+      setDatabaseInfo(session.databaseInfo);
+      setIsInitialized(true);
+
+      // Add welcome message
+      const welcomeMessage: ChatMessage = {
+        id: `msg_${Date.now()}_welcome`,
+        role: 'assistant',
+        content: 'Chat session initialized! I can help you analyze your flight data. What would you like to know?',
+        timestamp: new Date()
+      };
+      setMessages([welcomeMessage]);
+
+      projectChatService.logDebug('Project chat initialized', { session_id: session.sessionId, project_id: pid });
     } finally {
       setIsLoading(false);
     }
@@ -76,7 +105,14 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setIsLoading(true);
 
     try {
-      const response = await chatService.sendQuery(sessionId, query);
+      let response;
+
+      // Use project chat service if we have a projectId, otherwise use file-based chat
+      if (projectId) {
+        response = await projectChatService.sendQuery(projectId, query, sessionId);
+      } else {
+        response = await chatService.sendQuery(sessionId, query);
+      }
 
       const assistantMessage: ChatMessage = {
         id: `msg_${Date.now()}_ai`,
@@ -89,7 +125,12 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       setMessages(prev => [...prev, assistantMessage]);
     } catch (error) {
-      chatService.logError('Query failed', { error: error instanceof Error ? error.message : 'Unknown' });
+      const errorMessage = error instanceof Error ? error.message : 'Unknown';
+      if (projectId) {
+        projectChatService.logError('Query failed', { error: errorMessage });
+      } else {
+        chatService.logError('Query failed', { error: errorMessage });
+      }
       throw error;
     } finally {
       setIsLoading(false);
@@ -98,6 +139,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const reset = () => {
     setSessionId(null);
+    setProjectId(null);
     setMessages([]);
     setIsInitialized(false);
     setDatabaseInfo(undefined);
@@ -106,11 +148,13 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   return (
     <ChatContext.Provider value={{
       sessionId,
+      projectId,
       messages,
       isInitialized,
       isLoading,
       databaseInfo,
       initializeSession,
+      initializeFromProject,
       autoInitialize,
       sendMessage,
       reset

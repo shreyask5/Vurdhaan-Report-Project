@@ -1,33 +1,46 @@
 import React, { useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useParams } from 'react-router-dom';
 import { useChat } from '../contexts/ChatContext';
 import { ChatInterface } from '../components/project/ChatInterface';
 import { ProjectHeader } from '../components/layout/ProjectHeader';
 
 const ProjectChat: React.FC = () => {
   const [searchParams] = useSearchParams();
+  const { projectId: urlProjectId } = useParams<{ projectId: string }>();
   const {
     sessionId,
+    projectId,
     messages,
     isInitialized,
     isLoading,
     databaseInfo,
     initializeSession,
+    initializeFromProject,
     autoInitialize,
     sendMessage
   } = useChat();
 
-  // Auto-initialize from URL session_id parameter
+  // Auto-initialize from URL parameters
+  // Priority: 1) session_id (for existing sessions), 2) projectId (for new sessions)
   useEffect(() => {
     const sessionIdParam = searchParams.get('session_id');
+
     if (sessionIdParam && !isInitialized && !sessionId) {
+      // Existing session - auto-initialize from session_id
       console.log('🔄 Auto-initializing chat from URL session_id:', sessionIdParam);
       autoInitialize(sessionIdParam).catch(error => {
         console.error('Failed to auto-initialize:', error);
         alert('Failed to load chat session. The session may have expired.');
       });
+    } else if (urlProjectId && !isInitialized && !sessionId) {
+      // New session - initialize from projectId
+      console.log('🔄 Initializing new chat session from project:', urlProjectId);
+      initializeFromProject(urlProjectId).catch(error => {
+        console.error('Failed to initialize from project:', error);
+        alert('Failed to initialize chat session. Please ensure the project has uploaded data.');
+      });
     }
-  }, [searchParams, isInitialized, sessionId]);
+  }, [searchParams, urlProjectId, isInitialized, sessionId, initializeFromProject, autoInitialize]);
 
   const calculateExpiresIn = () => {
     if (!databaseInfo) return null;

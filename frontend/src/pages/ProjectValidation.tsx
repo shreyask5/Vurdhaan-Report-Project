@@ -95,11 +95,11 @@ const ProjectValidation: React.FC = () => {
   const handleOpenChat = async () => {
     if (!projectId) return;
     try {
-      setLoadingMessage('Initializing AI chat...');
-      await validationService.initializeChatSession(projectId);
+      setLoadingMessage('Opening AI chat...');
+      // Simply navigate to chat - it will auto-initialize from projectId
       navigate(`/projects/${projectId}/chat`);
     } catch (error) {
-      alert('Failed to initialize chat: ' + (error as Error).message);
+      alert('Failed to open chat: ' + (error as Error).message);
     }
   };
 

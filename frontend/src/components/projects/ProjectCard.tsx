@@ -188,7 +188,7 @@ export function ProjectCard({
               title="View validation results"
             >
               <AlertCircle className="mr-2 h-4 w-4" />
-              View Validation
+              View Errors
             </Button>
           )}
 
