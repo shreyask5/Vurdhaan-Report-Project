@@ -265,6 +265,7 @@ export default function Dashboard() {
                         onDownload={handleDownload}
                         onGenerateReport={handleGenerateReport}
                         onDelete={handleDeleteProject}
+                        onUpdate={loadProjects}
                       />
                     ))}
                   </div>

@@ -30,7 +30,23 @@ const ProjectValidation: React.FC = () => {
 
   const [loadingMessage, setLoadingMessage] = useState('Loading validation results...');
   const [sequenceSummaryItems, setSequenceSummaryItems] = useState<any[]>([]);
+  const [aiChatEnabled, setAiChatEnabled] = useState(false);
   const hasFetchedRef = React.useRef(false);
+
+  // Fetch project details to get ai_chat_enabled
+  React.useEffect(() => {
+    if (projectId) {
+      import('../services/api').then(({ projectsApi }) => {
+        projectsApi.get(projectId)
+          .then(project => {
+            setAiChatEnabled(project.ai_chat_enabled || false);
+          })
+          .catch(error => {
+            console.error('[PROJECT VALIDATION] Failed to fetch project details:', error);
+          });
+      });
+    }
+  }, [projectId]);
 
   // Fetch errors when component mounts
   React.useEffect(() => {
@@ -206,6 +222,7 @@ const ProjectValidation: React.FC = () => {
                 onOpenChat={handleOpenChat}
                 onStartOver={handleStartOver}
                 hasCorrections={corrections.size > 0}
+                aiChatEnabled={aiChatEnabled}
               />
             </div>
 

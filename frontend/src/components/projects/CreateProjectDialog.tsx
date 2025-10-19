@@ -121,7 +121,7 @@ export function CreateProjectDialog({ onProjectCreated }: CreateProjectDialogPro
                   Save Files on Server
                 </Label>
                 <p className="text-sm text-muted-foreground">
-                  Store uploaded CSV files permanently on the server
+                  Store uploaded data permanently on the server
                 </p>
               </div>
               <Switch

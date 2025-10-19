@@ -2,6 +2,7 @@
 // Based on chat.js:235-287, chat.html:24, 298-321
 
 import React from 'react';
+import { marked } from 'marked';
 import { ChatMessage as ChatMessageType } from '../../types/chat';
 import { CollapsibleTable } from './CollapsibleTable';
 
@@ -12,13 +13,16 @@ interface ChatMessageProps {
 export const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
   const isUser = message.role === 'user';
 
-  // Simple markdown-like rendering for bold and line breaks
+  // Configure marked for safe rendering
+  marked.setOptions({
+    breaks: true, // Convert \n to <br>
+    gfm: true, // GitHub Flavored Markdown
+  });
+
+  // Render markdown using marked library
   const renderMarkdown = (text: string) => {
-    // Convert **bold** to <strong>
-    let formatted = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-    // Convert line breaks
-    formatted = formatted.replace(/\n/g, '<br/>');
-    return { __html: formatted };
+    const html = marked.parse(text);
+    return { __html: html };
   };
 
   return (
@@ -134,9 +138,124 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
           font-size: 0.9375rem;
         }
 
-        .message-text :global(strong) {
+        /* Markdown styling */
+        .message-text :global(strong),
+        .message-text :global(b) {
           font-weight: 700;
           color: #0f172a;
+        }
+
+        .message-text :global(em),
+        .message-text :global(i) {
+          font-style: italic;
+        }
+
+        .message-text :global(h1),
+        .message-text :global(h2),
+        .message-text :global(h3),
+        .message-text :global(h4) {
+          font-weight: 700;
+          margin: 1rem 0 0.5rem 0;
+          color: #0f172a;
+        }
+
+        .message-text :global(h1) {
+          font-size: 1.5rem;
+          border-bottom: 2px solid #e2e8f0;
+          padding-bottom: 0.5rem;
+        }
+
+        .message-text :global(h2) {
+          font-size: 1.25rem;
+        }
+
+        .message-text :global(h3) {
+          font-size: 1.125rem;
+        }
+
+        .message-text :global(h4) {
+          font-size: 1rem;
+        }
+
+        .message-text :global(p) {
+          margin: 0.5rem 0;
+        }
+
+        .message-text :global(ul),
+        .message-text :global(ol) {
+          margin: 0.5rem 0;
+          padding-left: 1.5rem;
+        }
+
+        .message-text :global(li) {
+          margin: 0.25rem 0;
+        }
+
+        .message-text :global(code) {
+          background: #f1f5f9;
+          padding: 0.125rem 0.375rem;
+          border-radius: 0.25rem;
+          font-family: 'Courier New', Courier, monospace;
+          font-size: 0.875rem;
+          color: #e11d48;
+        }
+
+        .message-text :global(pre) {
+          background: #1e293b;
+          color: #e2e8f0;
+          padding: 1rem;
+          border-radius: 0.5rem;
+          overflow-x: auto;
+          margin: 0.75rem 0;
+        }
+
+        .message-text :global(pre code) {
+          background: transparent;
+          padding: 0;
+          color: #e2e8f0;
+          font-size: 0.8125rem;
+        }
+
+        .message-text :global(blockquote) {
+          border-left: 4px solid #cbd5e1;
+          padding-left: 1rem;
+          margin: 0.75rem 0;
+          color: #64748b;
+          font-style: italic;
+        }
+
+        .message-text :global(a) {
+          color: #6366f1;
+          text-decoration: underline;
+          transition: color 0.2s ease;
+        }
+
+        .message-text :global(a:hover) {
+          color: #4f46e5;
+        }
+
+        .message-text :global(table) {
+          border-collapse: collapse;
+          width: 100%;
+          margin: 0.75rem 0;
+        }
+
+        .message-text :global(th),
+        .message-text :global(td) {
+          border: 1px solid #e2e8f0;
+          padding: 0.5rem;
+          text-align: left;
+        }
+
+        .message-text :global(th) {
+          background: #f8fafc;
+          font-weight: 600;
+        }
+
+        .message-text :global(hr) {
+          border: none;
+          border-top: 2px solid #e2e8f0;
+          margin: 1rem 0;
         }
 
         .sql-display {

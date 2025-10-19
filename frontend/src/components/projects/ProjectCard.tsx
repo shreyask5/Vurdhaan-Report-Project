@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { Project } from '@/services/api';
 import { formatDistanceToNow } from 'date-fns';
+import { ProjectSettingsDialog } from './ProjectSettingsDialog';
 
 interface ProjectCardProps {
   project: Project;
@@ -34,6 +35,7 @@ interface ProjectCardProps {
   onGenerateReport?: (projectId: string) => void;
   onEdit?: (projectId: string) => void;
   onDelete?: (projectId: string) => void;
+  onUpdate?: () => void;
 }
 
 export function ProjectCard({
@@ -44,8 +46,10 @@ export function ProjectCard({
   onGenerateReport,
   onEdit,
   onDelete,
+  onUpdate,
 }: ProjectCardProps) {
   const navigate = useNavigate();
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   // Debug logging
   console.log('[PROJECT CARD DEBUG] Rendering project:', {
@@ -101,7 +105,7 @@ export function ProjectCard({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => onEdit?.(project.id)}>
+              <DropdownMenuItem onClick={() => setSettingsOpen(true)}>
                 <Settings className="mr-2 h-4 w-4" />
                 Settings
               </DropdownMenuItem>
@@ -252,6 +256,14 @@ export function ProjectCard({
           </div>
         )}
       </CardContent>
+
+      {/* Settings Dialog */}
+      <ProjectSettingsDialog
+        project={project}
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        onSettingsUpdated={onUpdate}
+      />
     </Card>
   );
 }

@@ -12,6 +12,7 @@ interface ActionButtonsProps {
   onOpenChat: () => void;
   onStartOver: () => void;
   hasCorrections?: boolean;
+  aiChatEnabled?: boolean;
 }
 
 export const ActionButtons: React.FC<ActionButtonsProps> = ({
@@ -21,7 +22,8 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
   onDownloadErrors,
   onOpenChat,
   onStartOver,
-  hasCorrections = false
+  hasCorrections = false,
+  aiChatEnabled = false
 }) => {
   const baseButtonClass = "inline-flex items-center gap-2 px-6 py-3 rounded-lg font-semibold text-sm transition-all duration-200 justify-center min-w-[200px] md:min-w-0 md:flex-1";
   const successButtonClass = `${baseButtonClass} bg-gradient-to-br from-success to-success-light text-white hover:shadow-lg hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none disabled:hover:translate-y-0`;
@@ -58,9 +60,11 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
 
       {/* Analysis & Reset Actions */}
       <div className="flex flex-col md:flex-row gap-3">
-        <button className={highlightButtonClass} onClick={onOpenChat}>
-          <span className="text-xl">💬</span> Analyze Data with AI Chat
-        </button>
+        {aiChatEnabled && (
+          <button className={highlightButtonClass} onClick={onOpenChat}>
+            <span className="text-xl">💬</span> Analyze Data with AI Chat
+          </button>
+        )}
         <button className={secondaryButtonClass} onClick={onStartOver}>
           <span className="text-xl">🔄</span> Start Over
         </button>

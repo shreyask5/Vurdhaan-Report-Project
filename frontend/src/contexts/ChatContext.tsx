@@ -9,6 +9,7 @@ interface ChatContextType {
   messages: ChatMessage[];
   isInitialized: boolean;
   isLoading: boolean;
+  hasUserMessage: boolean;
   databaseInfo?: ChatSession['database_info'];
 
   initializeSession: (cleanFile: File, errorFile: File) => Promise<void>;
@@ -26,6 +27,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isInitialized, setIsInitialized] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [hasUserMessage, setHasUserMessage] = useState(false);
   const [databaseInfo, setDatabaseInfo] = useState<ChatSession['database_info']>();
 
   const initializeSession = async (cleanFile: File, errorFile: File) => {
@@ -102,6 +104,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
 
     setMessages(prev => [...prev, userMessage]);
+    setHasUserMessage(true); // Mark that user has sent a message
     setIsLoading(true);
 
     try {
@@ -142,6 +145,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setProjectId(null);
     setMessages([]);
     setIsInitialized(false);
+    setHasUserMessage(false);
     setDatabaseInfo(undefined);
   };
 
@@ -152,6 +156,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       messages,
       isInitialized,
       isLoading,
+      hasUserMessage,
       databaseInfo,
       initializeSession,
       initializeFromProject,

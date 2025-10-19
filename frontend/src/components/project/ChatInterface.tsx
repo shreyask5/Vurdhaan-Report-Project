@@ -10,6 +10,7 @@ interface ChatInterfaceProps {
   messages: ChatMessageType[];
   isInitialized: boolean;
   isLoading: boolean;
+  hasUserMessage: boolean;
   onSendMessage: (message: string) => void;
   onInitialize?: (cleanFile: File, errorFile: File) => void;
   databaseInfo?: {
@@ -24,6 +25,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   messages,
   isInitialized,
   isLoading,
+  hasUserMessage,
   onSendMessage,
   onInitialize,
   databaseInfo
@@ -171,8 +173,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         )}
       </div>
 
-      {/* Suggested Questions */}
-      {isInitialized && messages.length === 0 && (
+      {/* Suggested Questions - Show only before user sends their first message */}
+      {isInitialized && !hasUserMessage && (
         <div className="suggested-questions">
           <h3 className="suggestions-title">💡 Try asking:</h3>
           <div className="suggestions-grid">

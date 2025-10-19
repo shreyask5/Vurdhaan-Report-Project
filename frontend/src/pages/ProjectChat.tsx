@@ -13,6 +13,7 @@ const ProjectChat: React.FC = () => {
     messages,
     isInitialized,
     isLoading,
+    hasUserMessage,
     databaseInfo,
     initializeSession,
     initializeFromProject,
@@ -59,24 +60,12 @@ const ProjectChat: React.FC = () => {
           messages={messages}
           isInitialized={isInitialized}
           isLoading={isLoading}
+          hasUserMessage={hasUserMessage}
           databaseInfo={databaseInfo}
           onSendMessage={sendMessage}
           onInitialize={initializeSession}
         />
       </div>
-
-      {/* Footer */}
-      <footer className="bg-white border-t border-gray-200 px-6 py-3">
-        <div className="flex justify-between items-center text-xs text-gray-500">
-          <div>
-            💡 <strong>Tip:</strong> Ask about fuel efficiency, error patterns, or flight statistics
-          </div>
-          <div>
-            Press <kbd className="px-2 py-1 bg-gray-100 rounded border border-gray-300">Ctrl</kbd> +{' '}
-            <kbd className="px-2 py-1 bg-gray-100 rounded border border-gray-300">Enter</kbd> to send
-          </div>
-        </div>
-      </footer>
     </div>
   );
 };
