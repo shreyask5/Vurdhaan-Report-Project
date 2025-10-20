@@ -34,7 +34,7 @@ import psycopg2.extras
 
 # Google Generative AI
 import google.generativeai as genai
-from google.generativeai.types import FunctionDeclaration, Tool, GenerateContentConfig
+from google.generativeai.types import FunctionDeclaration, Tool
 from google.generativeai.types import content_types
 
 from config import Config
