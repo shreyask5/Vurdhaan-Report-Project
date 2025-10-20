@@ -525,6 +525,11 @@ class FlightDataPostgreSQLAgent:
         
         logger.info(f"🔄 Converting question to SQL using GPT-4o-mini: {question}")
         
+
+
+
+
+        """MAKE SURE TO UPDATE THIS CODE FOR ALL THE FUEL TYPES""""
         # Escape curly braces in schema for prompt template
         safe_schema = schema.replace('{', '{{').replace('}', '}}')
         system_prompt = (

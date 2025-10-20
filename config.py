@@ -9,15 +9,23 @@ class Config:
     # ========================================================================
     # EXISTING CONFIGURATION (BACKWARD COMPATIBLE)
     # ========================================================================
-    
+
     # Flask settings
     SECRET_KEY = os.getenv('SECRET_KEY', 'dev-secret-key')
     FLASK_ENV = os.getenv('FLASK_ENV', 'production')
-    
+
     # OpenAI settings (existing)
     OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
     OPENAI_MODEL = os.getenv('OPENAI_MODEL', 'gpt-4o-mini')
     OPENAI_MAX_TOKENS = int(os.getenv('OPENAI_MAX_TOKENS', '128000'))
+
+    # Google Gemini API Keys (multiple keys support)
+    GEMINI_API_KEY_1 = os.getenv('GEMINI_API_KEY_1')
+    GEMINI_API_KEY_2 = os.getenv('GEMINI_API_KEY_2')
+    GEMINI_API_KEY_3 = os.getenv('GEMINI_API_KEY_3')
+    GEMINI_MODEL = os.getenv('GEMINI_MODEL', 'gemini-2.5-pro')
+    GEMINI_TEMPERATURE = float(os.getenv('GEMINI_TEMPERATURE', '0.1'))
+    GEMINI_MAX_OUTPUT_TOKENS = int(os.getenv('GEMINI_MAX_OUTPUT_TOKENS', '8192'))
     
     # Database settings - Updated for local DuckDB
     DATABASE_DIR = os.getenv('DATABASE_DIR', '/var/lib/duckdb/sessions')
@@ -124,11 +132,11 @@ class Config:
     def validate_config(cls) -> bool:
         """Validate the configuration"""
         errors = []
-        
-        # Check required settings
-        if not cls.OPENAI_API_KEY:
-            errors.append("OPENAI_API_KEY is required")
-        
+
+        # Check required settings (at least one API key)
+        if not cls.OPENAI_API_KEY and not cls.GEMINI_API_KEY_1:
+            errors.append("Either OPENAI_API_KEY or GEMINI_API_KEY_1 is required")
+
         # Validate API key format (should start with sk-)
         if cls.OPENAI_API_KEY and not cls.OPENAI_API_KEY.startswith('sk-'):
             errors.append("OPENAI_API_KEY should start with 'sk-'")

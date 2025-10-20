@@ -46,6 +46,9 @@ python-json-logger==2.0.7
 psycopg2-binary==2.9.9
 langgraph==0.0.20
 
+# Google Generative AI (Gemini)
+google-generativeai>=0.8.0
+
 # NEW: Security and Firebase (for app5.py)
 firebase-admin==6.5.0
 flask-limiter==3.5.0
