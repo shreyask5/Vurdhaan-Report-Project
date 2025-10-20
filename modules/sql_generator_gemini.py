@@ -104,7 +104,7 @@ def create_function_declarations() -> List[FunctionDeclaration]:
 
         FunctionDeclaration(
             name="get_sample_rows",
-            description="Get sample rows from a table for data exploration.",
+            description="Get sample rows from a table for data exploration. The limit parameter is optional and defaults to 5 if not provided.",
             parameters={
                 "type": "object",
                 "properties": {
@@ -114,8 +114,7 @@ def create_function_declarations() -> List[FunctionDeclaration]:
                     },
                     "limit": {
                         "type": "integer",
-                        "description": "Number of rows to return (default: 5)",
-                        "default": 5
+                        "description": "Number of rows to return (optional, defaults to 5)"
                     }
                 },
                 "required": ["table_name"]
@@ -150,14 +149,13 @@ def create_function_declarations() -> List[FunctionDeclaration]:
 
         FunctionDeclaration(
             name="compute_route_statistics",
-            description="Compute statistics about flight routes (origin-destination pairs).",
+            description="Compute statistics about flight routes (origin-destination pairs). The limit parameter is optional and defaults to 10 if not provided.",
             parameters={
                 "type": "object",
                 "properties": {
                     "limit": {
                         "type": "integer",
-                        "description": "Number of top routes to return (default: 10)",
-                        "default": 10
+                        "description": "Number of top routes to return (optional, defaults to 10)"
                     }
                 },
                 "required": []
