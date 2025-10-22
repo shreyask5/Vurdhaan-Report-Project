@@ -153,7 +153,7 @@ function restoreOriginalErrorStructure(optimizedData: any): ErrorData {
 
 /**
  * Decompresses LZ-String compressed paginated error page
- * Paginated format is NOT optimized (uses full structure), so just decompress and parse
+ * Backend uses optimized structure with shortened field names, so we need to restore them
  */
 export async function decompressLZStringPaginatedPage(compressedData: string): Promise<PaginatedErrorData> {
   try {
@@ -177,21 +177,98 @@ export async function decompressLZStringPaginatedPage(compressedData: string): P
     console.log('[COMPRESSION] Decompressed JSON length:', jsonStr.length);
     console.log('[COMPRESSION] Compression ratio:', ((1 - compressedData.length / jsonStr.length) * 100).toFixed(1) + '%');
 
-    // Parse the decompressed JSON (already in correct PaginatedErrorData format)
-    const paginatedData: PaginatedErrorData = JSON.parse(jsonStr);
+    // Parse the decompressed JSON (optimized format)
+    const optimizedData: any = JSON.parse(jsonStr);
+
+    // Check if data is already in full format (no optimization)
+    if (optimizedData.category_name && optimizedData.page !== undefined) {
+      console.log('[COMPRESSION] Data already in full format');
+      return optimizedData as PaginatedErrorData;
+    }
+
+    // Restore optimized structure to full format
+    console.log('[COMPRESSION] Restoring optimized structure...');
+
+    // Get field map for row data restoration
+    const fieldMap = optimizedData.meta?.fm || {};
+
+    // Restore rows_data
+    const restoredRowsData: Record<number, any> = {};
+    const optimizedRows = optimizedData.rd || {};
+
+    for (const [rowIdx, rowData] of Object.entries(optimizedRows)) {
+      const restoredRow: any = {};
+
+      for (const [shortKey, value] of Object.entries(rowData as any)) {
+        if (shortKey === 'err') {
+          restoredRow['error'] = value;
+        } else {
+          // Restore full field name
+          const fullKey = fieldMap[shortKey] || shortKey;
+          restoredRow[fullKey] = value;
+        }
+      }
+
+      restoredRowsData[parseInt(rowIdx)] = restoredRow;
+    }
+
+    // Restore error_groups
+    const restoredErrorGroups: any[] = [];
+    const optimizedGroups = optimizedData.eg || [];
+
+    for (const group of optimizedGroups) {
+      const restoredGroup: any = {
+        reason: group.r || '',
+        rows: []
+      };
+
+      for (const row of (group.rows || [])) {
+        if (row.fl) {
+          // File-level error
+          restoredGroup.rows.push({
+            file_level: true,
+            cell_data: row.cd || '',
+            columns: row.cols || []
+          });
+        } else {
+          // Row-level error
+          restoredGroup.rows.push({
+            row_idx: row.idx,
+            cell_data: row.cd || '',
+            columns: row.cols || []
+          });
+        }
+      }
+
+      restoredErrorGroups.push(restoredGroup);
+    }
+
+    // Build final PaginatedErrorData structure
+    const paginatedData: PaginatedErrorData = {
+      category_name: optimizedData.meta?.cn || '',
+      page: optimizedData.meta?.p || 1,
+      total_pages: optimizedData.meta?.tp || 1,
+      errors_on_page: optimizedData.meta?.eop || 0,
+      summary: {
+        total_errors: optimizedData.s?.te || 0,
+        error_rows: optimizedData.s?.er || 0
+      },
+      rows_data: restoredRowsData,
+      error_groups: restoredErrorGroups
+    };
 
     console.log('[COMPRESSION] Paginated page decompression successful:', {
       category: paginatedData.category_name,
       page: paginatedData.page,
       totalPages: paginatedData.total_pages,
       errorsOnPage: paginatedData.errors_on_page,
-      rowsDataKeys: paginatedData.rows_data ? Object.keys(paginatedData.rows_data).length : 0,
-      errorGroups: paginatedData.error_groups?.length || 0
+      rowsDataKeys: Object.keys(paginatedData.rows_data).length,
+      errorGroups: paginatedData.error_groups.length
     });
 
-    // Validate structure
+    // Validate restored structure
     if (!paginatedData.category_name || typeof paginatedData.page !== 'number') {
-      throw new Error('Invalid paginated data structure: missing required fields');
+      throw new Error('Invalid paginated data structure: missing required fields after restoration');
     }
 
     return paginatedData;
