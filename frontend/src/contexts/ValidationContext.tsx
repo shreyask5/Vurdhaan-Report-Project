@@ -43,7 +43,6 @@ interface ValidationContextType {
   setValidationParams: (params: ValidationParams) => void;
   setColumnMapping: (mapping: ColumnMapping) => void;
   uploadFile: (projectId: string, params: ValidationFormData) => Promise<void>;
-  fetchErrors: (projectId?: string) => Promise<void>;
   saveCorrections: (projectId: string) => Promise<void>;
   ignoreErrors: (projectId: string) => Promise<void>;
   addCorrection: (correction: Correction) => void;
@@ -132,9 +131,16 @@ export const ValidationProvider: React.FC<{ children: ReactNode }> = ({ children
       const response = await validationService.uploadFile(projectId, selectedFile, params);
       setFileId(response.file_id || projectId);
 
-      // Fetch errors after upload
-      const errors = await validationService.fetchErrors(projectId);
-      setErrorData(errors);
+      // After upload, fetch error metadata (pagination mode)
+      // Note: Individual category pages will be loaded by ErrorCategory components on-demand
+      try {
+        const metadata = await validationService.fetchErrorMetadata(projectId);
+        console.log('[UPLOAD] Error metadata fetched:', metadata);
+        // Store metadata in context if needed, or let ProjectValidation page handle it
+      } catch (error) {
+        console.log('[UPLOAD] No error metadata available (validation passed with no errors)');
+        // If metadata doesn't exist, validation passed with no errors
+      }
 
       // Navigation is handled by ProjectUpload (navigates to /validation page)
       // No need to set currentStep here
@@ -143,18 +149,7 @@ export const ValidationProvider: React.FC<{ children: ReactNode }> = ({ children
     }
   };
 
-  const fetchErrors = useCallback(async (projectId?: string) => {
-    const id = projectId || fileId;
-    if (!id) return;
-
-    setIsLoading(true);
-    try {
-      const errors = await validationService.fetchErrors(id);
-      setErrorData(errors);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [fileId]);
+  // REMOVED: fetchErrors() - replaced with pagination-based approach in ProjectValidation page
 
   const saveCorrections = async (projectId: string) => {
     if (!projectId) return;
@@ -163,7 +158,7 @@ export const ValidationProvider: React.FC<{ children: ReactNode }> = ({ children
     try {
       await validationService.saveCorrections(projectId, Array.from(corrections.values()));
       setCorrections(new Map());
-      await fetchErrors(projectId);
+      // Note: ProjectValidation page will handle refreshing error data via pagination
     } finally {
       setIsLoading(false);
     }
@@ -236,7 +231,6 @@ export const ValidationProvider: React.FC<{ children: ReactNode }> = ({ children
       setValidationParams,
       setColumnMapping,
       uploadFile,
-      fetchErrors,
       saveCorrections,
       ignoreErrors,
       addCorrection,

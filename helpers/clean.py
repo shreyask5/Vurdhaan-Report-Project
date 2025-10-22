@@ -874,8 +874,8 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
             )
 
         # Return False to indicate the file is incomplete, and empty string for file path
-        output_file_json = generate_error_report(session, original_csv_path_with_Index, folder_path)
-        return False, "",result_df, output_file_json
+        generate_paginated_error_reports(session, original_csv_path_with_Index, folder_path)
+        return False, "",result_df, None
     
     # Ensure data is ordered before sequence validation (do not reset index here)
     result_df['Date'] = pd.to_datetime(result_df['Date'], dayfirst=True, errors='coerce')
@@ -1611,8 +1611,8 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
     # Check if there are "Column Missing" errors - critical issue
     if session.error_tracker["Column Missing"]:
         print("\nCritical error: Missing required columns - file cannot be processed")
-        output_file_json = generate_error_report(session, result_df, folder_path)
-        return False, "",result_df, output_file_json
+        generate_paginated_error_reports(session, original_csv_path_with_Index, folder_path)
+        return False, "",result_df, None
 
 
     # After all validations, determine if file is valid
@@ -1623,8 +1623,8 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
     # Generate output path
     if has_column_errors:
         # File has critical errors - don't save output
-        output_file_json = generate_error_report(session, original_csv_path_with_Index, folder_path)
-        return False, "",result_df,output_file_json
+        generate_paginated_error_reports(session, original_csv_path_with_Index, folder_path)
+        return False, "",result_df, None
     else:
         # Save file with validation results
         base_name = os.path.splitext(file_path)[0]
@@ -1633,8 +1633,8 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
         print(f"File validated and saved to: {output_path}")
 
         # Return True if validation passed, but might have non-critical errors
-        output_file_json = generate_error_report(session, original_csv_path_with_Index, folder_path)
-        return True, output_path,result_df,output_file_json
+        generate_paginated_error_reports(session, original_csv_path_with_Index, folder_path)
+        return True, output_path,result_df, None
 
 
 
@@ -1672,340 +1672,6 @@ def flatten_columns(columns):
         else:
             flattened.append(str(item))
     return flattened
-
-
-def generate_error_report(session, original_csv_path_with_Index, output_path, auto_generate_csvs=True):
-    """
-    Generates a JSON report of all errors, grouped by category and reason.
-    Stores row data in a central place to avoid duplication.
-    Now includes structure optimization + LZ-String compression.
-    Automatically generates clean_data.csv and errors_data.csv files.
-
-    Parameters:
-    - session: ValidationSession instance containing error tracking data
-    - original_csv_path_with_Index: Path to the CSV file with index column
-    - output_path: Path to save the JSON file (optional)
-    - auto_generate_csvs: Whether to automatically generate CSV files (default: True)
-
-    Returns:
-    - output_file_json: Path to the saved JSON file
-    """
-    # Use session data instead of globals
-    error_tracker = session.error_tracker
-    error_rows = session.error_rows
-    
-    # Field mappings to reduce key repetition (for compression)
-    field_map = {
-        "Date": "d", "A/C Registration": "r", "Flight No": "f", "A/C Type": "t",
-        "ATD (UTC) Block Off": "o", "ATA (UTC) Block On": "i",
-        "Origin ICAO": "or", "Destination ICAO": "de", "Uplift Volume": "uv",
-        "Uplift Density": "ud", "Uplift weight": "uw",
-        "Remaining Fuel From Prev. Flight": "rf", "Block Off Fuel": "bf",
-        "Block On Fuel": "bo", "Fuel Consumption": "fc"
-    }
-    
-    # Reverse mapping for client-side decompression
-    reverse_field_map = {v: k for k, v in field_map.items()}
-    
-    # Initialize the error report structure (original format)
-    # Adjust sequence error count (divide by 4 since 4 rows marked per break)
-    sequence_error_count = len(error_tracker["Sequence"]) // 4
-    
-    total_errors = sum(
-        len(errors) if category != "Sequence" else sequence_error_count 
-        for category, errors in error_tracker.items()
-    )
-    
-    # Create categories summary with adjusted sequence count
-    categories_summary = {}
-    for category, errors in error_tracker.items():
-        if len(errors) > 0:
-            count = len(errors) if category != "Sequence" else sequence_error_count
-            categories_summary[category] = count
-    
-    error_report = {
-        "summary": {
-            "total_errors": total_errors,
-            "error_rows": len(error_rows),
-            "categories": categories_summary
-        },
-        "rows_data": {},  # Central place to store row data
-        "categories": []
-    }
-    
-    # Load the persisted sorted+indexed CSV, use as result_df for reporting
-    try:
-        result_df = pd.read_csv(original_csv_path_with_Index, encoding='utf-8', encoding_errors='replace')
-    except Exception as e:
-        print(f"Error loading original_csv_path_with_Index: {e}")
-        # Fallback: create minimal DataFrame to avoid crashing
-        result_df = pd.DataFrame()
-
-    # Create mapping from original indices to current pandas indices
-    original_to_pandas_idx = {}
-    for pandas_idx, row in result_df.iterrows():
-        original_idx = row['index'] if 'index' in row else pandas_idx
-        original_to_pandas_idx[original_idx] = pandas_idx
-    
-    # Store all row data in a central place, indexed by row_idx
-    for row_idx in error_rows:
-        if row_idx is not None:  # Skip None indices (file-level errors)
-            try:
-                # Convert original index to current pandas index
-                if row_idx in original_to_pandas_idx:
-                    pandas_idx = original_to_pandas_idx[row_idx]
-                    # Get row data using the correct pandas index
-                    row_data = result_df.iloc[pandas_idx].to_dict()
-                else:
-                    print(f"Warning: Original row_idx {row_idx} not found in current DataFrame")
-                    continue
-                
-                row_data = {k: convert_to_serializable(v) for k, v in row_data.items()}
-                
-                # Strip " 00:00:00" suffix from Date field
-                if "Date" in row_data:
-                    if hasattr(row_data["Date"], 'strftime'):  # Check if it's a datetime-like object
-                        # Convert to date string (YYYY-MM-DD format)
-                        row_data["Date"] = row_data["Date"].strftime("%Y-%m-%d")
-                    elif isinstance(row_data["Date"], str) and row_data["Date"].endswith(" 00:00:00"):
-                        # Handle string dates
-                        row_data["Date"] = row_data["Date"].split(" ")[0]
-                
-                # Round all numeric values to 3 decimal places
-                for key, value in row_data.items():
-                    if isinstance(value, (int, float)) and not isinstance(value, bool):
-                        row_data[key] = round(float(value), 3)
-                
-                error_report["rows_data"][str(row_idx)] = row_data
-            except (IndexError, AttributeError):
-                error_report["rows_data"][str(row_idx)] = {"error": "Row not found in DataFrame"}
-    
-    # Process each category
-    for category in sorted(error_tracker.keys()):
-        if not error_tracker[category]:
-            continue  # Skip empty categories
-        
-        # Group errors by reason within this category
-        errors_by_reason = defaultdict(list)
-        for error in error_tracker[category]:
-            reason = error["reason"]
-            errors_by_reason[reason].append(error)
-        
-        # Create category entry
-        category_entry = {
-            "name": category,
-            "errors": []
-        }
-        
-        # Process each reason group, sorted alphabetically
-        for reason in sorted(errors_by_reason.keys()):
-            reason_group = {
-                "reason": reason,
-                "rows": []
-            }
-            
-            # Add each error row
-            for error in errors_by_reason[reason]:
-                row_idx = error["row_idx"]
-                
-                # Skip if row_idx is None (applies to the whole file, not a specific row)
-                if row_idx is None:
-                    # For file-level errors like missing columns
-                    file_error = {
-                        "file_level": True,
-                        "cell_data": error["cell_data"],
-                        "columns": error["columns"]
-                    }
-                    reason_group["rows"].append(file_error)
-                    continue
-                
-                # Add error row entry with reference to central row data
-                row_entry = {
-                    "row_idx": row_idx,
-                    "cell_data": error["cell_data"],
-                    "columns": error["columns"]
-                }
-                
-                reason_group["rows"].append(row_entry)
-            
-            # Add reason group to category
-            category_entry["errors"].append(reason_group)
-        
-        # Add category to report
-        error_report["categories"].append(category_entry)
-    
-    # Save original JSON format
-    output_file = None
-    if output_path:
-        # Generate filename if only directory is provided
-        if os.path.isdir(output_path):
-            output_file = os.path.join(output_path, "error_report.json")
-        else:
-            output_file = output_path
-        
-        # Ensure directory exists
-        os.makedirs(os.path.dirname(os.path.abspath(output_file)), exist_ok=True)
-        
-        # Write original JSON to file
-        json_str = json.dumps(error_report, indent=2, default=str, ensure_ascii=False)
-        with open(output_file, 'w', encoding='utf-8') as f:
-            f.write(json_str)
-    
-    # Create compressed version for web transfer
-    try:
-        compressed_data = create_compressed_error_report(error_report, field_map, reverse_field_map)
-        
-        # Save compressed version
-        if output_path:
-            if os.path.isdir(output_path):
-                compressed_file = os.path.join(output_path, "error_report.lzs")
-            else:
-                compressed_file = output_path.replace('.json', '.lzs')
-            
-            with open(compressed_file, 'w', encoding='utf-8') as f:
-                f.write(compressed_data)
-            
-            print(f"Compressed file saved to: {compressed_file}")
-    
-    except Exception as e:
-        print(f"Warning: Failed to create compressed version: {e}")
-        # Continue with original functionality
-    
-    # Auto-generate clean and errors CSV files (only if enabled and JSON file was created successfully)
-    if auto_generate_csvs and output_file and os.path.exists(output_file):
-        try:
-            # Create a DataFrame with original indices for CSV processing
-            # We need to restore the original index mapping for the CSV function to work correctly
-            csv_df = result_df.copy()
-            if 'index' in csv_df.columns:
-                csv_df.index = csv_df['index']  # Set the index to original indices
-                csv_df = csv_df.drop('index', axis=1)  # Remove the 'index' column
-            
-            clean_csv_path, errors_csv_path = process_error_json_to_csvs(
-                json_file_path=output_file,
-                original_data_df=csv_df,
-                output_dir=output_path if output_path and os.path.isdir(output_path) else os.path.dirname(output_file)
-            )
-            
-            if clean_csv_path and errors_csv_path:
-                print(f"Auto-generated CSV files:")
-                print(f"  Clean data: {clean_csv_path}")
-                print(f"  Error data: {errors_csv_path}")
-            else:
-                print("Warning: Failed to auto-generate CSV files")
-                
-        except Exception as e:
-            print(f"Warning: Failed to auto-generate CSV files: {e}")
-            import traceback
-            traceback.print_exc()
-    
-    # Note: Session data is not reset here - caller can reset the session if needed
-    # The session can be reused or reset using session.reset()
-
-    return output_file
-
-
-def create_compressed_error_report(error_data, field_map, reverse_field_map):
-    """
-    Create compressed version of error report using structure optimization + LZ-String
-    """
-    try:
-        # Optimize row data structure
-        optimized_rows = {}
-        for row_idx, row_data in error_data.get('rows_data', {}).items():
-            optimized_row = {}
-            
-            for key, value in row_data.items():
-                if key == 'error':
-                    optimized_row['err'] = value
-                else:
-                    short_key = field_map.get(key, key)
-                    
-                    # Convert and optimize numeric values
-                    value = convert_to_serializable(value)
-                    if isinstance(value, (int, float)) and not isinstance(value, bool):
-                        rounded_value = round(float(value), 3)
-                        if rounded_value == int(rounded_value):
-                            value = int(rounded_value)
-                        else:
-                            value = rounded_value
-                    
-                    optimized_row[short_key] = value
-            
-            optimized_rows[row_idx] = optimized_row
-        
-        # Optimize error structure
-        optimized_categories = []
-        for category in error_data.get('categories', []):
-            category_errors = []
-            
-            for error_group in category.get('errors', []):
-                reason_data = {
-                    "r": error_group.get('reason', ''),  # reason
-                    "rows": []
-                }
-                
-                for row_error in error_group.get('rows', []):
-                    if row_error.get('file_level'):
-                        row_entry = {
-                            "fl": True,  # file_level
-                            "cd": row_error.get('cell_data', ''),  # cell_data
-                            "cols": row_error.get('columns', [])
-                        }
-                    else:
-                        row_entry = {
-                            "idx": row_error.get('row_idx'),  # row_idx
-                            "cd": row_error.get('cell_data', ''),  # cell_data
-                            "cols": row_error.get('columns', [])
-                        }
-                    
-                    reason_data["rows"].append(row_entry)
-                
-                category_errors.append(reason_data)
-            
-            optimized_categories.append({
-                "n": category.get('name', ''),  # name
-                "e": category_errors  # errors
-            })
-        
-        # Create optimized report
-        summary = error_data.get('summary', {})
-        optimized_report = {
-            "meta": {
-                "fm": reverse_field_map,  # field map for decompression
-                "s": {  # summary
-                    "te": convert_to_serializable(summary.get('total_errors', 0)),  # total_errors
-                    "er": convert_to_serializable(summary.get('error_rows', 0)),  # error_rows
-                    "c": {k: convert_to_serializable(v) for k, v in summary.get('categories', {}).items()}  # categories
-                }
-            },
-            "rd": optimized_rows,  # rows_data
-            "c": optimized_categories  # categories
-        }
-        
-        # Convert to compact JSON
-        json_str = json.dumps(optimized_report, separators=(',', ':'), ensure_ascii=False)
-        
-        # Compress with LZ-String
-        compressed_data = LZString.compressToBase64(json_str)
-        
-        # Calculate compression stats
-        original_size = len(json_str.encode('utf-8'))
-        compressed_size = len(compressed_data.encode('utf-8'))
-        compression_ratio = (1 - compressed_size / original_size) * 100
-        
-        print(f"JSON Optimization + LZ-String Compression:")
-        print(f"  Original size: {original_size:,} bytes")
-        print(f"  Compressed size: {compressed_size:,} bytes")
-        print(f"  Compression ratio: {compression_ratio:.1f}%")
-        
-        return compressed_data
-        
-    except Exception as e:
-        print(f"Error compressing data: {e}")
-        # Fallback: return uncompressed JSON
-        json_str = json.dumps(error_data, separators=(',', ':'), ensure_ascii=False)
-        return json_str
 
 
 # ============================================================================

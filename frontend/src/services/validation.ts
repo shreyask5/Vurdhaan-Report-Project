@@ -193,59 +193,7 @@ export const validationService = {
    * GET /api/projects/{project_id}/errors (or similar endpoint)
    * With decompression support from index4.html:2095-2224
    */
-  async fetchErrors(projectId: string): Promise<ErrorData> {
-    console.log('[VALIDATION SERVICE] Fetching errors for project:', projectId);
-    const token = await getAuthToken();
-    const url = `${API_BASE_URL}/projects/${projectId}/errors`;
-    console.log('[VALIDATION SERVICE] Request URL:', url);
-    
-    const response = await fetch(url, {
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
-    });
-
-    console.log('[VALIDATION SERVICE] Response status:', response.status);
-    console.log('[VALIDATION SERVICE] Response headers:', {
-      contentType: response.headers.get('content-type'),
-      compression: response.headers.get('x-compression'),
-      contentLength: response.headers.get('content-length')
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('[VALIDATION SERVICE] Error response:', errorText);
-      throw new Error(`Failed to fetch errors: ${response.status} ${errorText}`);
-    }
-
-    // Check response headers to determine if data is compressed
-    const contentType = response.headers.get('content-type');
-    const compressionType = response.headers.get('x-compression');
-
-    let data: ErrorData;
-
-    if (compressionType === 'lzstring' || contentType === 'text/plain') {
-      console.log('[VALIDATION SERVICE] Handling compressed data');
-      // Handle LZ-String compressed data
-      const { decompressLZStringErrorReport } = await import('../utils/compression');
-      const compressedData = await response.text();
-      data = await decompressLZStringErrorReport(compressedData);
-    } else {
-      console.log('[VALIDATION SERVICE] Handling JSON data');
-      // Handle regular JSON
-      data = await response.json();
-    }
-
-    console.log('[VALIDATION SERVICE] Parsed error data:', {
-      hasSummary: !!data.summary,
-      totalErrors: data.summary?.total_errors,
-      hasRowsData: !!data.rows_data,
-      rowsDataKeys: data.rows_data ? Object.keys(data.rows_data).length : 0,
-      categories: data.categories?.length || 0
-    });
-
-    return data;
-  },
+  // REMOVED: fetchErrors() - replaced with pagination-based fetchErrorMetadata() and fetchCategoryPage()
 
   /**
    * Save corrections
