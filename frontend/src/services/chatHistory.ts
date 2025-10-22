@@ -3,7 +3,46 @@
  * Handles API calls for chat history management
  */
 
-import { api } from './api';
+import { auth } from './firebase';
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5002/api';
+
+/**
+ * Get Firebase ID token for authentication
+ */
+async function getAuthToken(): Promise<string> {
+  const user = auth.currentUser;
+  if (!user) {
+    throw new Error('Not authenticated');
+  }
+  return await user.getIdToken();
+}
+
+/**
+ * Make authenticated API request
+ */
+async function apiRequest<T>(
+  endpoint: string,
+  options: RequestInit = {}
+): Promise<T> {
+  const token = await getAuthToken();
+
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+      ...options.headers,
+    },
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Request failed' }));
+    throw new Error(error.error || 'Request failed');
+  }
+
+  return response.json();
+}
 
 export interface ChatMetadata {
   id: string;
@@ -51,15 +90,18 @@ class ChatHistoryService {
     console.log('[CHAT HISTORY] Creating new chat for project:', projectId);
 
     try {
-      const response = await api.post(`/api/projects/${projectId}/chats`, {});
+      const response = await apiRequest<{ success: boolean; chat: any }>(`/projects/${projectId}/chats`, {
+        method: 'POST',
+        body: JSON.stringify({})
+      });
 
-      console.log('[CHAT HISTORY] Chat created:', response.data);
+      console.log('[CHAT HISTORY] Chat created:', response.chat);
 
       return {
-        id: response.data.chat.id,
-        name: response.data.chat.name,
-        created_at: response.data.chat.created_at,
-        updated_at: response.data.chat.created_at,
+        id: response.chat.id,
+        name: response.chat.name,
+        created_at: response.chat.created_at,
+        updated_at: response.chat.created_at,
         message_count: 0,
         last_message_preview: '',
         is_active: true
@@ -77,11 +119,11 @@ class ChatHistoryService {
     console.log('[CHAT HISTORY] Fetching chats for project:', projectId);
 
     try {
-      const response = await api.get(`/api/projects/${projectId}/chats`);
+      const response = await apiRequest<{ success: boolean; chats: any[]; total: number }>(`/projects/${projectId}/chats`);
 
-      console.log('[CHAT HISTORY] Chats retrieved:', response.data.chats.length);
+      console.log('[CHAT HISTORY] Chats retrieved:', response.chats.length);
 
-      return response.data.chats.map((chat: any) => ({
+      return response.chats.map((chat: any) => ({
         id: chat.id,
         name: chat.name,
         created_at: chat.created_at,
@@ -108,17 +150,17 @@ class ChatHistoryService {
     console.log('[CHAT HISTORY] Fetching messages for chat:', chatId);
 
     try {
-      const response = await api.get(
-        `/api/projects/${projectId}/chats/${chatId}?limit=${limit}&offset=${offset}`
+      const response = await apiRequest<ChatHistoryResponse>(
+        `/projects/${projectId}/chats/${chatId}?limit=${limit}&offset=${offset}`
       );
 
-      console.log('[CHAT HISTORY] Messages retrieved:', response.data.messages.length);
+      console.log('[CHAT HISTORY] Messages retrieved:', response.messages.length);
 
       return {
-        success: response.data.success,
-        chat: response.data.chat,
-        messages: response.data.messages,
-        has_more: response.data.has_more
+        success: response.success,
+        chat: response.chat,
+        messages: response.messages,
+        has_more: response.has_more
       };
     } catch (error) {
       console.error('[CHAT HISTORY] Failed to fetch messages:', error);
@@ -137,8 +179,9 @@ class ChatHistoryService {
     console.log('[CHAT HISTORY] Renaming chat:', chatId, 'to:', newName);
 
     try {
-      await api.put(`/api/projects/${projectId}/chats/${chatId}`, {
-        name: newName
+      await apiRequest<{ success: boolean }>(`/projects/${projectId}/chats/${chatId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ name: newName })
       });
 
       console.log('[CHAT HISTORY] Chat renamed successfully');
@@ -155,7 +198,9 @@ class ChatHistoryService {
     console.log('[CHAT HISTORY] Deleting chat:', chatId);
 
     try {
-      await api.delete(`/api/projects/${projectId}/chats/${chatId}`);
+      await apiRequest<{ success: boolean }>(`/projects/${projectId}/chats/${chatId}`, {
+        method: 'DELETE'
+      });
 
       console.log('[CHAT HISTORY] Chat deleted successfully');
     } catch (error) {
@@ -171,7 +216,10 @@ class ChatHistoryService {
     console.log('[CHAT HISTORY] Setting active chat:', chatId);
 
     try {
-      await api.post(`/api/projects/${projectId}/chats/${chatId}/set-active`, {});
+      await apiRequest<{ success: boolean }>(`/projects/${projectId}/chats/${chatId}/set-active`, {
+        method: 'POST',
+        body: JSON.stringify({})
+      });
 
       console.log('[CHAT HISTORY] Active chat set successfully');
     } catch (error) {
