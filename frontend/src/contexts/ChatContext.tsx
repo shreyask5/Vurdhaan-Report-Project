@@ -1,7 +1,8 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
-import { ChatMessage, ChatSession } from '../types/chat';
+import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+import { ChatMessage, ChatSession, ChatMetadata } from '../types/chat';
 import { chatService } from '../services/chat';
 import { projectChatService } from '../services/projectChat';
+import { chatHistoryService } from '../services/chatHistory';
 
 interface ChatContextType {
   sessionId: string | null;
@@ -12,11 +13,23 @@ interface ChatContextType {
   hasUserMessage: boolean;
   databaseInfo?: ChatSession['database_info'];
 
+  // Chat history management
+  chats: ChatMetadata[];
+  currentChatId: string | null;
+  isLoadingChats: boolean;
+
   initializeSession: (cleanFile: File, errorFile: File) => Promise<void>;
   initializeFromProject: (projectId: string) => Promise<void>;
   autoInitialize: (sessionId: string) => Promise<void>;
   sendMessage: (query: string) => Promise<void>;
   reset: () => void;
+
+  // Chat history methods
+  loadProjectChats: (projectId: string) => Promise<void>;
+  createNewChat: () => Promise<void>;
+  switchChat: (chatId: string) => Promise<void>;
+  renameChat: (chatId: string, newName: string) => Promise<void>;
+  deleteChat: (chatId: string) => Promise<void>;
 }
 
 export const ChatContext = createContext<ChatContextType | undefined>(undefined);
@@ -29,6 +42,11 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isLoading, setIsLoading] = useState(false);
   const [hasUserMessage, setHasUserMessage] = useState(false);
   const [databaseInfo, setDatabaseInfo] = useState<ChatSession['database_info']>();
+
+  // Chat history state
+  const [chats, setChats] = useState<ChatMetadata[]>([]);
+  const [currentChatId, setCurrentChatId] = useState<string | null>(null);
+  const [isLoadingChats, setIsLoadingChats] = useState(false);
 
   const initializeSession = async (cleanFile: File, errorFile: File) => {
     setIsLoading(true);
@@ -147,6 +165,142 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setIsInitialized(false);
     setHasUserMessage(false);
     setDatabaseInfo(undefined);
+    setChats([]);
+    setCurrentChatId(null);
+  };
+
+  // Chat history management methods
+  const loadProjectChats = async (pid: string) => {
+    setIsLoadingChats(true);
+    try {
+      const projectChats = await chatHistoryService.getProjectChats(pid);
+      setChats(projectChats);
+
+      // Set active chat as current
+      const activeChat = projectChats.find(c => c.is_active);
+      if (activeChat) {
+        setCurrentChatId(activeChat.id);
+      }
+
+      chatHistoryService.logDebug('Loaded project chats', { count: projectChats.length });
+    } catch (error) {
+      chatHistoryService.logError('Failed to load chats', error);
+    } finally {
+      setIsLoadingChats(false);
+    }
+  };
+
+  const createNewChat = async () => {
+    if (!projectId) return;
+
+    setIsLoading(true);
+    try {
+      const newChat = await chatHistoryService.createChat(projectId);
+
+      // Set as active
+      await chatHistoryService.setActiveChat(projectId, newChat.id);
+
+      // Update chats list
+      setChats(prev => [newChat, ...prev.map(c => ({ ...c, is_active: false }))]);
+      setCurrentChatId(newChat.id);
+
+      // Clear messages for new chat
+      setMessages([]);
+      setHasUserMessage(false);
+
+      chatHistoryService.logDebug('Created new chat', { chatId: newChat.id });
+    } catch (error) {
+      chatHistoryService.logError('Failed to create chat', error);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const switchChat = async (chatId: string) => {
+    if (!projectId || chatId === currentChatId) return;
+
+    setIsLoading(true);
+    try {
+      // Load messages for the chat
+      const chatData = await chatHistoryService.getChatMessages(projectId, chatId, 100, 0);
+
+      // Convert stored messages to ChatMessage format
+      const loadedMessages: ChatMessage[] = chatData.messages.map(msg => ({
+        id: msg.id,
+        role: msg.role,
+        content: msg.content,
+        sql_query: msg.sql_query,
+        table_data: msg.table_data,
+        timestamp: new Date(msg.timestamp),
+        metadata: msg.metadata
+      }));
+
+      setMessages(loadedMessages);
+      setCurrentChatId(chatId);
+      setHasUserMessage(loadedMessages.some(m => m.role === 'user'));
+
+      // Set as active
+      await chatHistoryService.setActiveChat(projectId, chatId);
+
+      // Update chats list to reflect active status
+      setChats(prev => prev.map(c => ({
+        ...c,
+        is_active: c.id === chatId
+      })));
+
+      chatHistoryService.logDebug('Switched to chat', { chatId });
+    } catch (error) {
+      chatHistoryService.logError('Failed to switch chat', error);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const renameChat = async (chatId: string, newName: string) => {
+    if (!projectId) return;
+
+    try {
+      await chatHistoryService.renameChat(projectId, chatId, newName);
+
+      // Update local state
+      setChats(prev => prev.map(c =>
+        c.id === chatId ? { ...c, name: newName } : c
+      ));
+
+      chatHistoryService.logDebug('Renamed chat', { chatId, newName });
+    } catch (error) {
+      chatHistoryService.logError('Failed to rename chat', error);
+      throw error;
+    }
+  };
+
+  const deleteChat = async (chatId: string) => {
+    if (!projectId) return;
+
+    try {
+      await chatHistoryService.deleteChat(projectId, chatId);
+
+      // Remove from local state
+      setChats(prev => prev.filter(c => c.id !== chatId));
+
+      // If deleted chat was current, switch to first available or create new
+      if (chatId === currentChatId) {
+        const remainingChats = chats.filter(c => c.id !== chatId);
+        if (remainingChats.length > 0) {
+          await switchChat(remainingChats[0].id);
+        } else {
+          // No chats left, create a new one
+          await createNewChat();
+        }
+      }
+
+      chatHistoryService.logDebug('Deleted chat', { chatId });
+    } catch (error) {
+      chatHistoryService.logError('Failed to delete chat', error);
+      throw error;
+    }
   };
 
   return (
@@ -158,11 +312,19 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       isLoading,
       hasUserMessage,
       databaseInfo,
+      chats,
+      currentChatId,
+      isLoadingChats,
       initializeSession,
       initializeFromProject,
       autoInitialize,
       sendMessage,
-      reset
+      reset,
+      loadProjectChats,
+      createNewChat,
+      switchChat,
+      renameChat,
+      deleteChat
     }}>
       {children}
     </ChatContext.Provider>

@@ -37,6 +37,7 @@ from services.firebase_service import FirestoreService
 from services.project_service import ProjectService
 from services.storage_service import StorageService
 from services.openai_service import OpenAIService
+from services.chat_service import ChatService
 
 # Existing helpers
 from helpers.clean import validate_and_process_file
@@ -71,6 +72,7 @@ projects = ProjectService()
 storage = StorageService()
 sessions = SessionManager()
 openai_service = OpenAIService()
+chat_service = ChatService()
 executor_workers = int(os.getenv('MONITORING_PLAN_WORKERS', '4'))
 executor = ThreadPoolExecutor(max_workers=executor_workers)
 # Simple in-memory task registry; for multi-instance deployments, replace with Redis.
@@ -1028,7 +1030,29 @@ def chat_init(project_id):
         firestore.set_project_session(project_id, session_id)
         db.close()
 
-        return jsonify({'success': True, 'session_id': session_id, 'database_info': load_result}), 200
+        # Create a new chat if none exists or get active chat
+        chat_id = request.json.get('chat_id') if request.json else None
+        if not chat_id:
+            # Check if there's an active chat
+            active_chat_id = firestore.get_project_active_chat(project_id)
+            if active_chat_id:
+                # Verify it exists
+                active_chat = chat_service.get_chat(active_chat_id)
+                if active_chat:
+                    chat_id = active_chat_id
+
+            # Create new chat if no active chat exists
+            if not chat_id:
+                new_chat = chat_service.create_chat(project_id, g.user['uid'])
+                chat_id = new_chat['id']
+                firestore.set_project_active_chat(project_id, chat_id)
+
+        return jsonify({
+            'success': True,
+            'session_id': session_id,
+            'chat_id': chat_id,
+            'database_info': load_result
+        }), 200
     except Exception as e:
         print("ERROR: Chat init failed:", str(e))
         return jsonify({'error': str(e)}), 500
@@ -1047,6 +1071,13 @@ def chat_query_route(project_id):
 
     query = g.validated_data['query']
     session_id = g.validated_data.get('session_id') or project.get('session_id') or project_id
+    chat_id = g.validated_data.get('chat_id') or firestore.get_project_active_chat(project_id)
+
+    # Create chat if it doesn't exist
+    if not chat_id:
+        new_chat = chat_service.create_chat(project_id, g.user['uid'])
+        chat_id = new_chat['id']
+        firestore.set_project_active_chat(project_id, chat_id)
 
     session = sessions.get_session(session_id)
     if not session:
@@ -1060,18 +1091,261 @@ def chat_query_route(project_id):
         sessions.update_session(session_id, {'message_count': session.get('message_count', 0) + 1})
         db.close()
 
+        # Save user message to Firestore
+        chat_service.save_message(
+            chat_id=chat_id,
+            role='user',
+            content=query
+        )
+
+        # Save assistant response to Firestore
         if result['success']:
+            chat_service.save_message(
+                chat_id=chat_id,
+                role='assistant',
+                content=result['answer'],
+                sql_query=result['metadata'].get('sql_query', ''),
+                table_data=result.get('table_rows', []),
+                metadata={
+                    'tokens_used': result['metadata'].get('tokens', {}).get('total', 0),
+                    'model': result['metadata'].get('model', ''),
+                    'cache_savings_pct': result['metadata'].get('tokens', {}).get('cache_savings_pct', 0),
+                    'function_calls': result['metadata'].get('function_calls', 0)
+                }
+            )
+
             return jsonify({
                 'status': 'success',
                 'response': result['answer'],
                 'sql_query': result['metadata'].get('sql_query'),
-                'table_data': result.get('table_rows', [])
+                'table_data': result.get('table_rows', []),
+                'chat_id': chat_id
             }), 200
         else:
-            return jsonify({'status': 'error', 'response': result['answer']}), 200
+            # Save error response
+            chat_service.save_message(
+                chat_id=chat_id,
+                role='assistant',
+                content=result['answer']
+            )
+            return jsonify({'status': 'error', 'response': result['answer'], 'chat_id': chat_id}), 200
     except Exception as e:
         print("ERROR: Query failed:", str(e))
         return jsonify({'status': 'error', 'error': str(e)}), 500
+
+# ============================================================================
+# CHAT HISTORY MANAGEMENT
+# ============================================================================
+
+@app.route('/api/projects/<project_id>/chats', methods=['POST'])
+@require_auth
+@limit_expensive("20 per hour")
+def create_chat_route(project_id):
+    """Create a new chat session for a project"""
+    if not validate_project_id(project_id):
+        return jsonify({'error': 'Invalid project ID'}), 400
+
+    project = projects.get_project_with_validation(project_id, g.user['uid'])
+    if not project:
+        return jsonify({'error': 'Project not found'}), 404
+
+    if not project.get('ai_chat_enabled'):
+        return jsonify({'error': 'AI chat not enabled for this project'}), 403
+
+    try:
+        # Create new chat
+        chat = chat_service.create_chat(project_id, g.user['uid'])
+
+        # Set as active chat
+        firestore.set_project_active_chat(project_id, chat['id'])
+
+        return jsonify({
+            'success': True,
+            'chat': {
+                'id': chat['id'],
+                'name': chat['name'],
+                'created_at': chat['created_at'].isoformat(),
+                'message_count': 0
+            }
+        }), 201
+    except Exception as e:
+        print(f"[CHAT CREATE ERROR] {str(e)}")
+        return jsonify({'error': 'Failed to create chat'}), 500
+
+@app.route('/api/projects/<project_id>/chats', methods=['GET'])
+@require_auth
+@limit_by_user("60 per minute")
+def list_chats_route(project_id):
+    """Get all chats for a project"""
+    if not validate_project_id(project_id):
+        return jsonify({'error': 'Invalid project ID'}), 400
+
+    project = projects.get_project_with_validation(project_id, g.user['uid'])
+    if not project:
+        return jsonify({'error': 'Project not found'}), 404
+
+    try:
+        chats = chat_service.get_project_chats(project_id, g.user['uid'])
+        active_chat_id = firestore.get_project_active_chat(project_id)
+
+        formatted_chats = []
+        for chat in chats:
+            formatted_chats.append({
+                'id': chat['id'],
+                'name': chat['name'],
+                'created_at': chat['created_at'].isoformat() if isinstance(chat['created_at'], datetime) else chat['created_at'],
+                'updated_at': chat['updated_at'].isoformat() if isinstance(chat['updated_at'], datetime) else chat['updated_at'],
+                'message_count': chat.get('message_count', 0),
+                'last_message_preview': chat.get('last_message_preview', ''),
+                'is_active': chat['id'] == active_chat_id
+            })
+
+        return jsonify({
+            'success': True,
+            'chats': formatted_chats,
+            'total': len(formatted_chats)
+        }), 200
+    except Exception as e:
+        print(f"[CHAT LIST ERROR] {str(e)}")
+        return jsonify({'error': 'Failed to retrieve chats'}), 500
+
+@app.route('/api/projects/<project_id>/chats/<chat_id>', methods=['GET'])
+@require_auth
+@limit_by_user("60 per minute")
+def get_chat_route(project_id, chat_id):
+    """Get chat details including messages"""
+    if not validate_project_id(project_id):
+        return jsonify({'error': 'Invalid project ID'}), 400
+
+    project = projects.get_project_with_validation(project_id, g.user['uid'])
+    if not project:
+        return jsonify({'error': 'Project not found'}), 404
+
+    try:
+        chat = chat_service.get_chat_with_validation(chat_id, g.user['uid'])
+        if not chat or chat['project_id'] != project_id:
+            return jsonify({'error': 'Chat not found'}), 404
+
+        # Get messages (paginated)
+        limit = min(int(request.args.get('limit', 50)), 100)
+        offset = int(request.args.get('offset', 0))
+        messages = chat_service.get_chat_messages(chat_id, limit, offset)
+
+        # Format messages for frontend
+        formatted_messages = []
+        for msg in messages:
+            formatted_messages.append({
+                'id': msg['id'],
+                'role': msg['role'],
+                'content': msg['content'],
+                'sql_query': msg.get('sql_query'),
+                'table_data': msg.get('table_data', []),
+                'metadata': msg.get('metadata', {}),
+                'timestamp': msg['timestamp'].isoformat() if isinstance(msg['timestamp'], datetime) else msg['timestamp']
+            })
+
+        return jsonify({
+            'success': True,
+            'chat': {
+                'id': chat['id'],
+                'name': chat['name'],
+                'message_count': chat.get('message_count', 0)
+            },
+            'messages': formatted_messages,
+            'has_more': len(messages) == limit
+        }), 200
+    except Exception as e:
+        print(f"[CHAT GET ERROR] {str(e)}")
+        return jsonify({'error': 'Failed to retrieve chat'}), 500
+
+@app.route('/api/projects/<project_id>/chats/<chat_id>', methods=['PUT'])
+@require_auth
+@limit_by_user("30 per hour")
+def update_chat_route(project_id, chat_id):
+    """Update chat (rename)"""
+    if not validate_project_id(project_id):
+        return jsonify({'error': 'Invalid project ID'}), 400
+
+    project = projects.get_project_with_validation(project_id, g.user['uid'])
+    if not project:
+        return jsonify({'error': 'Project not found'}), 404
+
+    data = request.get_json()
+    if not data or 'name' not in data:
+        return jsonify({'error': 'Missing chat name'}), 400
+
+    new_name = data['name'].strip()
+    if not new_name or len(new_name) > 100:
+        return jsonify({'error': 'Invalid chat name'}), 400
+
+    try:
+        updated_chat = chat_service.update_chat_name(chat_id, g.user['uid'], new_name)
+        if not updated_chat:
+            return jsonify({'error': 'Chat not found or unauthorized'}), 404
+
+        return jsonify({
+            'success': True,
+            'chat': {
+                'id': updated_chat['id'],
+                'name': updated_chat['name']
+            }
+        }), 200
+    except Exception as e:
+        print(f"[CHAT UPDATE ERROR] {str(e)}")
+        return jsonify({'error': 'Failed to update chat'}), 500
+
+@app.route('/api/projects/<project_id>/chats/<chat_id>', methods=['DELETE'])
+@require_auth
+@limit_by_user("10 per hour")
+def delete_chat_route(project_id, chat_id):
+    """Delete a chat and all its messages"""
+    if not validate_project_id(project_id):
+        return jsonify({'error': 'Invalid project ID'}), 400
+
+    project = projects.get_project_with_validation(project_id, g.user['uid'])
+    if not project:
+        return jsonify({'error': 'Project not found'}), 404
+
+    try:
+        success = chat_service.delete_chat(chat_id, g.user['uid'])
+        if not success:
+            return jsonify({'error': 'Chat not found or unauthorized'}), 404
+
+        # If this was the active chat, clear it
+        active_chat_id = firestore.get_project_active_chat(project_id)
+        if active_chat_id == chat_id:
+            firestore.set_project_active_chat(project_id, '')
+
+        return jsonify({'success': True}), 200
+    except Exception as e:
+        print(f"[CHAT DELETE ERROR] {str(e)}")
+        return jsonify({'error': 'Failed to delete chat'}), 500
+
+@app.route('/api/projects/<project_id>/chats/<chat_id>/set-active', methods=['POST'])
+@require_auth
+@limit_by_user("60 per minute")
+def set_active_chat_route(project_id, chat_id):
+    """Set a chat as the active chat for the project"""
+    if not validate_project_id(project_id):
+        return jsonify({'error': 'Invalid project ID'}), 400
+
+    project = projects.get_project_with_validation(project_id, g.user['uid'])
+    if not project:
+        return jsonify({'error': 'Project not found'}), 404
+
+    try:
+        # Verify chat exists and belongs to user
+        chat = chat_service.get_chat_with_validation(chat_id, g.user['uid'])
+        if not chat or chat['project_id'] != project_id:
+            return jsonify({'error': 'Chat not found'}), 404
+
+        # Set as active
+        firestore.set_project_active_chat(project_id, chat_id)
+
+        return jsonify({'success': True}), 200
+    except Exception as e:
+        print(f"[SET ACTIVE CHAT ERROR] {str(e)}")
+        return jsonify({'error': 'Failed to set active chat'}), 500
 
 # ============================================================================
 # REPORT & DOWNLOAD

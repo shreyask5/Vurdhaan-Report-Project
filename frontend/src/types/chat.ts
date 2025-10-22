@@ -8,6 +8,27 @@ export interface ChatMessage {
   sql_query?: string;
   table_data?: any[];
   timestamp: Date;
+  metadata?: {
+    tokens_used?: number;
+    model?: string;
+    cache_savings_pct?: number;
+    function_calls?: number;
+  };
+}
+
+export interface ChatMetadata {
+  id: string;
+  name: string;
+  project_id?: string;
+  created_at: string;
+  updated_at: string;
+  message_count: number;
+  last_message_preview: string;
+  is_active?: boolean;
+}
+
+export interface StoredChatMessage extends ChatMessage {
+  chat_id: string;
 }
 
 export interface ChatSession {

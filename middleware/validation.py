@@ -111,6 +111,10 @@ class ChatQuerySchema(BaseModel):
         None,
         description="Chat session ID (optional for continuation)"
     )
+    chat_id: Optional[str] = Field(
+        None,
+        description="Chat history ID (optional)"
+    )
 
     @validator('query')
     def query_not_empty(cls, v):

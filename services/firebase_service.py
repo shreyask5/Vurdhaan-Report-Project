@@ -427,3 +427,37 @@ class FirestoreService:
         batch.commit()
         print(f"🗑️ Batch deleted {len(project_ids)} projects")
         return len(project_ids)
+
+    # ========================================================================
+    # Chat-Related Helper Methods
+    # ========================================================================
+
+    def get_project_active_chat(self, project_id: str) -> Optional[str]:
+        """
+        Get the active chat ID for a project (stored in project document)
+
+        Args:
+            project_id: Project ID
+
+        Returns:
+            Active chat ID or None
+        """
+        project = self.get_project(project_id)
+        return project.get('active_chat_id') if project else None
+
+    def set_project_active_chat(self, project_id: str, chat_id: str) -> bool:
+        """
+        Set the active chat ID for a project
+
+        Args:
+            project_id: Project ID
+            chat_id: Chat ID to set as active
+
+        Returns:
+            True if updated successfully
+        """
+        try:
+            self.update_project(project_id, {'active_chat_id': chat_id})
+            return True
+        except Exception:
+            return False

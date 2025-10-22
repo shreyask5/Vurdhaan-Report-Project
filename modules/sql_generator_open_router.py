@@ -292,6 +292,10 @@ class OpenRouterFlightDataAgent:
         # Message history for conversation
         self.messages = []
 
+        # Track SQL execution for response structure
+        self.last_sql_query = None
+        self.last_sql_rows = []
+
         # Build cached system message once
         self.system_message = None
         self._initialize_system_message()
@@ -345,6 +349,13 @@ IMPORTANT GUIDELINES:
 - Identify patterns, trends, and anomalies
 - Use professional aviation terminology
 - Provide operational insights when relevant
+
+IMPORTANT - TOKEN OPTIMIZATION:
+- When you use run_sql, the table data will be automatically sent to the frontend
+- DO NOT include the raw table data in your text response
+- Instead, provide analysis, insights, and summaries with specific metrics
+- Reference key findings from the data without printing entire rows
+- The frontend will display the table separately from your analysis
 
 RESPONSE FORMAT:
 - Start with a concise summary of key findings
@@ -400,6 +411,13 @@ IMPORTANT GUIDELINES:
 - Use professional aviation terminology
 - Provide operational insights when relevant
 
+IMPORTANT - TOKEN OPTIMIZATION:
+- When you use run_sql, the table data will be automatically sent to the frontend
+- DO NOT include the raw table data in your text response
+- Instead, provide analysis, insights, and summaries with specific metrics
+- Reference key findings from the data without printing entire rows
+- The frontend will display the table separately from your analysis
+
 RESPONSE FORMAT:
 - Start with a concise summary of key findings
 - Provide detailed analysis with specific metrics
@@ -429,6 +447,9 @@ RESPONSE FORMAT:
         try:
             logger.info(f"[Tool:run_sql] Executing: {sql[:200]}...")
 
+            # Store query for response metadata
+            self.last_sql_query = sql
+
             data, error = self.db_manager.execute_query(sql)
 
             if error:
@@ -438,9 +459,12 @@ RESPONSE FORMAT:
                     "rows": []
                 }
 
+            # Store full results for response (frontend needs this)
+            self.last_sql_rows = data
+
             return {
                 "success": True,
-                "rows": data[:100],  # Limit to 100 rows
+                "rows": data[:100],  # Limit to 100 rows for LLM context
                 "total_rows": len(data),
                 "truncated": len(data) > 100
             }
@@ -731,6 +755,10 @@ RESPONSE FORMAT:
         logger.info(f"[Query] Processing for session: {session_id}")
         logger.info(f"[Query] Question: {question}")
 
+        # Reset SQL tracking for new query
+        self.last_sql_query = None
+        self.last_sql_rows = []
+
         try:
             # Add user message
             self.messages.append({
@@ -830,6 +858,8 @@ RESPONSE FORMAT:
                 "model": self.model,
                 "function_calls": iteration,
                 "original_question": question,
+                "sql_query": self.last_sql_query or "",
+                "row_count": len(self.last_sql_rows),
                 "tokens": {
                     "prompt": usage.prompt_tokens,
                     "completion": usage.completion_tokens,
@@ -851,7 +881,8 @@ RESPONSE FORMAT:
             return {
                 "success": True,
                 "answer": final_answer,
-                "metadata": metadata
+                "metadata": metadata,
+                "table_rows": self.last_sql_rows
             }
 
         except Exception as e:
@@ -867,8 +898,11 @@ RESPONSE FORMAT:
                     "session_id": session_id,
                     "database": self.db_manager.db_name,
                     "model": self.model,
-                    "original_question": question
-                }
+                    "original_question": question,
+                    "sql_query": "",
+                    "row_count": 0
+                },
+                "table_rows": []
             }
 
     def get_conversation_summary(self) -> str:
