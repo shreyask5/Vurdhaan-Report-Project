@@ -359,9 +359,10 @@ export const chatApi = {
   /**
    * Initialize chat session for project
    */
-  async initialize(projectId: string): Promise<{ success: boolean; session_id: string }> {
+  async initialize(projectId: string): Promise<{ success: boolean; session_id: string; chat_id?: string }> {
     return apiRequest(`/projects/${projectId}/chat/initialize`, {
       method: 'POST',
+      body: JSON.stringify({}),
     });
   },
 

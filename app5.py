@@ -1031,7 +1031,12 @@ def chat_init(project_id):
         db.close()
 
         # Create a new chat if none exists or get active chat
-        chat_id = request.json.get('chat_id') if request.json else None
+        try:
+            request_data = request.get_json(silent=True) or {}
+            chat_id = request_data.get('chat_id')
+        except Exception:
+            chat_id = None
+
         if not chat_id:
             # Check if there's an active chat
             active_chat_id = firestore.get_project_active_chat(project_id)
