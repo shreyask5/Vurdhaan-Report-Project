@@ -14,6 +14,7 @@ const ProjectUpload: React.FC = () => {
   const navigate = useNavigate();
   const [uploadStatus, setUploadStatus] = useState<any>(null);
   const [isCheckingStatus, setIsCheckingStatus] = useState(true);
+  const [monitoringPlanEnabled, setMonitoringPlanEnabled] = useState(true);
   const {
     currentStep,
     airlineSize,
@@ -53,6 +54,17 @@ const ProjectUpload: React.FC = () => {
           setSchemeLocal(project.scheme as SchemeType);
         }
 
+        // Set monitoring plan enabled state
+        const mpEnabled = project.monitoring_plan_enabled !== false; // Default to true if not specified
+        setMonitoringPlanEnabled(mpEnabled);
+        console.log('[PROJECT UPLOAD DEBUG] Monitoring plan enabled:', mpEnabled);
+
+        // Auto-skip monitoring plan step if disabled
+        if (!mpEnabled && currentStep === 'monitoring_plan') {
+          console.log('[PROJECT UPLOAD DEBUG] Monitoring plan disabled, auto-skipping to parameters');
+          goToStep('parameters');
+        }
+
         const status = await projectsApi.getUploadStatus(projectId);
         console.log('[PROJECT UPLOAD DEBUG] Upload status received:', status);
         setUploadStatus(status);
@@ -72,7 +84,7 @@ const ProjectUpload: React.FC = () => {
     };
 
     checkStatus();
-  }, [projectId, navigate]);
+  }, [projectId, navigate, currentStep, goToStep]);
 
 
 
@@ -188,8 +200,14 @@ const ProjectUpload: React.FC = () => {
         {/* Progress Indicator */}
         <div className="mb-8 bg-white rounded-xl p-6 shadow-card">
           <div className="flex items-center justify-between">
-            {['Monitoring Plan', 'Parameters', 'Flight Data', 'Column Mapping'].map((step, index) => {
-              const stepKeys = ['monitoring_plan', 'parameters', 'upload', 'mapping'];
+            {(monitoringPlanEnabled
+              ? ['Monitoring Plan', 'Parameters', 'Flight Data', 'Column Mapping']
+              : ['Parameters', 'Flight Data', 'Column Mapping']
+            ).map((step, index) => {
+              const stepKeys = monitoringPlanEnabled
+                ? ['monitoring_plan', 'parameters', 'upload', 'mapping']
+                : ['parameters', 'upload', 'mapping'];
+              const totalSteps = stepKeys.length;
               const currentIndex = stepKeys.indexOf(currentStep);
               const isActive = index === currentIndex;
               const isCompleted = index < currentIndex;
@@ -216,7 +234,7 @@ const ProjectUpload: React.FC = () => {
                       {step}
                     </span>
                   </div>
-                  {index < 3 && (
+                  {index < totalSteps - 1 && (
                     <div
                       className={`flex-1 h-1 mx-4 rounded ${
                         isCompleted ? 'bg-success' : 'bg-gray-200'
@@ -247,7 +265,7 @@ const ProjectUpload: React.FC = () => {
 
 
 
-          {currentStep === 'monitoring_plan' && (
+          {currentStep === 'monitoring_plan' && monitoringPlanEnabled && (
             <div className="bg-white rounded-2xl p-8 shadow-card">
                <MonitoringPlanUpload
                  projectId={projectId!}
@@ -366,10 +384,10 @@ const ProjectUpload: React.FC = () => {
               {/* Navigation Buttons */}
               <div className="flex justify-between pt-6 border-t border-gray-200">
                 <button
-                  onClick={() => goToStep('monitoring_plan')}
+                  onClick={() => monitoringPlanEnabled ? goToStep('monitoring_plan') : navigate('/dashboard')}
                   className="px-6 py-2 border-2 border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition"
                 >
-                  ← Back to Monitoring Plan
+                  ← {monitoringPlanEnabled ? 'Back to Monitoring Plan' : 'Back to Dashboard'}
                 </button>
                 <button
                   onClick={() => goToStep('upload')}
