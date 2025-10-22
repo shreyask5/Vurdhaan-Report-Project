@@ -23,7 +23,7 @@ class Config:
     GEMINI_API_KEY_1 = os.getenv('GEMINI_API_KEY_1')
     GEMINI_API_KEY_2 = os.getenv('GEMINI_API_KEY_2')
     GEMINI_API_KEY_3 = os.getenv('GEMINI_API_KEY_3')
-    GEMINI_MODEL = os.getenv('GEMINI_MODEL', 'gemini-2.5-pro')
+    GEMINI_MODEL = os.getenv('GEMINI_MODEL', 'gemini-2.5-flash')
     GEMINI_TEMPERATURE = float(os.getenv('GEMINI_TEMPERATURE', '0.1'))
     GEMINI_MAX_OUTPUT_TOKENS = int(os.getenv('GEMINI_MAX_OUTPUT_TOKENS', '8192'))
     
