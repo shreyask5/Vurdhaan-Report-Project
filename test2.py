@@ -27,7 +27,7 @@ from datetime import datetime
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from modules.database import PostgreSQLManager
-from modules.sql_generator_gemini import create_gemini_sql_agent
+from modules.sql_generator_open_router import create_open_router_sql_agent
 from config import Config
 
 # Setup logging
@@ -132,7 +132,7 @@ class GeminiChatCLI:
             print(f"[*] Initializing Gemini SQL Agent...")
 
             # Create agent with GEMINI_API_KEY_1
-            self.agent = create_gemini_sql_agent(
+            self.agent = create_open_router_sql_agent(
                 db_manager=self.db_manager,
                 session_id=self.session_id,
                 max_attempts=3,

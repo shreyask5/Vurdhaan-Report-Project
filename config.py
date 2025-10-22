@@ -23,9 +23,22 @@ class Config:
     GEMINI_API_KEY_1 = os.getenv('GEMINI_API_KEY_1')
     GEMINI_API_KEY_2 = os.getenv('GEMINI_API_KEY_2')
     GEMINI_API_KEY_3 = os.getenv('GEMINI_API_KEY_3')
-    GEMINI_MODEL = os.getenv('GEMINI_MODEL', 'gemini-2.5-flash')
+    GEMINI_MODEL = os.getenv('GEMINI_MODEL', 'gemini-2.5-pro')
     GEMINI_TEMPERATURE = float(os.getenv('GEMINI_TEMPERATURE', '0.1'))
     GEMINI_MAX_OUTPUT_TOKENS = int(os.getenv('GEMINI_MAX_OUTPUT_TOKENS', '8192'))
+
+    # OpenRouter API Configuration
+    OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY')
+    OPENROUTER_MODEL = os.getenv('OPENROUTER_MODEL', 'google/gemini-2.0-flash-exp:free')
+    OPENROUTER_TEMPERATURE = float(os.getenv('OPENROUTER_TEMPERATURE', '0.1'))
+    OPENROUTER_MAX_TOKENS = int(os.getenv('OPENROUTER_MAX_TOKENS', '8192'))
+
+    # OpenRouter metadata (optional, for tracking and rankings)
+    OPENROUTER_SITE_URL = os.getenv('OPENROUTER_SITE_URL', 'http://localhost:5002')
+    OPENROUTER_APP_NAME = os.getenv('OPENROUTER_APP_NAME', 'Vurdhaan Flight Analyzer')
+
+    # OpenRouter caching configuration
+    OPENROUTER_ENABLE_CACHING = os.getenv('OPENROUTER_ENABLE_CACHING', 'true').lower() == 'true'
     
     # Database settings - Updated for local DuckDB
     DATABASE_DIR = os.getenv('DATABASE_DIR', '/var/lib/duckdb/sessions')
