@@ -137,6 +137,13 @@ class Config:
     SEQUENCE_ERRORS_PER_PAGE = int(os.getenv('SEQUENCE_ERRORS_PER_PAGE', '100'))
 
     # ========================================================================
+    # MONITORING PLAN CONFIGURATION
+    # ========================================================================
+
+    # Enable/disable monitoring plan functionality
+    ENABLE_MONITORING_PLAN = os.getenv('ENABLE_MONITORING_PLAN', 'true').lower() == 'true'
+
+    # ========================================================================
     # DIRECTORY CREATION (EXISTING)
     # ========================================================================
     
@@ -242,6 +249,9 @@ class Config:
         print(f"   Enabled: {cls.RATELIMIT_ENABLED}")
         print(f"   Default Limits: {cls.RATELIMIT_DEFAULT_LIMITS}")
         print(f"   Storage URI: {cls.RATELIMIT_STORAGE_URI}")
+        
+        print(f"\n📋 MONITORING PLAN:")
+        print(f"   Enabled: {cls.ENABLE_MONITORING_PLAN}")
         
         print("=" * 60)
 

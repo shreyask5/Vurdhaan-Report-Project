@@ -88,6 +88,7 @@ print("[*] Secure API Backend (app5.py) - Ready")
 print(f"[*] PostgreSQL Cleanup Service - Enabled: {cleanup_service.enabled}")
 print(f"[*] Cleanup Interval: {cleanup_service.cleanup_interval_seconds / 60} minutes")
 print(f"[*] Inactivity Timeout: {cleanup_service.inactive_minutes} minutes")
+print(f"[*] Monitoring Plan: {'Enabled' if Config.ENABLE_MONITORING_PLAN else 'Disabled'}")
 
 # ============================================================================
 # SECURITY HEADERS
@@ -392,6 +393,10 @@ def update_scheme_route(project_id):
 @validate_monitoring_plan_file('file', max_size_mb=50)
 def upload_monitoring_plan_route(project_id):
     """Upload and asynchronously process monitoring plan file"""
+    # Check if monitoring plan is enabled
+    if not Config.ENABLE_MONITORING_PLAN:
+        return jsonify({'error': 'Monitoring plan functionality is disabled'}), 403
+    
     if not validate_project_id(project_id):
         return jsonify({'error': 'Invalid project ID'}), 400
 
@@ -485,6 +490,10 @@ def upload_monitoring_plan_route(project_id):
 @limit_by_user("60 per minute")
 def monitoring_plan_status_route(project_id):
     """Check async extraction status. Optionally pass task_id as query."""
+    # Check if monitoring plan is enabled
+    if not Config.ENABLE_MONITORING_PLAN:
+        return jsonify({'error': 'Monitoring plan functionality is disabled'}), 403
+    
     if not validate_project_id(project_id):
         return jsonify({'error': 'Invalid project ID'}), 400
     task_id = request.args.get('task_id')
@@ -516,6 +525,10 @@ def monitoring_plan_status_route(project_id):
 @limit_by_user("30 per hour")
 def put_monitoring_plan_route(project_id):
     """Save user-edited monitoring plan data to Firestore."""
+    # Check if monitoring plan is enabled
+    if not Config.ENABLE_MONITORING_PLAN:
+        return jsonify({'error': 'Monitoring plan functionality is disabled'}), 403
+    
     if not validate_project_id(project_id):
         return jsonify({'error': 'Invalid project ID'}), 400
     payload = request.get_json(silent=True) or {}
