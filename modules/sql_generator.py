@@ -529,7 +529,7 @@ class FlightDataPostgreSQLAgent:
 
 
 
-        """MAKE SURE TO UPDATE THIS CODE FOR ALL THE FUEL TYPES""""
+        """MAKE SURE TO UPDATE THIS CODE FOR ALL THE FUEL TYPES"""
         # Escape curly braces in schema for prompt template
         safe_schema = schema.replace('{', '{{').replace('}', '}}')
         system_prompt = (
