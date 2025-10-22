@@ -52,6 +52,12 @@ export const ColumnMappingWizard: React.FC<ColumnMappingWizardProps> = ({
 
   const handlePrevious = () => {
     if (currentStep > 0) {
+      // Unmap the current column before going back
+      const previousRequiredColumn = requiredColumns[currentStep];
+      const newMapping = { ...mapping };
+      delete newMapping[previousRequiredColumn];
+      setMapping(newMapping);
+
       setCurrentStep(currentStep - 1);
     } else if (onBack) {
       // First step and onBack is provided - go back to previous page
@@ -66,7 +72,15 @@ export const ColumnMappingWizard: React.FC<ColumnMappingWizardProps> = ({
   };
 
   const handleFinalSubmit = async () => {
-    if (!canComplete) return;
+    if (!canComplete) {
+      console.log('Cannot complete - missing mappings:', {
+        totalSteps,
+        mappedCount: Object.keys(mapping).length,
+        mapping,
+        requiredColumns
+      });
+      return;
+    }
 
     // Complete the mapping first
     onComplete(mapping);
@@ -77,7 +91,8 @@ export const ColumnMappingWizard: React.FC<ColumnMappingWizardProps> = ({
     }
   };
 
-  const canComplete = Object.keys(mapping).length === totalSteps;
+  // Check if all required columns are mapped
+  const canComplete = requiredColumns.every(col => mapping[col] !== undefined && mapping[col] !== null && mapping[col] !== '');
   const isOnFirstStep = currentStep === 0;
   const isOnLastStep = currentStep === totalSteps - 1;
 

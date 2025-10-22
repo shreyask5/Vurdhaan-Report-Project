@@ -154,12 +154,43 @@ class PostgreSQLCleanupService:
 
                     # Read marker file
                     with open(marker_path, 'r') as f:
-                        marker_data = json.load(f)
+                        content = f.read()
+
+                    # Try to parse as JSON
+                    try:
+                        marker_data = json.loads(content)
+                    except json.JSONDecodeError:
+                        # Old format marker file (plain text) - treat as very old and clean up
+                        logger.info(f"[Cleanup Service] Found old-format marker file: {marker_file}, cleaning up...")
+
+                        # Extract session_id and db_name from filename
+                        session_id = marker_file[:-3]  # Remove .db extension
+                        db_name = f"session_{session_id.lower().replace('-', '_')}"
+
+                        # Drop the database
+                        if self._drop_database(db_name):
+                            os.remove(marker_path)
+                            cleanup_count += 1
+                            self.stats['databases_cleaned'] += 1
+                            self.stats['markers_cleaned'] += 1
+                            logger.info(f"[Cleanup Service] Cleaned up old-format session: {session_id}")
+                        continue
 
                     # Parse last accessed time
                     last_accessed_str = marker_data.get('last_accessed')
                     if not last_accessed_str:
-                        logger.warning(f"[Cleanup Service] No last_accessed in marker: {marker_file}")
+                        logger.warning(f"[Cleanup Service] No last_accessed in marker: {marker_file}, treating as old...")
+                        # Treat as old and clean up
+                        db_name = marker_data.get('database_name')
+                        session_id = marker_data.get('session_id')
+
+                        if db_name:
+                            if self._drop_database(db_name):
+                                os.remove(marker_path)
+                                cleanup_count += 1
+                                self.stats['databases_cleaned'] += 1
+                                self.stats['markers_cleaned'] += 1
+                                logger.info(f"[Cleanup Service] Cleaned up marker without timestamp: {session_id}")
                         continue
 
                     last_accessed = datetime.fromisoformat(last_accessed_str)
@@ -272,9 +303,16 @@ class PostgreSQLCleanupService:
 
             # Read marker file
             with open(marker_path, 'r') as f:
-                marker_data = json.load(f)
+                content = f.read()
 
-            db_name = marker_data.get('database_name')
+            # Try to parse as JSON
+            try:
+                marker_data = json.loads(content)
+                db_name = marker_data.get('database_name')
+            except json.JSONDecodeError:
+                # Old format - derive db_name from session_id
+                logger.info(f"[Cleanup Service] Old-format marker for force cleanup: {session_id}")
+                db_name = f"session_{session_id.lower().replace('-', '_')}"
 
             # Drop database
             if self._drop_database(db_name):
@@ -320,7 +358,15 @@ class PostgreSQLCleanupService:
                     marker_path = os.path.join(self.sessions_dir, marker_file)
 
                     with open(marker_path, 'r') as f:
-                        marker_data = json.load(f)
+                        content = f.read()
+
+                    # Try to parse as JSON
+                    try:
+                        marker_data = json.loads(content)
+                    except json.JSONDecodeError:
+                        # Old format - skip in listing
+                        logger.debug(f"[Cleanup Service] Skipping old-format marker in listing: {marker_file}")
+                        continue
 
                     last_accessed_str = marker_data.get('last_accessed')
                     if last_accessed_str:
