@@ -4,6 +4,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ChatMessage as ChatMessageType, SUGGESTED_QUESTIONS } from '../../types/chat';
 import { ChatMessage } from './ChatMessage';
+import { useChat } from '../../contexts/ChatContext';
 
 interface ChatInterfaceProps {
   sessionId: string | null;
@@ -30,6 +31,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   onInitialize,
   databaseInfo
 }) => {
+  const { chats, currentChatId, createNewChat } = useChat();
   const [inputValue, setInputValue] = useState('');
   const [cleanFile, setCleanFile] = useState<File | null>(null);
   const [errorFile, setErrorFile] = useState<File | null>(null);
@@ -68,8 +70,43 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
   };
 
+  // Get current chat name
+  const currentChat = chats.find(c => c.id === currentChatId);
+  const chatName = currentChat?.name || 'New Chat';
+
   return (
     <div className="chat-interface">
+      {/* Chat Header */}
+      {isInitialized && (
+        <div className="chat-header">
+          <div className="chat-header-info">
+            <div className="chat-header-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+              </svg>
+            </div>
+            <div className="chat-header-text">
+              <h2 className="chat-header-title">{chatName}</h2>
+              <p className="chat-header-subtitle">
+                {messages.length} message{messages.length !== 1 ? 's' : ''}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={createNewChat}
+            className="new-chat-header-button"
+            disabled={isLoading}
+            title="Start new chat"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
+              <line x1="12" y1="5" x2="12" y2="19"/>
+              <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            New Chat
+          </button>
+        </div>
+      )}
+
       {/* Messages Area */}
       <div className="chat-messages" id="chatMessages">
         {!isInitialized && onInitialize ? (
@@ -231,6 +268,76 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
           flex-direction: column;
           height: 100%;
           background: #f8fafc;
+        }
+
+        .chat-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 1rem 2rem;
+          background: white;
+          border-bottom: 1px solid #e2e8f0;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        }
+
+        .chat-header-info {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+        }
+
+        .chat-header-icon {
+          width: 40px;
+          height: 40px;
+          background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: white;
+        }
+
+        .chat-header-text {
+          display: flex;
+          flex-direction: column;
+        }
+
+        .chat-header-title {
+          font-size: 1.125rem;
+          font-weight: 700;
+          color: #1e293b;
+          margin: 0;
+        }
+
+        .chat-header-subtitle {
+          font-size: 0.75rem;
+          color: #94a3b8;
+          margin: 0.125rem 0 0 0;
+        }
+
+        .new-chat-header-button {
+          padding: 0.625rem 1.25rem;
+          background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+          color: white;
+          border: none;
+          border-radius: 0.5rem;
+          font-weight: 600;
+          font-size: 0.875rem;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+        }
+
+        .new-chat-header-button:hover:not(:disabled) {
+          box-shadow: 0 6px 12px -2px rgba(99, 102, 241, 0.3);
+          transform: translateY(-1px);
+        }
+
+        .new-chat-header-button:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
         }
 
         .chat-messages {
