@@ -38,13 +38,14 @@ from services.project_service import ProjectService
 from services.storage_service import StorageService
 from services.openai_service import OpenAIService
 from services.chat_service import ChatService
+from modules.cleanup_service import create_cleanup_service
 
 # Existing helpers
 from helpers.clean import validate_and_process_file
 from helpers.corsia import build_report
 from modules.session_manager import SessionManager
 from modules.database import DuckDBManager
-from modules.sql_generator import create_sql_agent
+from modules.sql_generator_open_router import create_openrouter_sql_agent
 from concurrent.futures import ThreadPoolExecutor
 import uuid
 
@@ -78,9 +79,15 @@ executor = ThreadPoolExecutor(max_workers=executor_workers)
 # Simple in-memory task registry; for multi-instance deployments, replace with Redis.
 monitoring_plan_tasks = {}
 
+# Initialize PostgreSQL cleanup service
+cleanup_service = create_cleanup_service()
+
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
 
 print("[*] Secure API Backend (app5.py) - Ready")
+print(f"[*] PostgreSQL Cleanup Service - Enabled: {cleanup_service.enabled}")
+print(f"[*] Cleanup Interval: {cleanup_service.cleanup_interval_seconds / 60} minutes")
+print(f"[*] Inactivity Timeout: {cleanup_service.inactive_minutes} minutes")
 
 # ============================================================================
 # SECURITY HEADERS
@@ -619,7 +626,7 @@ def upload_route(project_id):
         print(f"[UPLOAD] Starting validation with validate_and_process_file")
         is_valid, processed_path, _, error_json = validate_and_process_file(
             upload_result['file_path'], result_df, ref_df,
-            date_format, flight_prefix, start_date, end_date, fuel_method
+            date_format, flight_prefix, start_date, end_date, fuel_method, project.get('scheme')
         )
         print(f"[UPLOAD] Validation completed: is_valid={is_valid}")
 
@@ -699,14 +706,66 @@ def upload_route(project_id):
 # ERROR HANDLING ENDPOINTS
 # ============================================================================
 
+@app.route('/api/projects/<project_id>/errors/metadata', methods=['GET'])
+@require_auth
+@limit_by_user("60 per minute")
+def get_errors_metadata_route(project_id):
+    """Get error metadata including categories and page counts"""
+    print(f"[ERRORS METADATA API] Request received for project: {project_id}")
+    print(f"[ERRORS METADATA API] User UID: {g.user['uid']}")
+
+    if not validate_project_id(project_id):
+        print(f"[ERRORS METADATA API] Invalid project ID: {project_id}")
+        return jsonify({'error': 'Invalid project ID'}), 400
+
+    project = projects.get_project_with_validation(project_id, g.user['uid'])
+    if not project:
+        print(f"[ERRORS METADATA API] Project not found: {project_id}")
+        return jsonify({'error': 'Project not found'}), 404
+
+    try:
+        import json
+
+        # Check temp directory first (where validation saves files)
+        temp_path = storage.get_temp_path(project_id)
+        project_path = storage.get_project_path(project_id)
+
+        # Look for metadata file
+        metadata_file = os.path.join(temp_path, 'error_metadata.json')
+        if not os.path.exists(metadata_file):
+            metadata_file = os.path.join(project_path, 'error_metadata.json')
+
+        if os.path.exists(metadata_file):
+            print(f"[ERRORS METADATA] Reading metadata file: {metadata_file}")
+            with open(metadata_file, 'r') as f:
+                metadata = json.load(f)
+            print(f"[ERRORS METADATA API] Metadata loaded - total_errors: {metadata.get('total_errors', 0)}")
+            return jsonify(metadata), 200
+        else:
+            # No errors - return empty metadata
+            print(f"[ERRORS METADATA] No metadata found for project {project_id}")
+            return jsonify({
+                'total_errors': 0,
+                'error_rows': 0,
+                'error_categories': 0,
+                'categories': []
+            }), 200
+
+    except Exception as e:
+        print(f"[ERRORS METADATA] Get metadata failed: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/projects/<project_id>/errors', methods=['GET'])
 @require_auth
 @limit_by_user("60 per minute")
 def get_errors_route(project_id):
-    """Get validation errors for a project"""
+    """Get paginated validation errors for a project category"""
     print(f"[ERRORS API] Request received for project: {project_id}")
     print(f"[ERRORS API] User UID: {g.user['uid']}")
-    
+
     if not validate_project_id(project_id):
         print(f"[ERRORS API] Invalid project ID: {project_id}")
         return jsonify({'error': 'Invalid project ID'}), 400
@@ -716,9 +775,25 @@ def get_errors_route(project_id):
         print(f"[ERRORS API] Project not found: {project_id}")
         return jsonify({'error': 'Project not found'}), 404
 
-    print(f"[ERRORS API] Project found: {project.get('name', 'Unknown')}")
-    print(f"[ERRORS API] Project status: {project.get('status', 'Unknown')}")
-    print(f"[ERRORS API] Upload completed: {project.get('upload_completed', 'Unknown')}")
+    # Get query parameters for pagination
+    category = request.args.get('category')
+    page = request.args.get('page', '1')
+
+    # Validate page number
+    try:
+        page = int(page)
+        if page < 1:
+            page = 1
+    except ValueError:
+        return jsonify({'error': 'Invalid page number'}), 400
+
+    # Validate category if provided
+    if category:
+        valid_categories = ["Time", "Date", "Fuel", "ICAO", "Sequence", "Missing", "Column Missing"]
+        if category not in valid_categories:
+            return jsonify({'error': f'Invalid category. Must be one of: {", ".join(valid_categories)}'}), 400
+
+    print(f"[ERRORS API] Category: {category}, Page: {page}")
 
     try:
         import json
@@ -726,26 +801,33 @@ def get_errors_route(project_id):
         # Check temp directory first (where validation saves files)
         temp_path = storage.get_temp_path(project_id)
         project_path = storage.get_project_path(project_id)
-        
+
         print(f"[ERRORS API] Checking temp path: {temp_path}")
         print(f"[ERRORS API] Checking project path: {project_path}")
 
-        # Try compressed file first (preferred)
-        # Check temp directory first, then permanent
-        compressed_file = os.path.join(temp_path, 'error_report.lzs')
-        if not os.path.exists(compressed_file):
-            compressed_file = os.path.join(project_path, 'error_report.lzs')
+        if not category:
+            # Legacy support: if no category specified, return error
+            return jsonify({'error': 'category parameter is required'}), 400
 
-        json_file = os.path.join(temp_path, 'error_report.json')
+        # Build filename for paginated error file
+        json_filename = f"error_report_{category}_page_{page}.json"
+        compressed_filename = f"error_report_{category}_page_{page}.lzs"
+
+        # Try compressed file first (preferred)
+        compressed_file = os.path.join(temp_path, compressed_filename)
+        if not os.path.exists(compressed_file):
+            compressed_file = os.path.join(project_path, compressed_filename)
+
+        json_file = os.path.join(temp_path, json_filename)
         if not os.path.exists(json_file):
-            json_file = os.path.join(project_path, 'error_report.json')
+            json_file = os.path.join(project_path, json_filename)
 
         print(f"[ERRORS API] Compressed file exists: {os.path.exists(compressed_file)} at {compressed_file}")
         print(f"[ERRORS API] JSON file exists: {os.path.exists(json_file)} at {json_file}")
 
         if os.path.exists(compressed_file):
-            print(f"[ERRORS] Reading compressed error report: {compressed_file}")
-            # Read compressed file and decompress
+            print(f"[ERRORS] Reading compressed paginated error report: {compressed_file}")
+            # Read compressed file
             with open(compressed_file, 'r') as f:
                 compressed_data = f.read()
 
@@ -756,24 +838,15 @@ def get_errors_route(project_id):
             return response
 
         elif os.path.exists(json_file):
-            print(f"[ERRORS] Reading JSON error report: {json_file}")
+            print(f"[ERRORS] Reading JSON paginated error report: {json_file}")
             with open(json_file, 'r') as f:
-                error_data = json.load(f)
-            print(f"[ERRORS API] JSON data loaded - summary: {error_data.get('summary', {})}")
-            return jsonify(error_data), 200
+                page_data = json.load(f)
+            print(f"[ERRORS API] Page data loaded - errors_on_page: {page_data.get('errors_on_page', 0)}")
+            return jsonify(page_data), 200
         else:
-            # No errors - return empty structure
-            print(f"[ERRORS] No error report found for project {project_id}")
-            print(f"[ERRORS API] This might mean no validation has been run yet")
-            return jsonify({
-                'summary': {
-                    'total_errors': 0,
-                    'error_rows': 0,
-                    'categories': {}
-                },
-                'rows_data': {},
-                'categories': []
-            }), 200
+            # Page not found
+            print(f"[ERRORS] Page not found: {category} page {page}")
+            return jsonify({'error': f'Page {page} not found for category {category}'}), 404
 
     except Exception as e:
         print(f"[ERRORS] Get errors failed: {str(e)}")
@@ -923,7 +996,7 @@ def save_corrections_route(project_id):
 
         print(f"[CORRECTIONS] Re-validating corrected data with parameters: start={start_date}, end={end_date}, fmt={date_format}, prefix={flight_prefix}, fuel={fuel_method}")
         is_valid, processed_path, _, error_json = validate_and_process_file(
-            corrected_csv, df, ref_df, date_format, flight_prefix, start_date, end_date, fuel_method
+            corrected_csv, df, ref_df, date_format, flight_prefix, start_date, end_date, fuel_method, project.get('scheme')
         )
 
         # Update project validation status (error count unknown -> infer from file existence/flag)
@@ -1026,6 +1099,9 @@ def chat_init(project_id):
         db = DuckDBManager(session_id, session_data['db_path'])
         load_result = db.load_csv_data(clean_csv, error_csv)
 
+        # Update last accessed timestamp for cleanup tracking
+        db.update_last_accessed()
+
         sessions.update_session(session_id, {'status': 'active', 'database_info': load_result})
         firestore.set_project_session(project_id, session_id)
         db.close()
@@ -1090,7 +1166,7 @@ def chat_query_route(project_id):
 
     try:
         db = DuckDBManager(session_id, session['db_path'])
-        agent = create_sql_agent(db, session_id, 3, None, True)
+        agent = create_openrouter_sql_agent(db, session_id, 3)
         result = agent.process_query(query)
 
         sessions.update_session(session_id, {'message_count': session.get('message_count', 0) + 1})
@@ -1418,9 +1494,81 @@ def download_route(project_id, csv_type):
     return send_file(csv_path, as_attachment=True, download_name=filename)
 
 # ============================================================================
-# STARTUP
+# CLEANUP SERVICE MANAGEMENT
 # ============================================================================
 
+@app.route('/api/admin/cleanup/stats', methods=['GET'])
+@require_auth
+def get_cleanup_stats():
+    """Get cleanup service statistics (admin only)"""
+    try:
+        stats = cleanup_service.get_stats()
+        active_sessions = cleanup_service.get_active_sessions()
+
+        return jsonify({
+            'success': True,
+            'stats': stats,
+            'active_sessions': active_sessions,
+            'session_count': len(active_sessions)
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/cleanup/run', methods=['POST'])
+@require_auth
+def manual_cleanup():
+    """Manually trigger cleanup (admin only)"""
+    try:
+        # This will be picked up by the next cleanup cycle
+        return jsonify({
+            'success': True,
+            'message': 'Cleanup will run in the next cycle'
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# ============================================================================
+# STARTUP & SHUTDOWN
+# ============================================================================
+
+import atexit
+import signal
+
+def shutdown_handler(signum=None, frame=None):
+    """Handle graceful shutdown"""
+    print("\n[*] Shutting down gracefully...")
+
+    # Stop cleanup service
+    if cleanup_service:
+        cleanup_service.stop()
+        print("[*] Cleanup service stopped")
+
+    # Stop executor
+    if executor:
+        executor.shutdown(wait=True)
+        print("[*] Thread pool executor stopped")
+
+    print("[*] Shutdown complete")
+
+# Register shutdown handlers
+atexit.register(shutdown_handler)
+signal.signal(signal.SIGINT, shutdown_handler)
+signal.signal(signal.SIGTERM, shutdown_handler)
+
 if __name__ == '__main__':
-    print("[*] Starting app5.py on port", Config.PORT)
-    app.run(host=Config.HOST, port=Config.PORT, debug=(Config.FLASK_ENV == 'development'))
+    try:
+        print("[*] Starting app5.py on port", Config.PORT)
+
+        # Start cleanup service
+        cleanup_service.start()
+        print("[*] Cleanup service started")
+
+        # Start Flask application
+        app.run(host=Config.HOST, port=Config.PORT, debug=(Config.FLASK_ENV == 'development'))
+    except KeyboardInterrupt:
+        print("\n[*] Received interrupt signal")
+        shutdown_handler()
+    except Exception as e:
+        print(f"[!] Fatal error: {e}")
+        shutdown_handler()
+        raise

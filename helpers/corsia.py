@@ -4,6 +4,7 @@ from openpyxl.utils.cell import get_column_letter
 import os
 import time
 from helpers.config import get_corsia_states
+from helpers import eu_ets
 
 def process_and_insert_to_excel(main_csv_path):
     print("Starting data processing...")

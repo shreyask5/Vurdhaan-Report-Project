@@ -12,8 +12,7 @@ import csv
 import xlwings as xw
 from lzstring import LZString
 from collections import defaultdict
-from helpers.corsia import filter_reportable_flights as filter_reportable_flights_corsia
-from helpers.eu_ets import filter_reportable_flights as filter_reportable_flights_eu_ets
+from helpers.corsia import filter_reportable_flights
 
 # Load environment variables for OpenAI
 try:
@@ -607,130 +606,9 @@ def validate_and_correct_icao(icao_code,icao_country_dict):
 
 
 
-# ============================================================================
-# VALIDATION SESSION CLASS
-# ============================================================================
-
-class ValidationSession:
-    """
-    Encapsulates all validation state for a single validation session.
-    Each session tracks errors across multiple categories and provides
-    methods for error reporting with pagination support.
-    """
-
-    def __init__(self, errors_per_page=100):
-        """
-        Initialize a new validation session.
-
-        Parameters:
-        - errors_per_page: Maximum number of errors per page (default: 100)
-        """
-        self.errors_per_page = errors_per_page
-        self.error_categories = [
-            "Time", "Date", "Fuel", "ICAO", "Sequence",
-            "Missing", "Column Missing"
-        ]
-        self.error_tracker = {category: [] for category in self.error_categories}
-        self.error_rows = set()  # Using a set for faster lookup
-        self.result_df = None
-        self.original_csv_path = None
-
-    def mark_error(self, cell_data, reason, row_idx=None, category="Missing", column=None):
-        """
-        Mark a cell as having an error and add it to the appropriate error category.
-
-        Parameters:
-        - cell_data: The actual value in the cell
-        - reason: Why it's considered an error
-        - row_idx: The row index in the dataframe
-        - category: Error category (Time, Date, Fuel, ICAO, Sequence, Missing, Column Missing)
-        - column: The column name where the error was found
-
-        Returns:
-        - Error message string
-        """
-        # Validate category
-        if category not in self.error_categories:
-            category = "Missing"  # Default category if invalid
-
-        # Create error entry
-        error_entry = {
-            "row_idx": row_idx,
-            "reason": reason,
-            "cell_data": cell_data,
-            "columns": [column] if column else []
-        }
-
-        # Add to the appropriate category
-        self.error_tracker[category].append(error_entry)
-
-        # Track the row index in error_rows set
-        if row_idx is not None:
-            self.error_rows.add(row_idx)
-
-        return f"Error: {cell_data} : {reason}"
-
-    def get_category_page_count(self, category_name):
-        """
-        Calculate the total number of pages for a given category.
-
-        For Sequence errors: 100 sequence errors = 400 row entries per page
-        For other categories: 100 errors per page
-
-        Parameters:
-        - category_name: Name of the error category
-
-        Returns:
-        - Total number of pages for the category
-        """
-        if category_name not in self.error_tracker:
-            return 0
-
-        total_errors = len(self.error_tracker[category_name])
-        if total_errors == 0:
-            return 0
-
-        # For sequence category, each sequence error involves 4 rows
-        if category_name.lower() == "sequence":
-            # Calculate actual sequence errors (divide by 4)
-            sequence_errors = total_errors // 4
-            # Calculate pages based on sequence errors (not row entries)
-            return (sequence_errors + self.errors_per_page - 1) // self.errors_per_page
-        else:
-            # For other categories, paginate by error count
-            return (total_errors + self.errors_per_page - 1) // self.errors_per_page
-
-    def get_total_error_count(self):
-        """
-        Get the total number of errors across all categories.
-        Adjusts for sequence errors (4 rows = 1 sequence error).
-
-        Returns:
-        - Total error count
-        """
-        sequence_error_count = len(self.error_tracker.get("Sequence", [])) // 4
-
-        total_errors = sum(
-            len(errors) if category != "Sequence" else sequence_error_count
-            for category, errors in self.error_tracker.items()
-        )
-
-        return total_errors
-
-    def reset(self):
-        """Reset all error tracking data."""
-        self.error_tracker = {category: [] for category in self.error_categories}
-        self.error_rows = set()
-        self.result_df = None
-        self.original_csv_path = None
-
-
-# ============================================================================
-# GLOBAL ERROR TRACKING (Legacy - kept for backward compatibility)
-# ============================================================================
 
 # Define a structured array of dictionaries for different error categories
-error_categories = ["Time", "Date", "Fuel", "ICAO", "Sequence", "Missing", "Column Missing"]
+error_categories = ["Time", "Date", "Fuel", "ICAO", "Sequence", "Missing","Column Missing", "Sequence"]
 error_tracker = {category: [] for category in error_categories}
 
 # Track all rows with errors
@@ -807,22 +685,8 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
     - output_path_json: Path to the saved JSON file
     """
 
-    # Create validation session to track errors
-    # Import config to get errors_per_page setting
-    try:
-        from config import Config
-        errors_per_page = Config.ERRORS_PER_PAGE
-    except ImportError:
-        errors_per_page = 100  # Fallback default
-
-    session = ValidationSession(errors_per_page=errors_per_page)
-
     #Folder path file
     folder_path = os.path.dirname(file_path)
-
-    # Store paths in session for later use
-    session.original_csv_path = file_path
-    session.result_df = result_df
 
     # Define all required columns (non-fuel columns that are always required)
     required_columns = [
@@ -865,7 +729,7 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
 
         # Log each missing column as a separate error
         for column in missing_columns:
-            session.mark_error(
+            mark_error(
                 column,
                 f"Required column '{column}' is missing from the file",
                 None,  # No specific row index since it affects the entire file
@@ -874,7 +738,7 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
             )
 
         # Return False to indicate the file is incomplete, and empty string for file path
-        output_file_json = generate_error_report(session, original_csv_path_with_Index, folder_path)
+        output_file_json = generate_error_report(original_csv_path_with_Index, folder_path)
         return False, "",result_df, output_file_json
     
     # Ensure data is ordered before sequence validation (do not reset index here)
@@ -932,7 +796,7 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
                 is_valid, expected_country = validate_and_correct_icao(origin_icao,icao_country_dict)
                 
                 if not is_valid:
-                    session.mark_error(str(origin_icao), "Invalid Origin ICAO", original_idx, "ICAO", "Origin ICAO")
+                    mark_error(str(origin_icao), "Invalid Origin ICAO", original_idx, "ICAO", "Origin ICAO")
                     icao_error_rows.add(original_idx)
                 elif origin_icao not in icao_country_dict:
                     # Add the newly discovered valid ICAO code to the dictionary
@@ -946,7 +810,7 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
                 is_valid, expected_country = validate_and_correct_icao(dest_icao,icao_country_dict)
                 
                 if not is_valid:
-                    session.mark_error(str(dest_icao), "Invalid Destination ICAO", original_idx, "ICAO", "Destination ICAO")
+                    mark_error(str(dest_icao), "Invalid Destination ICAO", original_idx, "ICAO", "Destination ICAO")
                     icao_error_rows.add(original_idx)
                 elif dest_icao not in icao_country_dict:
                     # Add the newly discovered valid ICAO code to the dictionary
@@ -1166,7 +1030,7 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
                 if i > 0:
                     prev_flight = valid_flights[i - 1]
                     prev_idx = int(prev_flight['index'])
-                    session.mark_error(
+                    mark_error(
                         f"{ac_reg} : {dest_icao} → {next_origin_icao}",
                         error_msg,
                         prev_idx,
@@ -1175,7 +1039,7 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
                     )
 
                 # Mark errors for current flight and next flight
-                session.mark_error(
+                mark_error(
                     f"{ac_reg} : {dest_icao} → {next_origin_icao}",
                     error_msg,
                     current_idx,
@@ -1183,7 +1047,7 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
                     ["Origin ICAO", "Destination ICAO"]
                 )
 
-                session.mark_error(
+                mark_error(
                     f"{ac_reg} : {dest_icao} → {next_origin_icao}",
                     error_msg,
                     next_idx,
@@ -1195,7 +1059,7 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
                 if i + 2 < len(valid_flights):
                     after_next_flight = valid_flights[i + 2]
                     after_next_idx = int(after_next_flight['index'])
-                    session.mark_error(
+                    mark_error(
                         f"{ac_reg} : {dest_icao} → {next_origin_icao}",
                         error_msg,
                         after_next_idx,
@@ -1207,14 +1071,7 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
     # Apply flight prefix filtering to remove non-reportable flights and domestic flights
     # This is done after sorting, index creation, and sequence validation
     if flight_starts_with:
-        if scheme == "CORSIA":
-            result_df = filter_reportable_flights_corsia(result_df, flight_starts_with, icao_error_rows)
-
-        if scheme == "EU ETS":
-            result_df = filter_reportable_flights_eu_ets(result_df, flight_starts_with, icao_error_rows)
-        #if scheme == "UK ETS"
-
-
+        result_df = filter_reportable_flights(result_df, flight_starts_with, icao_error_rows)
         # filter_reportable_flights preserves the 'index' column for error tracking
         # We just need to reset the pandas index (0,1,2...) after dropping rows
         result_df = result_df.reset_index(drop=True)
@@ -1232,7 +1089,7 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
 
             # Check for missing data
             if pd.isna(value) or value_str == "":
-                session.mark_error("Missing data", f"{column} is missing", original_idx, "Missing", column)
+                mark_error("Missing data", f"{column} is missing", original_idx, "Missing", column)
     
     # 3. CHECK FUEL TYPE VALUES - REMOVED
     # COMMENTED OUT: Fuel Type column has been removed from requirements
@@ -1248,7 +1105,7 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
     #         fuel_type = row['Fuel Type']
     #         if not pd.isna(fuel_type) and str(fuel_type).strip() != "":
     #             if str(fuel_type) not in allowed_fuel_types:
-    #                 session.mark_error(
+    #                 mark_error(
     #                     str(fuel_type),
     #                     f"Invalid fuel type. Must be one of: {', '.join(allowed_fuel_types)}",
     #                     original_idx,
@@ -1277,9 +1134,9 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
 
                         # Additional validation: fuel values should be positive
                         if numeric_value < 0:
-                            session.mark_error(value, f"{column} cannot be negative", original_idx, "Fuel", column)
+                            mark_error(value, f"{column} cannot be negative", original_idx, "Fuel", column)
                 except (ValueError, TypeError):
-                    session.mark_error(value, f"{column} must be numeric", original_idx, "Fuel", column)
+                    mark_error(value, f"{column} must be numeric", original_idx, "Fuel", column)
 
     # Also check Fuel Consumption column (common to all methods)
     if 'Fuel Consumption' in result_df.columns:
@@ -1291,9 +1148,9 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
                 if not pd.isna(value):
                     numeric_value = float(value)
                     if numeric_value < 0:
-                        session.mark_error(value, "Fuel Consumption cannot be negative", original_idx, "Fuel", 'Fuel Consumption')
+                        mark_error(value, "Fuel Consumption cannot be negative", original_idx, "Fuel", 'Fuel Consumption')
             except (ValueError, TypeError):
-                session.mark_error(value, "Fuel Consumption must be numeric", original_idx, "Fuel", 'Fuel Consumption')
+                mark_error(value, "Fuel Consumption must be numeric", original_idx, "Fuel", 'Fuel Consumption')
 
     # Method-specific validations
     if fuel_method == 'Block Off - Block On':
@@ -1312,7 +1169,7 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
 
                         # Block off fuel should be greater than block on fuel
                         if block_off <= block_on:
-                            session.mark_error(f"Off: {block_off}, On: {block_on}",
+                            mark_error(f"Off: {block_off}, On: {block_on}",
                                     "Block Off fuel must be greater than Block On fuel",
                                     original_idx, "Fuel", ["Block Off Fuel", "Block On Fuel"])
                 except (ValueError, TypeError):
@@ -1337,7 +1194,7 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
                         tolerance = 0.005 * abs(expected_consumption) if expected_consumption != 0 else 0.01
 
                         if abs(expected_consumption - fuel_consumption) > tolerance:
-                            session.mark_error(
+                            mark_error(
                                 f"Block Off: {block_off}, Block On: {block_on}, Consumption: {fuel_consumption}",
                                 f"Fuel Consumption ({fuel_consumption}) doesn't match Block Off - Block On ({expected_consumption:.2f})",
                                 original_idx, "Fuel", ['Block Off Fuel', 'Block On Fuel', 'Fuel Consumption']
@@ -1372,7 +1229,7 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
                         tolerance = 0.005 * abs(expected_consumption) if expected_consumption != 0 else 0.01
 
                         if abs(expected_consumption - fuel_consumption) > tolerance:
-                            session.mark_error(
+                            mark_error(
                                 f"Prev: {prev_fuel}, Uplift: {uplift}, Block On: {block_on}, Consumption: {fuel_consumption}",
                                 f"Fuel Consumption ({fuel_consumption}) doesn't match (Prev + Uplift) - Block On ({expected_consumption:.2f})",
                                 original_idx, "Fuel", ['Remaining Fuel From Prev. Flight', 'Uplift weight', 'Block On Fuel', 'Fuel Consumption']
@@ -1478,14 +1335,14 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
                         # Convert datetime to date for comparison if needed
                         date_for_comparison = date_obj.date() if hasattr(date_obj, 'date') else date_obj
                         if not (start_date <= date_for_comparison <= end_date):
-                            session.mark_error(date_str, f"Date not within range {start_date.date()} to {end_date.date()}", original_idx, "Date", "Date")
+                            mark_error(date_str, f"Date not within range {start_date.date()} to {end_date.date()}", original_idx, "Date", "Date")
                         if date_debug_count < date_debug_limit:
                             print(f"[DATE CHECK] Row {original_idx}: out of range '{date_str}'")
                             date_debug_count += 1
                         
                 except (ValueError, TypeError) as e:
                     # Invalid date format
-                    session.mark_error(date_str, f"Invalid date format: {e}", original_idx, "Date", "Date")
+                    mark_error(date_str, f"Invalid date format: {e}", original_idx, "Date", "Date")
                     if date_debug_count < date_debug_limit:
                         print(f"[DATE CHECK] Row {original_idx}: invalid date '{date_str}' -> {e}")
                         date_debug_count += 1
@@ -1571,35 +1428,35 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
                     converted_time, is_valid, error_msg = validate_and_convert_time(time_value)
                     
                     if not is_valid:
-                        session.mark_error(str(time_value), f"{col}: {error_msg}", original_idx, "Time", col)
+                        mark_error(str(time_value), f"{col}: {error_msg}", original_idx, "Time", col)
                     elif converted_time != time_value:
                         # Update the time value in the dataframe if it was converted
                         result_df.at[idx, col] = converted_time
 
     # PRINT ERROR SUMMARY
     # Adjust sequence error count (divide by 4 since 4 rows marked per break)
-    sequence_error_count = len(session.error_tracker["Sequence"]) // 4
-
+    sequence_error_count = len(error_tracker["Sequence"]) // 4
+    
     total_errors = sum(
-        len(errors) if category != "Sequence" else sequence_error_count
-        for category, errors in session.error_tracker.items()
+        len(errors) if category != "Sequence" else sequence_error_count 
+        for category, errors in error_tracker.items()
     )
-
+    
     print(f"\n📊 VALIDATION SUMMARY:")
-    print(f"Found {total_errors} errors affecting {len(session.error_rows)} rows.")
-
+    print(f"Found {total_errors} errors affecting {len(error_rows)} rows.")
+    
     # Print summary by category
     if total_errors > 0:
         print("\nErrors by category:")
-        for category in session.error_categories:
-            if session.error_tracker[category]:
-                count = len(session.error_tracker[category]) if category != "Sequence" else sequence_error_count
+        for category in error_categories:
+            if error_tracker[category]:
+                count = len(error_tracker[category]) if category != "Sequence" else sequence_error_count
                 print(f"  {category}: {count} errors")
     else:
         print("✅ No validation errors found - all data appears to be valid according to current rules.")
         print("\nValidation rules checked:")
         print("  ✓ Missing column check")
-        print("  ✓ Missing cell data check")
+        print("  ✓ Missing cell data check") 
         print("  ✓ Fuel type validation")
         print("  ✓ Fuel numeric validation")
         print("  ✓ Fuel calculation consistency")
@@ -1607,23 +1464,24 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
         print("  ✓ ICAO code validation")
         print("  ✓ Time format validation")
         print("  ✓ Flight sequence validation")
-
+    
     # Check if there are "Column Missing" errors - critical issue
-    if session.error_tracker["Column Missing"]:
+    if error_tracker["Column Missing"]:
         print("\nCritical error: Missing required columns - file cannot be processed")
-        output_file_json = generate_error_report(session, result_df, folder_path)
+        output_file_json = generate_error_report(result_df, folder_path)
         return False, "",result_df, output_file_json
-
-
+    
+    
     # After all validations, determine if file is valid
-    has_column_errors = len(session.error_tracker["Column Missing"]) > 0
+    has_column_errors = len(error_tracker["Column Missing"]) > 0
     
 
     print("\n\n" + str(result_df.iloc[6]) + "\n\n")
     # Generate output path
     if has_column_errors:
         # File has critical errors - don't save output
-        output_file_json = generate_error_report(session, original_csv_path_with_Index, folder_path)
+        output_file_json = generate_error_report(original_csv_path_with_Index, folder_path)
+        output_file_json = generate_error_report(original_csv_path_with_Index, folder_path)
         return False, "",result_df,output_file_json
     else:
         # Save file with validation results
@@ -1631,9 +1489,9 @@ def validate_and_process_file(file_path, result_df, ref_df, date_format="DMY", f
         output_path = f"{base_name}_validated.csv"
         result_df.to_csv(output_path, index=False)
         print(f"File validated and saved to: {output_path}")
-
+        
         # Return True if validation passed, but might have non-critical errors
-        output_file_json = generate_error_report(session, original_csv_path_with_Index, folder_path)
+        output_file_json = generate_error_report(original_csv_path_with_Index, folder_path)
         return True, output_path,result_df,output_file_json
 
 
@@ -1674,25 +1532,22 @@ def flatten_columns(columns):
     return flattened
 
 
-def generate_error_report(session, original_csv_path_with_Index, output_path, auto_generate_csvs=True):
+def generate_error_report(original_csv_path_with_Index, output_path, auto_generate_csvs=True):
     """
     Generates a JSON report of all errors, grouped by category and reason.
     Stores row data in a central place to avoid duplication.
     Now includes structure optimization + LZ-String compression.
     Automatically generates clean_data.csv and errors_data.csv files.
-
+    
     Parameters:
-    - session: ValidationSession instance containing error tracking data
-    - original_csv_path_with_Index: Path to the CSV file with index column
+    - result_df: The DataFrame containing the data
     - output_path: Path to save the JSON file (optional)
     - auto_generate_csvs: Whether to automatically generate CSV files (default: True)
-
+    
     Returns:
     - output_file_json: Path to the saved JSON file
     """
-    # Use session data instead of globals
-    error_tracker = session.error_tracker
-    error_rows = session.error_rows
+    global error_tracker, error_rows
     
     # Field mappings to reduce key repetition (for compression)
     field_map = {
@@ -1899,9 +1754,10 @@ def generate_error_report(session, original_csv_path_with_Index, output_path, au
             import traceback
             traceback.print_exc()
     
-    # Note: Session data is not reset here - caller can reset the session if needed
-    # The session can be reused or reset using session.reset()
-
+    # Reset error tracking for next use
+    error_tracker = {category: [] for category in error_categories}
+    error_rows = set()
+    
     return output_file
 
 
@@ -2006,321 +1862,6 @@ def create_compressed_error_report(error_data, field_map, reverse_field_map):
         # Fallback: return uncompressed JSON
         json_str = json.dumps(error_data, separators=(',', ':'), ensure_ascii=False)
         return json_str
-
-
-# ============================================================================
-# PAGINATED ERROR REPORT GENERATION
-# ============================================================================
-
-def generate_paginated_error_reports(session, original_csv_path_with_Index, output_path):
-    """
-    Generate paginated error reports - one file per category per page.
-    Creates metadata.json with overview of all categories and pages.
-
-    Parameters:
-    - session: ValidationSession instance containing error tracking data
-    - original_csv_path_with_Index: Path to the CSV file with index column
-    - output_path: Directory path to save the paginated error files
-
-    Returns:
-    - metadata: Dictionary containing error metadata
-    """
-    import math
-
-    # Load the persisted sorted+indexed CSV
-    try:
-        result_df = pd.read_csv(original_csv_path_with_Index, encoding='utf-8', encoding_errors='replace')
-    except Exception as e:
-        print(f"Error loading CSV: {e}")
-        result_df = pd.DataFrame()
-
-    # Create mapping from original indices to current pandas indices
-    original_to_pandas_idx = {}
-    for pandas_idx, row in result_df.iterrows():
-        original_idx = row['index'] if 'index' in row else pandas_idx
-        original_to_pandas_idx[original_idx] = pandas_idx
-
-    # Field mappings for compression
-    field_map = {
-        "Date": "d", "A/C Registration": "r", "Flight No": "f", "A/C Type": "t",
-        "ATD (UTC) Block Off": "o", "ATA (UTC) Block On": "i",
-        "Origin ICAO": "or", "Destination ICAO": "de", "Uplift Volume": "uv",
-        "Uplift Density": "ud", "Uplift weight": "uw",
-        "Remaining Fuel From Prev. Flight": "rf", "Block Off Fuel": "bf",
-        "Block On Fuel": "bo", "Fuel Consumption": "fc"
-    }
-    reverse_field_map = {v: k for k, v in field_map.items()}
-
-    # Calculate metadata
-    total_errors = session.get_total_error_count()
-    total_error_rows = len(session.error_rows)
-
-    # Ensure output directory exists
-    if not os.path.exists(output_path):
-        os.makedirs(output_path, exist_ok=True)
-
-    # Build categories metadata
-    categories_metadata = []
-
-    for category in session.error_categories:
-        if not session.error_tracker[category]:
-            continue  # Skip empty categories
-
-        # Calculate page count for this category
-        total_pages = session.get_category_page_count(category)
-        if total_pages == 0:
-            continue
-
-        # Calculate actual error count
-        if category.lower() == "sequence":
-            category_error_count = len(session.error_tracker[category]) // 4
-        else:
-            category_error_count = len(session.error_tracker[category])
-
-        categories_metadata.append({
-            "name": category,
-            "total_errors": category_error_count,
-            "total_pages": total_pages
-        })
-
-        # Generate pages for this category
-        print(f"Generating {total_pages} page(s) for category: {category}")
-
-        # Group errors by reason
-        errors_by_reason = defaultdict(list)
-        for error in session.error_tracker[category]:
-            reason = error["reason"]
-            errors_by_reason[reason].append(error)
-
-        # Get all errors for this category (flat list)
-        all_errors_flat = []
-        for reason in sorted(errors_by_reason.keys()):
-            all_errors_flat.extend(errors_by_reason[reason])
-
-        # Calculate pagination based on category type
-        if category.lower() == "sequence":
-            # For sequence: 100 sequence errors (400 rows) per page
-            # Each sequence error = 4 rows
-            errors_per_page = session.errors_per_page * 4  # 400 rows per page
-        else:
-            # For other categories: 100 errors per page
-            errors_per_page = session.errors_per_page
-
-        # Generate each page
-        for page_num in range(1, total_pages + 1):
-            start_idx = (page_num - 1) * errors_per_page
-            end_idx = min(start_idx + errors_per_page, len(all_errors_flat))
-            page_errors = all_errors_flat[start_idx:end_idx]
-
-            # Collect unique row indices for this page
-            page_row_indices = set()
-            for error in page_errors:
-                row_idx = error.get("row_idx")
-                if row_idx is not None:
-                    page_row_indices.add(row_idx)
-
-            # Build rows_data for this page
-            page_rows_data = {}
-            for row_idx in page_row_indices:
-                if row_idx in original_to_pandas_idx:
-                    pandas_idx = original_to_pandas_idx[row_idx]
-                    row_data = result_df.iloc[pandas_idx].to_dict()
-                    row_data = {k: convert_to_serializable(v) for k, v in row_data.items()}
-
-                    # Clean up Date field
-                    if "Date" in row_data:
-                        if hasattr(row_data["Date"], 'strftime'):
-                            row_data["Date"] = row_data["Date"].strftime("%Y-%m-%d")
-                        elif isinstance(row_data["Date"], str) and row_data["Date"].endswith(" 00:00:00"):
-                            row_data["Date"] = row_data["Date"].split(" ")[0]
-
-                    # Round numeric values
-                    for key, value in row_data.items():
-                        if isinstance(value, (int, float)) and not isinstance(value, bool):
-                            row_data[key] = round(float(value), 3)
-
-                    page_rows_data[str(row_idx)] = row_data
-
-            # Reorganize page_errors by reason
-            page_errors_by_reason = defaultdict(list)
-            for error in page_errors:
-                reason = error["reason"]
-                page_errors_by_reason[reason].append(error)
-
-            # Build error groups for this page
-            error_groups = []
-            for reason in sorted(page_errors_by_reason.keys()):
-                reason_group = {
-                    "reason": reason,
-                    "rows": []
-                }
-
-                for error in page_errors_by_reason[reason]:
-                    row_idx = error.get("row_idx")
-
-                    if row_idx is None:
-                        # File-level error
-                        file_error = {
-                            "file_level": True,
-                            "cell_data": error.get("cell_data"),
-                            "columns": error.get("columns", [])
-                        }
-                        reason_group["rows"].append(file_error)
-                    else:
-                        # Row-level error
-                        row_entry = {
-                            "row_idx": row_idx,
-                            "cell_data": error.get("cell_data"),
-                            "columns": error.get("columns", [])
-                        }
-                        reason_group["rows"].append(row_entry)
-
-                error_groups.append(reason_group)
-
-            # Build page data structure
-            page_data = {
-                "category_name": category,
-                "page": page_num,
-                "total_pages": total_pages,
-                "errors_on_page": len(page_errors),
-                "summary": {
-                    "total_errors": category_error_count,
-                    "error_rows": len(session.error_rows)
-                },
-                "rows_data": page_rows_data,
-                "error_groups": error_groups
-            }
-
-            # Save JSON file for this page
-            json_filename = f"error_report_{category}_page_{page_num}.json"
-            json_filepath = os.path.join(output_path, json_filename)
-
-            with open(json_filepath, 'w', encoding='utf-8') as f:
-                json.dump(page_data, f, indent=2, default=str, ensure_ascii=False)
-
-            print(f"  Saved: {json_filename} ({len(page_errors)} errors)")
-
-            # Create compressed version
-            try:
-                # Optimize and compress the page data
-                compressed_data = create_compressed_paginated_page(
-                    page_data, field_map, reverse_field_map
-                )
-
-                # Save compressed file
-                compressed_filename = f"error_report_{category}_page_{page_num}.lzs"
-                compressed_filepath = os.path.join(output_path, compressed_filename)
-
-                with open(compressed_filepath, 'w', encoding='utf-8') as f:
-                    f.write(compressed_data)
-
-                print(f"  Compressed: {compressed_filename}")
-            except Exception as e:
-                print(f"  Warning: Failed to compress {json_filename}: {e}")
-
-    # Build and save metadata
-    metadata = {
-        "total_errors": total_errors,
-        "error_rows": total_error_rows,
-        "error_categories": len(categories_metadata),
-        "categories": categories_metadata
-    }
-
-    metadata_filepath = os.path.join(output_path, "error_metadata.json")
-    with open(metadata_filepath, 'w', encoding='utf-8') as f:
-        json.dump(metadata, f, indent=2, default=str, ensure_ascii=False)
-
-    print(f"\n✅ Paginated error reports generated successfully!")
-    print(f"   Total errors: {total_errors}")
-    print(f"   Error categories: {len(categories_metadata)}")
-    print(f"   Metadata saved to: {metadata_filepath}")
-
-    return metadata
-
-
-def create_compressed_paginated_page(page_data, field_map, reverse_field_map):
-    """
-    Create compressed version of a single paginated error page.
-
-    Parameters:
-    - page_data: Page data dictionary
-    - field_map: Field mapping for compression
-    - reverse_field_map: Reverse field mapping for decompression
-
-    Returns:
-    - Compressed string
-    """
-    try:
-        # Optimize rows_data
-        optimized_rows = {}
-        for row_idx, row_data in page_data.get('rows_data', {}).items():
-            optimized_row = {}
-            for key, value in row_data.items():
-                if key == 'error':
-                    optimized_row['err'] = value
-                else:
-                    short_key = field_map.get(key, key)
-                    value = convert_to_serializable(value)
-                    if isinstance(value, (int, float)) and not isinstance(value, bool):
-                        rounded_value = round(float(value), 3)
-                        value = int(rounded_value) if rounded_value == int(rounded_value) else rounded_value
-                    optimized_row[short_key] = value
-            optimized_rows[row_idx] = optimized_row
-
-        # Optimize error groups
-        optimized_groups = []
-        for error_group in page_data.get('error_groups', []):
-            group_data = {
-                "r": error_group.get('reason', ''),
-                "rows": []
-            }
-
-            for row_error in error_group.get('rows', []):
-                if row_error.get('file_level'):
-                    row_entry = {
-                        "fl": True,
-                        "cd": row_error.get('cell_data', ''),
-                        "cols": row_error.get('columns', [])
-                    }
-                else:
-                    row_entry = {
-                        "idx": row_error.get('row_idx'),
-                        "cd": row_error.get('cell_data', ''),
-                        "cols": row_error.get('columns', [])
-                    }
-                group_data["rows"].append(row_entry)
-
-            optimized_groups.append(group_data)
-
-        # Build optimized page
-        optimized_page = {
-            "meta": {
-                "fm": reverse_field_map,
-                "cn": page_data.get('category_name', ''),
-                "p": page_data.get('page', 1),
-                "tp": page_data.get('total_pages', 1),
-                "eop": page_data.get('errors_on_page', 0)
-            },
-            "s": {
-                "te": page_data.get('summary', {}).get('total_errors', 0),
-                "er": page_data.get('summary', {}).get('error_rows', 0)
-            },
-            "rd": optimized_rows,
-            "eg": optimized_groups
-        }
-
-        # Convert to compact JSON
-        json_str = json.dumps(optimized_page, separators=(',', ':'), ensure_ascii=False)
-
-        # Compress with LZ-String
-        compressed_data = LZString.compressToBase64(json_str)
-
-        return compressed_data
-
-    except Exception as e:
-        print(f"Error compressing paginated page: {e}")
-        # Fallback: return uncompressed JSON
-        return json.dumps(page_data, separators=(',', ':'), ensure_ascii=False)
 
 
 def process_error_json_to_csvs(json_file_path, original_data_df, output_dir=None):

@@ -127,7 +127,15 @@ class Config:
     # API Settings
     OPENAI_TIMEOUT = int(os.getenv('OPENAI_TIMEOUT', '60'))
     OPENAI_MAX_RETRIES = int(os.getenv('OPENAI_MAX_RETRIES', '3'))
-    
+
+    # ========================================================================
+    # ERROR PAGINATION CONFIGURATION
+    # ========================================================================
+
+    # Pagination settings for error reporting
+    ERRORS_PER_PAGE = int(os.getenv('ERRORS_PER_PAGE', '100'))
+    SEQUENCE_ERRORS_PER_PAGE = int(os.getenv('SEQUENCE_ERRORS_PER_PAGE', '100'))
+
     # ========================================================================
     # DIRECTORY CREATION (EXISTING)
     # ========================================================================

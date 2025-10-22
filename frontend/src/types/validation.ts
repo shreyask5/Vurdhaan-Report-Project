@@ -117,6 +117,38 @@ export interface ErrorData {
   categories: ErrorCategory[];
 }
 
+// ========================================================================
+// PAGINATED ERROR REPORTING STRUCTURES
+// ========================================================================
+
+// Paginated error metadata - returned by /api/projects/{id}/errors/metadata
+export interface ErrorMetadata {
+  total_errors: number;
+  error_rows: number;
+  error_categories: number;
+  categories: CategoryMetadata[];
+}
+
+export interface CategoryMetadata {
+  name: string;
+  total_errors: number;
+  total_pages: number;
+}
+
+// Paginated error data (per category, per page) - returned by /api/projects/{id}/errors?category=X&page=N
+export interface PaginatedErrorData {
+  category_name: string;
+  page: number;
+  total_pages: number;
+  errors_on_page: number;
+  summary: {
+    total_errors: number;
+    error_rows: number;
+  };
+  rows_data: Record<number, any>;
+  error_groups: ErrorGroup[];
+}
+
 // Sequence error structure from index4.html:1608-1627
 export interface SequenceError {
   errorCode: string;

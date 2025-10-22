@@ -50,14 +50,32 @@ class PostgreSQLManager:
     def _create_session_marker(self):
         """Create a marker file to track the session for compatibility"""
         try:
-            # Create an empty marker file
+            # Create marker file with timestamps for cleanup tracking
+            import json
+            marker_data = {
+                'database_name': self.db_name,
+                'session_id': self.session_id,
+                'created_at': datetime.now().isoformat(),
+                'last_accessed': datetime.now().isoformat()
+            }
             with open(self.db_path, 'w') as f:
-                f.write(f"PostgreSQL Database: {self.db_name}\n")
-                f.write(f"Session ID: {self.session_id}\n")
-                f.write(f"Created: {datetime.now().isoformat()}\n")
+                json.dump(marker_data, f, indent=2)
             print(f"📝 [DEBUG] PostgreSQL Manager → Created session marker: {self.db_path}", flush=True)
         except Exception as e:
             print(f"⚠️ [DEBUG] PostgreSQL Manager → Failed to create marker file: {str(e)}", flush=True)
+
+    def update_last_accessed(self):
+        """Update the last_accessed timestamp in the session marker file"""
+        try:
+            import json
+            if os.path.exists(self.db_path):
+                with open(self.db_path, 'r') as f:
+                    marker_data = json.load(f)
+                marker_data['last_accessed'] = datetime.now().isoformat()
+                with open(self.db_path, 'w') as f:
+                    json.dump(marker_data, f, indent=2)
+        except Exception as e:
+            logger.warning(f"Failed to update last_accessed timestamp: {e}")
     
     def _create_database_if_not_exists(self):
         """Create a PostgreSQL database for this session if it doesn't exist"""
@@ -310,7 +328,7 @@ class PostgreSQLManager:
             # For clean_flights - note that column names are case-sensitive in PostgreSQL
             ('idx_clean_flights_date', 'clean_flights', '"Date"'),
             ('idx_clean_flights_registration', 'clean_flights', '"A/C Registration"'),
-            ('idx_clean_flights_flight', 'clean_flights', '"Flight"'),
+            ('idx_clean_flights_flight_no', 'clean_flights', '"Flight No"'),  # Fixed: was "Flight", now "Flight No"
             ('idx_clean_flights_origin', 'clean_flights', '"Origin ICAO"'),
             ('idx_clean_flights_destination', 'clean_flights', '"Destination ICAO"'),
             # For error_flights
@@ -372,8 +390,11 @@ class PostgreSQLManager:
     def execute_query(self, sql: str, params: Optional[Dict] = None) -> Tuple[List[Dict], Optional[str]]:
         """Execute SQL query and return results"""
         try:
+            # Update last accessed timestamp for cleanup tracking
+            self.update_last_accessed()
+
             print(f"🔍 [DEBUG] PostgreSQL Manager → Executing SQL: {sql[:200]}...", flush=True)
-            
+
             cursor = self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
             
             if params:

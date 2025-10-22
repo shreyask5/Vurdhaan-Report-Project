@@ -57,12 +57,13 @@ const ProjectChat: React.FC = () => {
     }
   }, [searchParams, urlProjectId, isInitialized, sessionId, initializeFromProject, autoInitialize]);
 
-  // Load chats when project is initialized
+  // Load chats when project is initialized (only once)
   useEffect(() => {
     if (projectId && isInitialized) {
       loadProjectChats(projectId);
     }
-  }, [projectId, isInitialized, loadProjectChats]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId, isInitialized]);
 
   const handleDeleteChat = (chatId: string) => {
     const chat = chats.find(c => c.id === chatId);

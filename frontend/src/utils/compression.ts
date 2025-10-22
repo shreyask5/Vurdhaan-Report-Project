@@ -1,7 +1,7 @@
 // LZ-String compression utilities
 // Based on index4.html:2226-2310, 2312-2494
 
-import { ErrorData, OptimizedErrorData } from '../types/validation';
+import { ErrorData, OptimizedErrorData, PaginatedErrorData } from '../types/validation';
 
 /**
  * Decompresses LZ-String compressed error report
@@ -148,6 +148,57 @@ function restoreOriginalErrorStructure(optimizedData: any): ErrorData {
   } catch (error) {
     console.error('❌ [ERROR] Failed to restore error structure:', error);
     throw new Error(`Structure restoration failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+/**
+ * Decompresses LZ-String compressed paginated error page
+ * Paginated format is NOT optimized (uses full structure), so just decompress and parse
+ */
+export async function decompressLZStringPaginatedPage(compressedData: string): Promise<PaginatedErrorData> {
+  try {
+    console.log('[COMPRESSION] Starting LZ-String decompression for paginated page...');
+    console.log('[COMPRESSION] Compressed data length:', compressedData.length);
+
+    // Check if LZString is available (loaded from CDN)
+    if (typeof (window as any).LZString === 'undefined') {
+      throw new Error('LZ-String library not loaded. Please check your internet connection and try again.');
+    }
+
+    const LZString = (window as any).LZString;
+
+    // LZ-String decompression
+    const jsonStr = LZString.decompressFromBase64(compressedData);
+
+    if (!jsonStr) {
+      throw new Error('Failed to decompress paginated data. The data may be corrupted.');
+    }
+
+    console.log('[COMPRESSION] Decompressed JSON length:', jsonStr.length);
+    console.log('[COMPRESSION] Compression ratio:', ((1 - compressedData.length / jsonStr.length) * 100).toFixed(1) + '%');
+
+    // Parse the decompressed JSON (already in correct PaginatedErrorData format)
+    const paginatedData: PaginatedErrorData = JSON.parse(jsonStr);
+
+    console.log('[COMPRESSION] Paginated page decompression successful:', {
+      category: paginatedData.category_name,
+      page: paginatedData.page,
+      totalPages: paginatedData.total_pages,
+      errorsOnPage: paginatedData.errors_on_page,
+      rowsDataKeys: paginatedData.rows_data ? Object.keys(paginatedData.rows_data).length : 0,
+      errorGroups: paginatedData.error_groups?.length || 0
+    });
+
+    // Validate structure
+    if (!paginatedData.category_name || typeof paginatedData.page !== 'number') {
+      throw new Error('Invalid paginated data structure: missing required fields');
+    }
+
+    return paginatedData;
+
+  } catch (error) {
+    console.error('❌ [ERROR] Paginated page decompression failed:', error);
+    throw new Error(`Failed to decompress paginated error data: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 

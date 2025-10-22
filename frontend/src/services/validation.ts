@@ -6,7 +6,9 @@ import {
   ValidationFormData,
   ErrorData,
   Correction,
-  UploadResponse
+  UploadResponse,
+  ErrorMetadata,
+  PaginatedErrorData
 } from '../types/validation';
 import { getAuthToken } from './auth';
 
@@ -295,5 +297,110 @@ export const validationService = {
       const error = await response.json().catch(() => ({ error: 'Failed to re-validate' }));
       throw new Error(error.error || 'Failed to re-validate');
     }
+  },
+
+  // ========================================================================
+  // PAGINATED ERROR REPORTING API
+  // ========================================================================
+
+  /**
+   * Fetch error metadata including all categories and page counts
+   * GET /api/projects/{project_id}/errors/metadata
+   * From app5.py:709-758
+   */
+  async fetchErrorMetadata(projectId: string): Promise<ErrorMetadata> {
+    console.log('[VALIDATION SERVICE] Fetching error metadata for project:', projectId);
+    const token = await getAuthToken();
+    const url = `${API_BASE_URL}/projects/${projectId}/errors/metadata`;
+    console.log('[VALIDATION SERVICE] Metadata URL:', url);
+
+    const response = await fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+
+    console.log('[VALIDATION SERVICE] Metadata response status:', response.status);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('[VALIDATION SERVICE] Metadata error response:', errorText);
+      throw new Error(`Failed to fetch error metadata: ${response.status} ${errorText}`);
+    }
+
+    const metadata = await response.json();
+    console.log('[VALIDATION SERVICE] Error metadata:', {
+      totalErrors: metadata.total_errors,
+      errorRows: metadata.error_rows,
+      categoriesCount: metadata.error_categories,
+      categories: metadata.categories?.map((c: any) => `${c.name}(${c.total_pages}p)`)
+    });
+
+    return metadata;
+  },
+
+  /**
+   * Fetch a specific page for a specific error category
+   * GET /api/projects/{project_id}/errors?category={category}&page={page}
+   * From app5.py:761-855
+   */
+  async fetchCategoryPage(
+    projectId: string,
+    category: string,
+    page: number = 1
+  ): Promise<PaginatedErrorData> {
+    console.log('[VALIDATION SERVICE] Fetching category page:', { projectId, category, page });
+    const token = await getAuthToken();
+    const url = `${API_BASE_URL}/projects/${projectId}/errors?category=${encodeURIComponent(category)}&page=${page}`;
+    console.log('[VALIDATION SERVICE] Category page URL:', url);
+
+    const response = await fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+
+    console.log('[VALIDATION SERVICE] Category page response status:', response.status);
+    console.log('[VALIDATION SERVICE] Category page response headers:', {
+      contentType: response.headers.get('content-type'),
+      compression: response.headers.get('x-compression'),
+      contentLength: response.headers.get('content-length')
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('[VALIDATION SERVICE] Category page error response:', errorText);
+      throw new Error(`Failed to fetch category page: ${response.status} ${errorText}`);
+    }
+
+    // Check response headers to determine if data is compressed
+    const contentType = response.headers.get('content-type');
+    const compressionType = response.headers.get('x-compression');
+
+    let data: PaginatedErrorData;
+
+    if (compressionType === 'lzstring' || contentType === 'text/plain') {
+      console.log('[VALIDATION SERVICE] Handling compressed paginated data');
+      // Handle LZ-String compressed data
+      const { decompressLZStringPaginatedPage } = await import('../utils/compression');
+      const compressedData = await response.text();
+      data = await decompressLZStringPaginatedPage(compressedData);
+    } else {
+      console.log('[VALIDATION SERVICE] Handling JSON paginated data');
+      // Handle regular JSON
+      data = await response.json();
+    }
+
+    console.log('[VALIDATION SERVICE] Parsed paginated data:', {
+      category: data.category_name,
+      page: data.page,
+      totalPages: data.total_pages,
+      errorsOnPage: data.errors_on_page,
+      hasRowsData: !!data.rows_data,
+      rowsDataKeys: data.rows_data ? Object.keys(data.rows_data).length : 0,
+      errorGroups: data.error_groups?.length || 0
+    });
+
+    return data;
   }
 };

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback } from 'react';
 import { ChatMessage, ChatSession, ChatMetadata } from '../types/chat';
 import { chatService } from '../services/chat';
 import { projectChatService } from '../services/projectChat';
@@ -170,7 +170,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   // Chat history management methods
-  const loadProjectChats = async (pid: string) => {
+  const loadProjectChats = useCallback(async (pid: string) => {
     setIsLoadingChats(true);
     try {
       const projectChats = await chatHistoryService.getProjectChats(pid);
@@ -188,9 +188,9 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } finally {
       setIsLoadingChats(false);
     }
-  };
+  }, []);
 
-  const createNewChat = async () => {
+  const createNewChat = useCallback(async () => {
     if (!projectId) return;
 
     setIsLoading(true);
@@ -215,9 +215,9 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [projectId]);
 
-  const switchChat = async (chatId: string) => {
+  const switchChat = useCallback(async (chatId: string) => {
     if (!projectId || chatId === currentChatId) return;
 
     setIsLoading(true);
@@ -256,9 +256,9 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [projectId, currentChatId]);
 
-  const renameChat = async (chatId: string, newName: string) => {
+  const renameChat = useCallback(async (chatId: string, newName: string) => {
     if (!projectId) return;
 
     try {
@@ -274,9 +274,9 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       chatHistoryService.logError('Failed to rename chat', error);
       throw error;
     }
-  };
+  }, [projectId]);
 
-  const deleteChat = async (chatId: string) => {
+  const deleteChat = useCallback(async (chatId: string) => {
     if (!projectId) return;
 
     try {
@@ -301,7 +301,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       chatHistoryService.logError('Failed to delete chat', error);
       throw error;
     }
-  };
+  }, [projectId, chatId, currentChatId, chats, switchChat, createNewChat]);
 
   return (
     <ChatContext.Provider value={{

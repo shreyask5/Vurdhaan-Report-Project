@@ -7,9 +7,22 @@ including CORSIA (Carbon Offsetting and Reduction Scheme for International Aviat
 The data is organized by scheme and year to support historical and current reporting.
 """
 
+# Special ICAO codes for EU ETS
+LIECHTENSTEIN_ICAO = "LSXB"
+
 # CORSIA States by Year
 # Source: ICAO CORSIA participation lists
 REGULATORY_DATA = {
+    'EU_ETS': {
+        'EEA_STATES': [
+            "Austria", "Belgium", "Bulgaria", "Croatia", "Cyprus", "Czechia", "Denmark", "Estonia",
+            "Finland", "France", "Germany", "Greece", "Hungary", "Iceland", "Ireland", "Italy",
+            "Latvia", "Lithuania", "Luxembourg", "Malta", "Netherlands", "Norway", "Poland",
+            "Portugal", "Romania", "Slovakia", "Slovenia", "Spain", "Sweden"
+        ],
+        'UK': "United Kingdom",
+        'SWITZERLAND': "Switzerland"
+    },
     'CORSIA': {
         2020: {
             'states': [
@@ -193,6 +206,36 @@ def get_available_years(scheme='CORSIA'):
         raise ValueError(f"Scheme '{scheme}' not found in regulatory data")
 
     return sorted(REGULATORY_DATA[scheme].keys())
+
+
+def get_eea_states():
+    """
+    Retrieve EEA member states for EU ETS reporting.
+
+    Returns:
+    - list: List of EEA member state names
+    """
+    return REGULATORY_DATA['EU_ETS']['EEA_STATES']
+
+
+def get_uk_state():
+    """
+    Retrieve UK state name for EU ETS reporting.
+
+    Returns:
+    - str: UK state name
+    """
+    return REGULATORY_DATA['EU_ETS']['UK']
+
+
+def get_switzerland_state():
+    """
+    Retrieve Switzerland state name for EU ETS reporting.
+
+    Returns:
+    - str: Switzerland state name
+    """
+    return REGULATORY_DATA['EU_ETS']['SWITZERLAND']
 
 
 def validate_scheme_year(scheme='CORSIA', year=2024):

@@ -6,7 +6,7 @@ import { ErrorCategory } from '../components/project/ErrorCategory';
 import { ActionButtons } from '../components/project/ActionButtons';
 import { SuccessSection } from '../components/project/SuccessSection';
 import { LoadingSection } from '../components/project/LoadingSection';
-import { FUEL_METHOD_COLUMNS } from '../types/validation';
+import { FUEL_METHOD_COLUMNS, ErrorMetadata } from '../types/validation';
 import { validationService } from '../services/validation';
 import { ProjectHeader } from '../components/layout/ProjectHeader';
 import { createSequenceSummary, processSequenceGroups } from '../utils/errorProcessing';
@@ -33,6 +33,11 @@ const ProjectValidation: React.FC = () => {
   const [aiChatEnabled, setAiChatEnabled] = useState(false);
   const hasFetchedRef = React.useRef(false);
 
+  // Pagination state
+  const [usePagination, setUsePagination] = useState(false);
+  const [errorMetadata, setErrorMetadata] = useState<ErrorMetadata | null>(null);
+  const [metadataError, setMetadataError] = useState<string | null>(null);
+
   // Fetch project details to get ai_chat_enabled
   React.useEffect(() => {
     if (projectId) {
@@ -48,15 +53,32 @@ const ProjectValidation: React.FC = () => {
     }
   }, [projectId]);
 
-  // Fetch errors when component mounts
+  // Fetch error metadata first to determine if pagination is available
   React.useEffect(() => {
     if (projectId && !hasFetchedRef.current) {
       hasFetchedRef.current = true;
-      console.log('[PROJECT VALIDATION] Fetching errors for project:', projectId);
-      fetchErrors(projectId).catch(error => {
-        console.error('[PROJECT VALIDATION] Failed to fetch errors:', error);
-        setLoadingMessage('Failed to load validation results');
-      });
+      console.log('[PROJECT VALIDATION] Attempting to fetch error metadata for project:', projectId);
+
+      // Try to fetch paginated metadata first
+      validationService.fetchErrorMetadata(projectId)
+        .then(metadata => {
+          console.log('[PROJECT VALIDATION] Successfully fetched error metadata:', metadata);
+          setErrorMetadata(metadata);
+          setUsePagination(true);
+          setLoadingMessage('Validation results loaded (paginated mode)');
+        })
+        .catch(error => {
+          console.log('[PROJECT VALIDATION] Metadata not available, falling back to legacy mode:', error.message);
+          setMetadataError(error.message);
+          setUsePagination(false);
+
+          // Fall back to legacy mode
+          console.log('[PROJECT VALIDATION] Fetching errors for project (legacy mode):', projectId);
+          fetchErrors(projectId).catch(legacyError => {
+            console.error('[PROJECT VALIDATION] Failed to fetch errors (legacy mode):', legacyError);
+            setLoadingMessage('Failed to load validation results');
+          });
+        });
     }
   }, [projectId]);
 
@@ -191,12 +213,20 @@ const ProjectValidation: React.FC = () => {
     return <LoadingSection message={loadingMessage} />;
   }
 
-  if (!errorData) {
+  // Determine if we have errors (from either mode)
+  const hasErrors = usePagination
+    ? (errorMetadata && errorMetadata.total_errors > 0)
+    : (errorData && errorData.summary && errorData.summary.total_errors > 0);
+
+  // Show loading if we're still fetching in legacy mode
+  if (!usePagination && !errorData) {
     return <LoadingSection message="No validation data available" />;
   }
 
-  // Check if there are errors
-  const hasErrors = errorData.summary && errorData.summary.total_errors > 0;
+  // Show loading if we're in pagination mode but metadata isn't loaded yet
+  if (usePagination && !errorMetadata && !metadataError) {
+    return <LoadingSection message="Loading error metadata..." />;
+  }
 
   return (
     <div className="min-h-screen bg-gradient-radial">
@@ -207,7 +237,32 @@ const ProjectValidation: React.FC = () => {
           <>
             {/* Error Summary */}
             <div className="animate-fade-in mb-6">
-              <ErrorSummary errorData={errorData} />
+              {usePagination && errorMetadata ? (
+                // Paginated mode summary
+                <div className="bg-card rounded-xl p-6 shadow-card">
+                  <h2 className="text-2xl font-bold text-foreground mb-4">Validation Errors Found</h2>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="bg-error/10 rounded-lg p-4">
+                      <div className="text-3xl font-bold text-error">{errorMetadata.total_errors}</div>
+                      <div className="text-sm text-muted-foreground">Total Errors</div>
+                    </div>
+                    <div className="bg-warning/10 rounded-lg p-4">
+                      <div className="text-3xl font-bold text-warning">{errorMetadata.error_rows}</div>
+                      <div className="text-sm text-muted-foreground">Affected Rows</div>
+                    </div>
+                    <div className="bg-primary/10 rounded-lg p-4">
+                      <div className="text-3xl font-bold text-primary">{errorMetadata.error_categories}</div>
+                      <div className="text-sm text-muted-foreground">Error Categories</div>
+                    </div>
+                  </div>
+                  <div className="mt-4 text-sm text-muted-foreground">
+                    Using paginated error reporting for improved performance
+                  </div>
+                </div>
+              ) : (
+                // Legacy mode summary
+                errorData && <ErrorSummary errorData={errorData} />
+              )}
             </div>
 
             {/* Action Buttons */}
@@ -228,20 +283,41 @@ const ProjectValidation: React.FC = () => {
 
             {/* Error Categories */}
             <div className="space-y-4">
-              {errorData.categories.map((category, index) => (
-                <div
-                  key={`${category.name}-${index}`}
-                  className="animate-fade-in-up"
-                  style={{ animationDelay: `${index * 0.1}s`, animationFillMode: 'both' }}
-                >
-                  <ErrorCategory
-                    category={category}
-                    columnOrder={columnOrder}
-                    rowsData={errorData.rows_data}
-                    onCorrection={addCorrection}
-                  />
-                </div>
-              ))}
+              {usePagination && errorMetadata ? (
+                // Paginated mode - render categories from metadata
+                errorMetadata.categories.map((categoryMeta, index) => (
+                  <div
+                    key={`${categoryMeta.name}-${index}`}
+                    className="animate-fade-in-up"
+                    style={{ animationDelay: `${index * 0.1}s`, animationFillMode: 'both' }}
+                  >
+                    <ErrorCategory
+                      categoryMetadata={categoryMeta}
+                      projectId={projectId}
+                      columnOrder={columnOrder}
+                      onCorrection={addCorrection}
+                      usePagination={true}
+                    />
+                  </div>
+                ))
+              ) : (
+                // Legacy mode - render categories from errorData
+                errorData && errorData.categories.map((category, index) => (
+                  <div
+                    key={`${category.name}-${index}`}
+                    className="animate-fade-in-up"
+                    style={{ animationDelay: `${index * 0.1}s`, animationFillMode: 'both' }}
+                  >
+                    <ErrorCategory
+                      category={category}
+                      columnOrder={columnOrder}
+                      rowsData={errorData.rows_data}
+                      onCorrection={addCorrection}
+                      usePagination={false}
+                    />
+                  </div>
+                ))
+              )}
             </div>
 
             {/* Final Sequence Error Summary */}
