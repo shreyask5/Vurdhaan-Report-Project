@@ -96,6 +96,21 @@ export const ColumnMappingWizard: React.FC<ColumnMappingWizardProps> = ({
   const isOnFirstStep = currentStep === 0;
   const isOnLastStep = currentStep === totalSteps - 1;
 
+  // DEBUG: Log mapping state for troubleshooting
+  useEffect(() => {
+    console.log('=== COLUMN MAPPING DEBUG ===');
+    console.log('Current Step:', currentStep + 1, 'of', totalSteps);
+    console.log('Current Required Column:', currentRequiredColumn);
+    console.log('Is Last Step:', isOnLastStep);
+    console.log('Can Complete:', canComplete);
+    console.log('Total Required Columns:', requiredColumns.length);
+    console.log('Mapped Columns Count:', Object.keys(mapping).length);
+    console.log('Full Mapping:', mapping);
+    console.log('Unmapped Columns:', requiredColumns.filter(col => !mapping[col] || mapping[col] === ''));
+    console.log('Required Columns:', requiredColumns);
+    console.log('========================');
+  }, [currentStep, mapping, canComplete]);
+
   return (
     <div className="column-mapping-wizard">
       {/* Header */}
@@ -192,22 +207,53 @@ export const ColumnMappingWizard: React.FC<ColumnMappingWizardProps> = ({
               Next →
             </button>
           ) : onSubmit ? (
-            <button
-              onClick={handleFinalSubmit}
-              disabled={!canComplete}
-              className="btn-success"
-              type="button"
-            >
-              Submit & Validate
-            </button>
+            <>
+              <button
+                onClick={handleFinalSubmit}
+                disabled={!canComplete}
+                className="btn-success"
+                type="button"
+                title={!canComplete ? `Missing mappings: ${requiredColumns.filter(col => !mapping[col] || mapping[col] === '').join(', ')}` : 'All columns mapped - ready to submit'}
+              >
+                Submit & Validate
+                {!canComplete && (
+                  <span style={{ marginLeft: '8px', fontSize: '0.75rem' }}>
+                    ({Object.keys(mapping).length}/{totalSteps} mapped)
+                  </span>
+                )}
+              </button>
+              {/* DEBUG: Force Submit Button - Remove in production */}
+              {!canComplete && (
+                <button
+                  onClick={handleFinalSubmit}
+                  className="btn-warning"
+                  type="button"
+                  title="Force submit without complete mapping (DEBUG)"
+                  style={{
+                    background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                    flex: '0 0 auto',
+                    padding: '0.75rem 1rem',
+                    fontSize: '0.75rem'
+                  }}
+                >
+                  🔧 Force Submit
+                </button>
+              )}
+            </>
           ) : (
             <button
               onClick={handleComplete}
               disabled={!canComplete}
               className="btn-success"
               type="button"
+              title={!canComplete ? `Missing mappings: ${requiredColumns.filter(col => !mapping[col] || mapping[col] === '').join(', ')}` : 'All columns mapped'}
             >
               Complete Mapping
+              {!canComplete && (
+                <span style={{ marginLeft: '8px', fontSize: '0.75rem' }}>
+                  ({Object.keys(mapping).length}/{totalSteps} mapped)
+                </span>
+              )}
             </button>
           )}
         </div>
