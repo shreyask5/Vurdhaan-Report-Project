@@ -1,18 +1,20 @@
 # -*- coding: utf-8 -*-
 #!/usr/bin/env python3
-# test2.py - CLI Chat Interface for Gemini SQL Agent
+# test2.py - CLI Chat Interface for OpenRouter SQL Agent
 
 """
-CLI Chat Interface for Testing Gemini SQL Agent
+CLI Chat Interface for Testing OpenRouter SQL Agent
 
 This script provides an interactive command-line interface for testing
-the Gemini-powered SQL agent with real flight data.
+the OpenRouter-powered SQL agent with real flight data.
 
 Features:
 - Multi-turn conversation support
 - Conversation history tracking
 - Summary generation
 - Interactive commands
+- Access to 400+ AI models via OpenRouter
+- Intelligent prompt caching for cost savings
 
 Usage:
     python test2.py
@@ -60,8 +62,8 @@ if os.name == 'nt':  # Windows
 # CLI CHAT INTERFACE
 # ============================================================================
 
-class GeminiChatCLI:
-    """Interactive CLI for Gemini SQL Agent"""
+class OpenRouterChatCLI:
+    """Interactive CLI for OpenRouter SQL Agent"""
 
     def __init__(self):
         self.db_manager = None
@@ -72,11 +74,11 @@ class GeminiChatCLI:
     def print_banner(self):
         """Print welcome banner"""
         print("\n" + "=" * 80)
-        print("GEMINI SQL AGENT - FLIGHT DATA CHAT INTERFACE")
+        print("OPENROUTER SQL AGENT - FLIGHT DATA CHAT INTERFACE")
         print("=" * 80)
         print(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        print(f"API Key: {Config.GEMINI_API_KEY_1[:20] if Config.GEMINI_API_KEY_1 else 'NOT SET'}...")
-        print(f"Model: {Config.GEMINI_MODEL}")
+        print(f"API Key: {Config.OPENROUTER_API_KEY[:20] if Config.OPENROUTER_API_KEY else 'NOT SET'}...")
+        print(f"Model: {Config.OPENROUTER_MODEL}")
         print("=" * 80)
         print()
 
@@ -127,19 +129,19 @@ class GeminiChatCLI:
             return False
 
     def initialize_agent(self):
-        """Initialize Gemini SQL Agent"""
+        """Initialize OpenRouter SQL Agent"""
         try:
-            print(f"[*] Initializing Gemini SQL Agent...")
+            print(f"[*] Initializing OpenRouter SQL Agent...")
 
-            # Create agent with GEMINI_API_KEY_1
+            # Create agent with OPENROUTER_API_KEY
             self.agent = create_openrouter_sql_agent(
                 db_manager=self.db_manager,
                 session_id=self.session_id,
                 max_attempts=3,
-                key="GEMINI_API_KEY_1"
+                key="OPENROUTER_API_KEY"
             )
 
-            print(f"[+] Gemini agent initialized with {Config.GEMINI_MODEL}")
+            print(f"[+] OpenRouter agent initialized with {Config.OPENROUTER_MODEL}")
             return True
 
         except Exception as e:
@@ -299,15 +301,16 @@ def main():
     """Main entry point"""
 
     # Check if API key is set
-    if not Config.GEMINI_API_KEY_1:
-        print("\n[-] ERROR: GEMINI_API_KEY_1 not found in environment")
-        print("Please set GEMINI_API_KEY_1 in your .env file")
+    if not Config.OPENROUTER_API_KEY:
+        print("\n[-] ERROR: OPENROUTER_API_KEY not found in environment")
+        print("Please set OPENROUTER_API_KEY in your .env file")
         print("\nExample:")
-        print("GEMINI_API_KEY_1=your_api_key_here")
+        print("OPENROUTER_API_KEY=sk-or-v1-...")
+        print("\nGet your API key from: https://openrouter.ai/keys")
         sys.exit(1)
 
     # Check if model is configured
-    print(f"\n[+] Using Gemini model: {Config.GEMINI_MODEL}")
+    print(f"\n[+] Using OpenRouter model: {Config.OPENROUTER_MODEL}")
 
     # Show sample queries
     print("\nSAMPLE QUERIES YOU CAN TRY:")
@@ -316,7 +319,7 @@ def main():
     print()
 
     # Create and run CLI
-    cli = GeminiChatCLI()
+    cli = OpenRouterChatCLI()
     cli.run()
 
 
