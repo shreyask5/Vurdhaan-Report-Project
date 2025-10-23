@@ -7,57 +7,57 @@ import feature3 from '@/assets/feature-3.jpg';
 const features = [
   {
     icon: Zap,
-    title: 'Lightning Fast',
-    description: 'Automated workflows that execute in milliseconds, not hours.',
+    title: 'Multi-Scheme Support',
+    description: 'CORSIA, EU ETS, UK ETS, CH ETS, and ReFuelEU reporting in one platform.',
   },
   {
     icon: Users,
     title: 'Team Collaboration',
-    description: 'Real-time updates and seamless communication across your team.',
+    description: 'Real-time collaboration with AI assistance for complex compliance queries.',
   },
   {
     icon: Shield,
-    title: 'Enterprise Security',
-    description: 'Bank-level encryption with SOC 2 Type II compliance.',
+    title: 'Data Validation',
+    description: 'Automated validation ensures compliance with scheme requirements.',
   },
   {
     icon: BarChart,
-    title: 'Advanced Analytics',
-    description: 'Deep insights into performance metrics and customer behavior.',
+    title: 'Monitoring Plans',
+    description: 'Comprehensive monitoring plan creation and review workflow.',
   },
   {
     icon: Clock,
-    title: '24/7 Monitoring',
-    description: 'Around-the-clock system monitoring with instant alerts.',
+    title: 'Document Management',
+    description: 'Centralized document upload, storage, and version control.',
   },
   {
     icon: Sparkles,
-    title: 'AI-Powered',
-    description: 'Smart automation and predictive intelligence built-in.',
+    title: 'AI-Powered Insights',
+    description: 'Intelligent analysis of emissions data and compliance requirements.',
   },
 ];
 
 const detailedFeatures = [
   {
     image: feature1,
-    title: 'Real-Time Collaboration',
+    title: 'Comprehensive Scheme Coverage',
     description:
-      'Connect your entire team with live updates, shared workspaces, and instant messaging. See changes as they happen and collaborate without friction.',
-    features: ['Live editing', 'Team chat', 'Activity feeds', '@mentions'],
+      'Support for all major aviation carbon schemes including CORSIA, EU ETS, UK ETS, CH ETS, and ReFuelEU. Manage multiple compliance requirements from a single platform with scheme-specific validation rules.',
+    features: ['CORSIA reporting', 'EU ETS compliance', 'UK & CH ETS', 'ReFuelEU ready'],
   },
   {
     image: feature2,
-    title: 'Automated Workflows',
+    title: 'Automated Data Validation',
     description:
-      'Set up intelligent automation rules that handle repetitive tasks. From routing to notifications, let the system do the heavy lifting.',
-    features: ['Smart routing', 'Auto-assignments', 'Trigger actions', 'Custom rules'],
+      'Built-in validation rules ensure your data meets scheme requirements before submission. Catch errors early with intelligent checks and receive actionable feedback on compliance gaps.',
+    features: ['Real-time validation', 'Error detection', 'Data quality checks', 'Compliance scoring'],
   },
   {
     image: feature3,
-    title: 'Enterprise-Grade Security',
+    title: 'AI-Powered Collaboration',
     description:
-      'Your data is protected with military-grade encryption, role-based access control, and comprehensive audit logs for complete peace of mind.',
-    features: ['AES-256 encryption', 'SSO support', 'Audit trails', '2FA authentication'],
+      'Work together seamlessly with your team and get instant answers to complex compliance questions. Our AI assistant helps navigate regulations and provides guidance throughout the reporting process.',
+    features: ['Real-time chat', 'AI assistance', 'Document sharing', 'Audit trails'],
   },
 ];
 
@@ -68,11 +68,11 @@ export const FeaturesSection = () => {
         {/* Header */}
         <div className="text-center max-w-3xl mx-auto mb-16 space-y-4 animate-fade-in-up">
           <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold">
-            Everything You Need to{' '}
-            <span className="bg-gradient-primary bg-clip-text text-transparent">Scale</span>
+            Everything You Need for{' '}
+            <span className="bg-gradient-primary bg-clip-text text-transparent">Carbon Compliance</span>
           </h2>
           <p className="text-lg text-muted-foreground">
-            Powerful features designed to help your team work smarter, faster, and more efficiently.
+            Powerful features designed to streamline your aviation emissions reporting and ensure regulatory compliance.
           </p>
         </div>
 

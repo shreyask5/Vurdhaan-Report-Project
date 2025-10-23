@@ -323,8 +323,8 @@ const ProjectUpload: React.FC = () => {
                     })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                   >
-                    {Array.from({ length: 6 }, (_, i) => {
-                      const year = new Date().getFullYear() - 5 + i;
+                    {Array.from({ length: 2 }, (_, i) => {
+                      const year = new Date().getFullYear() - 1 + i;
                       return (
                         <option key={year} value={year}>
                           {year}
@@ -362,7 +362,7 @@ const ProjectUpload: React.FC = () => {
                 {/* Flight Number Prefix */}
                 <div>
                   <label htmlFor="flight_starts_with" className="block text-sm font-medium text-gray-700 mb-2">
-                    Flight Number Prefix
+                    ICAO Designator
                   </label>
                   <input
                     id="flight_starts_with"
@@ -376,7 +376,7 @@ const ProjectUpload: React.FC = () => {
                     placeholder="e.g., AI, BA, UA"
                   />
                   <p className="text-xs text-gray-500 mt-1">
-                    Optional: Enter the prefix that all flight numbers should start with
+                    Optional: Enter the ICAO Designator
                   </p>
                 </div>
               </div>

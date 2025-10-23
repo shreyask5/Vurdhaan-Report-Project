@@ -340,11 +340,15 @@ def update_project_route(project_id):
     if not validate_project_id(project_id):
         return jsonify({'error': 'Invalid project ID'}), 400
 
-    updated = projects.update_project(project_id, g.user['uid'], g.validated_data)
+    # Filter out None values to prevent overwriting existing fields with null
+    validated_data = {k: v for k, v in g.validated_data.items() if v is not None}
+
+    updated = projects.update_project(project_id, g.user['uid'], validated_data)
     if not updated:
         return jsonify({'error': 'Not found or unauthorized'}), 404
 
-    return jsonify({'success': True, 'project': {'id': updated['id'], 'name': updated['name']}}), 200
+    # Return full project object instead of just id and name
+    return jsonify({'success': True, 'project': updated}), 200
 
 @app.route('/api/projects/<project_id>', methods=['DELETE'])
 @require_auth

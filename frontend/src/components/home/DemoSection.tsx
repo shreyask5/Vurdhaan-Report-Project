@@ -16,11 +16,11 @@ export const DemoSection = () => {
 
             <div className="space-y-4">
               <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold">
-                See ServicePro in Action
+                See Vurdhaan Reports in Action
               </h2>
               <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                Book a personalized demo with our product experts. We'll show you how ServicePro
-                can transform your team's workflow and answer all your questions.
+                Book a personalized demo with our compliance experts. We'll show you how Vurdhaan Reports
+                can streamline your carbon reporting and answer all your questions about CORSIA, EU ETS, and other schemes.
               </p>
             </div>
 

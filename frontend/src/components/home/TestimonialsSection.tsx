@@ -3,55 +3,55 @@ import { Star, Quote } from 'lucide-react';
 
 const testimonials = [
   {
-    name: 'Sarah Johnson',
-    role: 'CEO at TechCorp',
-    company: 'TechCorp Inc.',
+    name: 'Sarah Mitchell',
+    role: 'Head of Sustainability',
+    company: 'Global Airways',
     content:
-      'ServicePro transformed how our team collaborates. The automation features alone saved us 20 hours per week. Absolutely game-changing.',
+      'Vurdhaan Reports simplified our CORSIA compliance process dramatically. The automated validation caught errors we would have missed, saving us from costly resubmissions.',
     rating: 5,
   },
   {
-    name: 'Michael Chen',
-    role: 'Operations Director',
-    company: 'GrowthLabs',
+    name: 'James Thompson',
+    role: 'Environmental Compliance Manager',
+    company: 'European Air Cargo',
     content:
-      'The analytics dashboard gives us insights we never had before. We can now make data-driven decisions in real-time. Highly recommended!',
+      'Managing EU ETS and UK ETS reporting simultaneously was a nightmare until we found this platform. The multi-scheme support is exactly what we needed.',
     rating: 5,
   },
   {
-    name: 'Emily Rodriguez',
-    role: 'Product Manager',
-    company: 'InnovateCo',
+    name: 'Maria Rodriguez',
+    role: 'Carbon Reporting Lead',
+    company: 'Atlantic Aviation',
     content:
-      'Implementation was seamless, and the support team is exceptional. Our productivity increased by 40% within the first month.',
+      'The AI assistant is incredibly helpful for navigating complex regulations. Our team can get instant answers without waiting for external consultants.',
     rating: 5,
   },
   {
-    name: 'David Park',
-    role: 'CTO',
-    company: 'ScaleUp Systems',
+    name: 'David Chen',
+    role: 'Director of Operations',
+    company: 'Intercontinental Airlines',
     content:
-      'Best investment we made this year. The platform scales effortlessly with our growing team, and the security features give us complete peace of mind.',
+      'Vurdhaan Reports reduced our reporting time by 60%. The monitoring plan workflow is intuitive and the validation features give us confidence in our submissions.',
     rating: 5,
   },
   {
-    name: 'Lisa Anderson',
-    role: 'VP of Customer Success',
-    company: 'CustomerFirst',
+    name: 'Emma Williams',
+    role: 'Sustainability Director',
+    company: 'Regional Express',
     content:
-      'Our customer satisfaction scores improved dramatically after implementing ServicePro. The real-time collaboration features are unmatched.',
+      'Outstanding platform for carbon compliance. The team collaboration features and document management have streamlined our entire reporting process across multiple schemes.',
     rating: 5,
   },
 ];
 
 // Mock company logos
 const companies = [
-  'TechCorp',
-  'GrowthLabs',
-  'InnovateCo',
-  'ScaleUp',
-  'CustomerFirst',
-  'DataFlow',
+  'Global Airways',
+  'Air Cargo International',
+  'Atlantic Aviation',
+  'Regional Express',
+  'Continental Airlines',
+  'Pacific Flights',
 ];
 
 export const TestimonialsSection = () => {
@@ -61,7 +61,7 @@ export const TestimonialsSection = () => {
         {/* Company Logos */}
         <div className="mb-16">
           <p className="text-center text-sm text-muted-foreground mb-8">
-            Trusted by thousands of companies worldwide
+            Trusted by airlines and aviation companies worldwide
           </p>
           <div className="flex flex-wrap justify-center items-center gap-8 md:gap-12 opacity-60">
             {companies.map((company, index) => (
@@ -78,13 +78,13 @@ export const TestimonialsSection = () => {
         {/* Header */}
         <div className="text-center max-w-3xl mx-auto mb-16 space-y-4">
           <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold">
-            Loved by{' '}
+            Trusted by{' '}
             <span className="bg-gradient-primary bg-clip-text text-transparent">
-              Teams Everywhere
+              Aviation Leaders
             </span>
           </h2>
           <p className="text-lg text-muted-foreground">
-            See what our customers have to say about their experience with ServicePro.
+            See what compliance teams have to say about their experience with Vurdhaan Reports.
           </p>
         </div>
 

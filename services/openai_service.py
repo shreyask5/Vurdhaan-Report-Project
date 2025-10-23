@@ -233,7 +233,7 @@ class OpenAIService:
             "Calculation Inputs: Fuel density values and sources; CERT usage (yes/no); CERT inputs (e.g., GCD vs actual distances); emission factors if stated.\n"
             "Data Flow & Controls (QA/QC): How data is captured, validated, reconciled, and approved; key controls; error handling; change control; responsible teams/roles.\n"
             "Records & Retention: Where records are stored (systems/locations), retention time, backup/archiving.\n"
-            "Reporting Setup: List State pairs operated (high-level); note major Aerodrome pairs if included; any exclusions or special cases.\n"
+            "Reporting Setup: any exclusions or special cases.\n"
             "Data Gaps: Whether gaps occurred; % of data affected; replacement method(s) (e.g., QAR, CERT); justification.\n"
             "Emission Reductions / SAF: Any SAF claims, book-and-claim, or emission reductions claimed; documentation required.\n\n"
             "JSON shape (include ALL keys; if unknown use null):\n"
@@ -248,7 +248,7 @@ class OpenAIService:
             "  \"calculation_inputs\": { \"fuel_density_values\": string|null, \"fuel_density_sources\": string|null, \"cert_usage\": boolean|null, \"cert_inputs\": string|null, \"emission_factors\": string|null },\n"
             "  \"data_management\": { \"data_flow\": string|null, \"controls\": string|null, \"risk_analysis\": string|null, \"data_gaps\": string|null, \"qa_qc_controls\": string|null, \"data_validation_procedures\": string|null, \"change_control\": string|null, \"responsible_teams\": [string] },\n"
             "  \"records_retention\": { \"storage_systems\": [string], \"storage_locations\": [string], \"retention_time\": string|null, \"backup_archiving\": string|null },\n"
-            "  \"reporting_setup\": { \"state_pairs_operated\": [string], \"aerodrome_pairs\": [string], \"exclusions\": [string], \"special_cases\": [string] },\n"
+            "  \"reporting_setup\": { \"exclusions\": [string], \"special_cases\": [string] },\n"
             "  \"data_gaps\": { \"gaps_occurred\": boolean|null, \"data_affected_percentage\": number|null, \"replacement_methods\": [string], \"justification\": string|null },\n"
             "  \"emission_reductions_saf\": { \"saf_claims\": [string], \"book_and_claim\": boolean|null, \"emission_reductions_claimed\": [string], \"documentation_required\": [string] },\n"
             "}\n"
@@ -547,8 +547,6 @@ class OpenAIService:
                     "reporting_setup": {
                         "type": "object",
                         "properties": {
-                            "state_pairs_operated": {"type": "array", "items": {"type": "string"}},
-                            "aerodrome_pairs": {"type": "array", "items": {"type": "string"}},
                             "exclusions": {"type": "array", "items": {"type": "string"}},
                             "special_cases": {"type": "array", "items": {"type": "string"}}
                         },

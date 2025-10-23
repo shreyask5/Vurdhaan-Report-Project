@@ -45,6 +45,14 @@ export interface CreateProjectData {
   save_files_on_server: boolean;
 }
 
+export interface UpdateProjectData {
+  name?: string;
+  description?: string;
+  ai_chat_enabled?: boolean;
+  save_files_on_server?: boolean;
+  status?: 'active' | 'processing' | 'completed' | 'error';
+}
+
 export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
@@ -128,7 +136,7 @@ export const projectsApi = {
    */
   async update(
     projectId: string,
-    data: Partial<CreateProjectData>
+    data: UpdateProjectData
   ): Promise<{ success: boolean; project: Project }> {
     return apiRequest<{ success: boolean; project: Project }>(`/projects/${projectId}`, {
       method: 'PUT',

@@ -7,34 +7,34 @@ import {
 
 const faqs = [
   {
-    question: 'How does the free trial work?',
+    question: 'Which carbon schemes does Vurdhaan Reports support?',
     answer:
-      'You get full access to all Pro features for 14 days, no credit card required. If you decide to continue after the trial, simply choose a plan and add your payment information.',
+      'Vurdhaan Reports supports all major aviation carbon compliance schemes including CORSIA (Carbon Offsetting and Reduction Scheme for International Aviation), EU ETS (European Union Emissions Trading System), UK ETS, CH ETS (Swiss ETS), and ReFuelEU Aviation. Each scheme has customized validation rules and reporting templates.',
   },
   {
-    question: 'Can I change plans later?',
+    question: 'How does the automated validation work?',
     answer:
-      'Absolutely! You can upgrade, downgrade, or cancel your plan at any time. Changes take effect immediately, and we will prorate any charges or credits.',
+      'Our platform includes built-in validation rules specific to each compliance scheme. As you enter data or upload documents, the system automatically checks for completeness, accuracy, and compliance with scheme requirements. Any errors or warnings are flagged immediately with clear guidance on how to resolve them.',
   },
   {
-    question: 'What kind of support do you offer?',
+    question: 'Can multiple team members collaborate on reports?',
     answer:
-      'All plans include email support with response times under 24 hours. Pro and Business plans get priority support, and Business customers get dedicated phone support and a customer success manager.',
+      'Yes! Vurdhaan Reports is designed for team collaboration. Multiple users can work on the same project simultaneously, with role-based access controls. You can also use our AI-powered chat feature to get instant answers to compliance questions without leaving the platform.',
   },
   {
-    question: 'Is my data secure?',
+    question: 'Is my emissions data secure?',
     answer:
-      'Yes. We use bank-level AES-256 encryption, are SOC 2 Type II certified, and comply with GDPR and other major privacy regulations. Your data is backed up daily and stored in secure, geo-redundant data centers.',
+      'Absolutely. We use enterprise-grade AES-256 encryption for all data at rest and in transit. The platform includes comprehensive audit trails, role-based access controls, and regular security audits. Your sensitive emissions data is stored in secure, geo-redundant data centers with daily backups.',
   },
   {
-    question: 'Do you offer custom enterprise plans?',
+    question: 'How does the monitoring plan review process work?',
     answer:
-      'Yes! For organizations with more than 100 users or specific requirements, we offer custom enterprise plans with dedicated infrastructure, custom SLAs, and personalized onboarding. Contact our sales team to learn more.',
+      'The platform guides you through creating compliant monitoring plans with scheme-specific templates and requirements. You can collaborate with your team, track review status, and receive feedback all within the system. The AI assistant can help answer questions about specific monitoring plan requirements.',
   },
   {
-    question: 'Can I integrate ServicePro with other tools?',
+    question: 'Can I export my data and reports?',
     answer:
-      'ServicePro integrates with 100+ popular business tools including Slack, Microsoft Teams, Google Workspace, Salesforce, and more. Pro and Business plans also include API access for custom integrations.',
+      'Yes! All reports and data can be exported in multiple formats suitable for submission to regulatory authorities. The platform maintains version control of all documents and submissions, ensuring you have a complete audit trail of your compliance activities.',
   },
 ];
 
@@ -50,7 +50,7 @@ export const FAQSection = () => {
               <span className="bg-gradient-primary bg-clip-text text-transparent">Questions</span>
             </h2>
             <p className="text-lg text-muted-foreground">
-              Everything you need to know about ServicePro
+              Everything you need to know about Vurdhaan Reports
             </p>
           </div>
 
@@ -76,13 +76,13 @@ export const FAQSection = () => {
           <div className="mt-12 text-center p-8 bg-gradient-card rounded-2xl border border-border/50">
             <p className="text-lg font-medium mb-2">Still have questions?</p>
             <p className="text-muted-foreground mb-4">
-              Our team is here to help. Reach out anytime.
+              Our compliance experts are here to help. Reach out anytime.
             </p>
             <a
-              href="mailto:support@servicepro.com"
+              href="mailto:support@vurdhaan.com"
               className="text-primary hover:underline font-semibold"
             >
-              support@servicepro.com
+              support@vurdhaan.com
             </a>
           </div>
         </div>

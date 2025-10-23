@@ -62,10 +62,10 @@ export const Header = () => {
           {/* Logo */}
           <Link to="/" className="flex items-center space-x-2 group">
             <div className="h-8 w-8 rounded-lg bg-gradient-primary flex items-center justify-center transition-transform group-hover:scale-110">
-              <span className="text-white font-bold text-lg">S</span>
+              <span className="text-white font-bold text-lg">V</span>
             </div>
             <span className="text-xl font-bold bg-gradient-primary bg-clip-text text-transparent">
-              ServicePro
+              Vurdhaan Reports
             </span>
           </Link>
 

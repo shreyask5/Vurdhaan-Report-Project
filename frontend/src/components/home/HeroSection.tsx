@@ -31,21 +31,21 @@ export const HeroSection = () => {
           <div className="text-center lg:text-left space-y-8 animate-fade-in-up">
             <div className="inline-block">
               <span className="px-4 py-2 rounded-full bg-primary/10 text-primary text-sm font-semibold">
-                ✨ Trusted by 10,000+ businesses
+                ✨ Supporting Multiple Compliance Schemes
               </span>
             </div>
 
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold leading-tight">
-              Transform Your{' '}
+              Streamline Your{' '}
               <span className="bg-gradient-primary bg-clip-text text-transparent">
-                Service Delivery
+                Carbon Compliance
               </span>{' '}
-              with Intelligent Automation
+              Reporting for Aviation
             </h1>
 
             <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto lg:mx-0">
-              Streamline workflows, enhance team collaboration, and deliver exceptional service
-              experiences. All in one powerful platform built for modern businesses.
+              Comprehensive reporting platform for CORSIA, EU ETS, UK ETS, CH ETS, and ReFuelEU schemes.
+              Automated validation, monitoring plans, and real-time collaboration in one powerful solution.
             </p>
 
             <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
@@ -54,7 +54,7 @@ export const HeroSection = () => {
                 className="bg-gradient-primary hover:opacity-90 transition-all shadow-glow group"
                 onClick={scrollToPricing}
               >
-                Get Started Free
+                Get Started
                 <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
               </Button>
               <Button
@@ -64,7 +64,7 @@ export const HeroSection = () => {
                 onClick={scrollToDemo}
               >
                 <Play className="mr-2 h-5 w-5" />
-                Book a Demo
+                Request Demo
               </Button>
             </div>
 
@@ -72,15 +72,15 @@ export const HeroSection = () => {
             <div className="flex flex-wrap gap-6 justify-center lg:justify-start pt-8 opacity-70">
               <div className="flex items-center space-x-2">
                 <div className="w-2 h-2 rounded-full bg-success" />
-                <span className="text-sm text-muted-foreground">99.9% Uptime</span>
+                <span className="text-sm text-muted-foreground">CORSIA Compliant</span>
               </div>
               <div className="flex items-center space-x-2">
                 <div className="w-2 h-2 rounded-full bg-success" />
-                <span className="text-sm text-muted-foreground">SOC 2 Certified</span>
+                <span className="text-sm text-muted-foreground">EU ETS Ready</span>
               </div>
               <div className="flex items-center space-x-2">
                 <div className="w-2 h-2 rounded-full bg-success" />
-                <span className="text-sm text-muted-foreground">GDPR Compliant</span>
+                <span className="text-sm text-muted-foreground">Multi-Scheme Support</span>
               </div>
             </div>
           </div>
@@ -90,7 +90,7 @@ export const HeroSection = () => {
             <div className="relative rounded-2xl overflow-hidden shadow-xl">
               <img
                 src={heroImage}
-                alt="ServicePro Platform Dashboard"
+                alt="Vurdhaan Reports Carbon Compliance Dashboard"
                 className="w-full h-auto"
               />
             </div>

@@ -26,14 +26,14 @@ export const Footer = () => {
           <div className="space-y-4">
             <Link to="/" className="flex items-center space-x-2">
               <div className="h-8 w-8 rounded-lg bg-gradient-primary flex items-center justify-center">
-                <span className="text-white font-bold text-lg">S</span>
+                <span className="text-white font-bold text-lg">V</span>
               </div>
               <span className="text-xl font-bold bg-gradient-primary bg-clip-text text-transparent">
-                ServicePro
+                Vurdhaan Reports
               </span>
             </Link>
             <p className="text-sm text-muted-foreground">
-              Professional service platform trusted by thousands of businesses worldwide.
+              Carbon compliance reporting platform for aviation. Supporting CORSIA, EU ETS, UK ETS, CH ETS, and ReFuelEU schemes.
             </p>
           </div>
 
@@ -134,7 +134,7 @@ export const Footer = () => {
         {/* Bottom Bar */}
         <div className="pt-8 border-t border-border flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
           <p className="text-sm text-muted-foreground">
-            © {new Date().getFullYear()} ServicePro. All rights reserved.
+            © {new Date().getFullYear()} Vurdhaan Reports. All rights reserved.
           </p>
           <div className="flex space-x-6">
             <a

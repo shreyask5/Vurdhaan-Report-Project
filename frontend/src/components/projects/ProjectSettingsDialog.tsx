@@ -45,6 +45,8 @@ export function ProjectSettingsDialog({
     setIsLoading(true);
     try {
       await projectsApi.update(project.id, {
+        name: project.name,  // Explicitly preserve name
+        description: project.description,  // Explicitly preserve description
         ai_chat_enabled: formData.ai_chat_enabled,
         save_files_on_server: formData.save_files_on_server,
       });
