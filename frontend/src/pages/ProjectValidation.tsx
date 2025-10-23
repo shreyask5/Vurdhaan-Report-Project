@@ -232,6 +232,29 @@ const ProjectValidation: React.FC = () => {
     <div className="min-h-screen bg-gradient-radial">
       <ProjectHeader />
       <div className="container mx-auto px-4 py-8 max-w-7xl">
+        {/* Custom styles for error tables */}
+        <style>
+          {`
+            .error-row-table td {
+              text-align: center;
+              vertical-align: middle;
+            }
+            .error-row-table .editable {
+              background-color: #ffe0e0; /* Light red background for editable error cells */
+              border: 1px solid red; /* Red border for emphasis */
+              padding: 0; /* Remove default padding to allow input to fill */
+            }
+            .error-row-table .editable .cell-input {
+              text-align: center;
+              background-color: transparent; /* Inherit background from parent */
+              border: none; /* Remove default input border */
+              width: 100%; /* Make input fill the cell horizontally */
+              height: 100%; /* Make input fill the cell vertically */
+              box-sizing: border-box; /* Include padding and border in the element's total width and height */
+              padding: 8px; /* Add some internal padding to the input field */
+            }
+          `}
+        </style>
         {hasErrors ? (
           // Error Display Section
           <>
