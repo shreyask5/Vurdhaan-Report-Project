@@ -550,7 +550,7 @@ class OpenAIService:
                             "exclusions": {"type": "array", "items": {"type": "string"}},
                             "special_cases": {"type": "array", "items": {"type": "string"}}
                         },
-                        "required": ["state_pairs_operated", "aerodrome_pairs", "exclusions", "special_cases"],
+                        "required": ["exclusions", "special_cases"],
                         "additionalProperties": False
                     },
                     "data_gaps": {

@@ -222,23 +222,6 @@ export const ColumnMappingWizard: React.FC<ColumnMappingWizardProps> = ({
                   </span>
                 )}
               </button>
-              {/* DEBUG: Force Submit Button - Remove in production */}
-              {!canComplete && (
-                <button
-                  onClick={handleFinalSubmit}
-                  className="btn-warning"
-                  type="button"
-                  title="Force submit without complete mapping (DEBUG)"
-                  style={{
-                    background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-                    flex: '0 0 auto',
-                    padding: '0.75rem 1rem',
-                    fontSize: '0.75rem'
-                  }}
-                >
-                  🔧 Force Submit
-                </button>
-              )}
             </>
           ) : (
             <button

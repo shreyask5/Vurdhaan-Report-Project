@@ -113,12 +113,6 @@ export const ErrorCategory: React.FC<ErrorCategoryProps> = ({
         <div className="category-info">
           <span className="category-icon">{isExpanded ? '📂' : '📁'}</span>
           <h4 className="category-name">{categoryName}</h4>
-          <span className="error-badge">{totalErrors} errors</span>
-          {usePagination && totalPages > 1 && (
-            <span className="page-info">
-              ({totalPages} {totalPages === 1 ? 'page' : 'pages'})
-            </span>
-          )}
         </div>
         <div className="category-actions" onClick={(e) => e.stopPropagation()}>
           <button
@@ -138,6 +132,18 @@ export const ErrorCategory: React.FC<ErrorCategoryProps> = ({
 
       {isExpanded && (
         <div className="category-content">
+          {/* Pagination controls at top */}
+          {usePagination && totalPages > 1 && (
+            <div className="pagination-container">
+              <Pagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                onPageChange={handlePageChange}
+                disabled={isLoading}
+              />
+            </div>
+          )}
+
           {/* Error state */}
           {error && (
             <div className="error-message">
@@ -349,7 +355,8 @@ export const ErrorCategory: React.FC<ErrorCategoryProps> = ({
         }
 
         .pagination-container {
-          margin-top: 1.5rem;
+          margin-top: 0;
+          margin-bottom: 1.5rem;
           padding: 1rem;
           background: white;
           border-radius: 0.5rem;

@@ -240,7 +240,6 @@ const ProjectValidation: React.FC = () => {
               {usePagination && errorMetadata ? (
                 // Paginated mode summary
                 <div className="bg-card rounded-xl p-6 shadow-card">
-                  <h2 className="text-2xl font-bold text-foreground mb-4">Validation Errors Found</h2>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="bg-error/10 rounded-lg p-4">
                       <div className="text-3xl font-bold text-error">{errorMetadata.total_errors}</div>
@@ -254,9 +253,6 @@ const ProjectValidation: React.FC = () => {
                       <div className="text-3xl font-bold text-primary">{errorMetadata.error_categories}</div>
                       <div className="text-sm text-muted-foreground">Error Categories</div>
                     </div>
-                  </div>
-                  <div className="mt-4 text-sm text-muted-foreground">
-                    Using paginated error reporting for improved performance
                   </div>
                 </div>
               ) : (

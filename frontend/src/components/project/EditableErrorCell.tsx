@@ -66,20 +66,6 @@ export const EditableErrorCell: React.FC<EditableErrorCellProps> = ({
     return (
       <td className="table-cell">
         {value !== null && value !== undefined ? String(value) : ''}
-        <style jsx>{`
-          .table-cell {
-            padding: 0.375rem 0.75rem;
-            font-size: 0.75rem;
-            border-bottom: 1px solid #e2e8f0;
-            border-right: 1px solid #e2e8f0;
-            text-align: center;
-            min-width: 100px;
-            max-width: 200px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-          }
-        `}</style>
       </td>
     );
   }
@@ -96,54 +82,6 @@ export const EditableErrorCell: React.FC<EditableErrorCellProps> = ({
         onBlur={handleBlur}
         className="cell-input"
       />
-      <style jsx>{`
-        .table-cell {
-          padding: 0.25rem;
-          font-size: 0.75rem;
-          border-bottom: 1px solid #e2e8f0;
-          border-right: 1px solid #e2e8f0;
-          text-align: center;
-          background: white;
-          transition: background-color 0.2s ease;
-          min-width: 100px;
-          max-width: 200px;
-        }
-
-        .table-cell.editable {
-          background: #fef3c7;
-        }
-
-        .table-cell.editable.focused {
-          background: #fde68a;
-        }
-
-        .table-cell.editable.changed {
-          background: #bfdbfe;
-        }
-
-        .cell-input {
-          width: 100%;
-          min-width: 80px;
-          padding: 0.375rem 0.5rem;
-          border: 1px solid transparent;
-          border-radius: 0.25rem;
-          font-size: 0.75rem;
-          text-align: center;
-          background: transparent;
-          transition: all 0.2s ease;
-        }
-
-        .cell-input:focus {
-          outline: none;
-          border-color: #6366f1;
-          background: white;
-        }
-
-        .editable.changed .cell-input {
-          font-weight: 600;
-          color: #1e40af;
-        }
-      `}</style>
     </td>
   );
 };
