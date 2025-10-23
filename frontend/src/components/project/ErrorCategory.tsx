@@ -113,6 +113,7 @@ export const ErrorCategory: React.FC<ErrorCategoryProps> = ({
         <div className="category-info">
           <span className="category-icon">{isExpanded ? '📂' : '📁'}</span>
           <h4 className="category-name">{categoryName}</h4>
+          <span className="error-badge">{totalErrors} errors</span>
         </div>
         <div className="category-actions" onClick={(e) => e.stopPropagation()}>
           <button

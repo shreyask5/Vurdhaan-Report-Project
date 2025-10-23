@@ -301,7 +301,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       chatHistoryService.logError('Failed to delete chat', error);
       throw error;
     }
-  }, [projectId, chatId, currentChatId, chats, switchChat, createNewChat]);
+  }, [projectId, currentChatId, chats, switchChat, createNewChat]);
 
   return (
     <ChatContext.Provider value={{

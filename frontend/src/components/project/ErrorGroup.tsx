@@ -399,15 +399,20 @@ export const ErrorGroup: React.FC<ErrorGroupProps> = ({
 
         .error-row-table :global(td.table-cell) {
           padding: 0.375rem 0.75rem;
+          text-align: center;  /* Add explicit center */
         }
 
         .error-row-table :global(td.editable) {
-          background: #fef3c7;
+          background: #fee2e2 !important;  /* Change from yellow to red */
+          color: #991b1b;  /* Add red text color */
+          font-weight: 600;  /* Make text stand out */
         }
 
         .error-row-table :global(input.cell-input) {
           width: 100%;
           min-width: 80px;
+          text-align: center;  /* Center input text */
+          background: white;  /* White background for input */
         }
 
         .row-index-cell {
